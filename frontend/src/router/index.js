@@ -85,6 +85,24 @@ const router = createRouter({
         roles: ['futsalAdmin']
       }
     },
+    {
+      path: '/admin-bookings',
+      name: 'adminBookings',
+      component: () => import('../views/AdminBooking.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: ['futsalAdmin']
+      }
+    },
+    {
+      path: '/admin-profile',
+      name: 'adminProfile',
+      component: () => import('../views/AdminProfile.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: ['futsalAdmin']
+      }
+    },
 
     {
       path: '/player/courts/:id',

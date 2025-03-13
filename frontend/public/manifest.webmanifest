@@ -1,0 +1,16 @@
+{
+  "name": "FutNet - Futsal Booking System",
+  "short_name": "FutNet",
+  "description": "Book futsal courts, manage bookings, and join tournaments",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon"
+    }
+  ]
+}
