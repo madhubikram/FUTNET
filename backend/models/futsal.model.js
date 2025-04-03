@@ -1,5 +1,5 @@
 // models/futsal.model.js
-const mongoose = require('mongoose');  // Add this line
+const mongoose = require('mongoose');  
 
 const futsalSchema = new mongoose.Schema({
     name: { 

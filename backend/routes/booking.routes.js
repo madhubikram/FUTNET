@@ -387,7 +387,7 @@ router.get('/', auth, async (req, res) => {
         })
         .populate({
           path: 'user',
-          select: 'name email phone'
+          select: 'firstName lastName email contactNumber username'
         })
         .sort({ date: -1, startTime: 1 });
       
@@ -396,7 +396,7 @@ router.get('/', auth, async (req, res) => {
         const bookingObj = booking.toObject();
         
         // Add formatted data for easier frontend display
-        bookingObj.formattedDate = booking.date.toLocaleDateString();
+        // bookingObj.formattedDate = booking.date.toLocaleDateString();
         
         // Add court details
         bookingObj.courtDetails = {
@@ -408,11 +408,12 @@ router.get('/', auth, async (req, res) => {
         };
         
         // Add user details with proper fallbacks from direct booking data
-        bookingObj.userDetails = {
-          name: booking.user?.name || booking.userName || booking.bookedBy || 'Guest User',
-          email: booking.user?.email || booking.email || booking.contactEmail || 'No Email Provided',
-          phone: booking.user?.phone || booking.phone || booking.contactNumber || booking.contact || 'No Phone Provided'
-        };
+        bookingObj.userInfo = {
+          name: `${booking.user?.firstName || '' } ${booking.user?.lastName || ''}` . trim() || booking.userName || 'Guest User',
+          email: booking.user?.email || booking.email || 'No Email Provided', 
+          phone: booking.user?.contactNumber || booking.phone || 'No Phone Provided', 
+          username: booking.user?.username || booking.userName || 'No Username Provided'
+      };
         
         return bookingObj;
       });
