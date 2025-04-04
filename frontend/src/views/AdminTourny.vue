@@ -38,6 +38,7 @@
       @edit-item="editTournament(tournament)"
       @delete-item="deleteTournament(tournament)"
       @view-details="viewTournament(tournament)"
+      @view-bracket="navigateToBracket(tournament)"
     >
         <template #tournament-details>
           <div class="space-y-3">
@@ -54,14 +55,17 @@
                 <CalendarIcon class="w-4 h-4 mr-2" />
                 <span class="text-sm">Reg. Deadline:</span>
               </div>
-              <span class="text-sm">{{ new Date(tournament.registrationDeadline).toLocaleDateString() }}</span>
+              <span class="text-sm">
+                {{ new Date(tournament.registrationDeadline).toLocaleDateString() }}
+                {{ tournament.registrationDeadlineTime ? ` ${tournament.registrationDeadlineTime}` : '' }}
+              </span>
             </div>
             <div class="flex items-center text-gray-400 justify-between">
               <div class="flex items-center">
                 <UsersIcon class="w-4 h-4 mr-2" />
                 <span class="text-sm">Teams:</span>
               </div>
-              <span class="text-sm">{{ tournament.registeredTeams }}/{{ tournament.maxTeams }}</span>
+              <span class="text-sm">{{ tournament.registeredTeams }} / {{ tournament.maxTeams }}</span>
             </div>
             <div class="flex items-center text-gray-400 justify-between">
               <div class="flex items-center">
@@ -96,6 +100,7 @@
               class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
               required
             />
+            <p v-if="errors.name" class="text-xs text-red-400 mt-1">{{ errors.name }}</p>
           </div>
 
           <div>
@@ -106,6 +111,7 @@
               class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
               required
             ></textarea>
+            <p v-if="errors.description" class="text-xs text-red-400 mt-1">{{ errors.description }}</p>
           </div>
         </div>
 
@@ -121,6 +127,7 @@
                 :min="minDate"
                 required
               />
+              <p v-if="errors.startDate" class="text-xs text-red-400 mt-1">{{ errors.startDate }}</p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-400 mb-1">Start Time</label>
@@ -130,6 +137,7 @@
                 class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
                 required
               />
+              <p v-if="errors.startTime" class="text-xs text-red-400 mt-1">{{ errors.startTime }}</p>
             </div>
           </div>
           <div>
@@ -141,18 +149,32 @@
               :min="tournamentForm.startDate || minDate"
               required
             />
+            <p v-if="errors.endDate" class="text-xs text-red-400 mt-1">{{ errors.endDate }}</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-400 mb-1">Registration Deadline</label>
-            <input
-              v-model="tournamentForm.registrationDeadline"
-              type="date"
-              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
-              :min="minDate"
-              :max="tournamentForm.startDate"
-              required
-            />
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-400 mb-1">Registration Deadline Date</label>
+              <input
+                v-model="tournamentForm.registrationDeadline"
+                type="date"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
+                :min="minDate"
+                :max="tournamentForm.startDate"
+                required
+              />
+              <p v-if="errors.registrationDeadline" class="text-xs text-red-400 mt-1">{{ errors.registrationDeadline }}</p>
+            </div>
+             <div>
+              <label class="block text-sm font-medium text-gray-400 mb-1">Registration Deadline Time</label>
+              <input
+                v-model="tournamentForm.registrationDeadlineTime"
+                type="time"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
+                required
+              />
+              <p v-if="errors.registrationDeadlineTime" class="text-xs text-red-400 mt-1">{{ errors.registrationDeadlineTime }}</p>
+            </div>
           </div>
         </div>
 
@@ -172,6 +194,7 @@
                 />
                 <span class="text-gray-400 whitespace-nowrap">minutes</span>
               </div>
+              <p v-if="errors.halfDuration" class="text-xs text-red-400 mt-1">{{ errors.halfDuration }}</p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-400 mb-1">Break Time</label>
@@ -186,6 +209,7 @@
                 />
                 <span class="text-gray-400 whitespace-nowrap">minutes</span>
               </div>
+              <p v-if="errors.breakDuration" class="text-xs text-red-400 mt-1">{{ errors.breakDuration }}</p>
             </div>
           </div>
         </div>
@@ -204,6 +228,17 @@
               </select>
             </div>
             <div>
+              <label class="block text-sm font-medium text-gray-400 mb-1">Minimum Teams</label>
+              <select
+                v-model.number="tournamentForm.minTeams"
+                class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
+                required
+              >
+                <option v-for="n in 12" :key="`min-teams-${n}`" :value="n + 3">{{ n + 3 }} Teams</option>
+              </select>
+              <p v-if="errors.minTeams" class="text-xs text-red-400 mt-1">{{ errors.minTeams }}</p>
+            </div>
+            <div>
               <label class="block text-sm font-medium text-gray-400 mb-1">Maximum Teams</label>
               <select
                 v-model="tournamentForm.maxTeams"
@@ -214,6 +249,7 @@
                 <option value="16">16 Teams</option>
                 <option value="32">32 Teams</option>
               </select>
+              <p v-if="errors.maxTeams" class="text-xs text-red-400 mt-1">{{ errors.maxTeams }}</p>
             </div>
           </div>
 
@@ -250,31 +286,65 @@
 
         <div class="space-y-4">
           <h4 class="text-sm font-semibold text-gray-300">Financial Details</h4>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-400 mb-1">Registration Fee</label>
               <div class="flex items-center gap-2">
                 <span class="text-gray-400">Rs.</span>
                 <input
-                  v-model="tournamentForm.registrationFee"
+                  v-model.number="tournamentForm.registrationFee"
                   type="number"
                   min="0"
                   class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
                   required
                 />
               </div>
+              <p v-if="errors.registrationFee" class="text-xs text-red-400 mt-1">{{ errors.registrationFee }}</p>
             </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-400 mb-1">Prize Pool</label>
-              <div class="flex items-center gap-2">
-                <span class="text-gray-400">Rs.</span>
-                <input
-                  v-model="tournamentForm.prizePool"
-                  type="number"
-                  min="0"
-                  class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
-                  required
-                />
+          </div>
+          
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-400 mb-2">Prize Breakdown</label>
+            <div class="grid grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">1st Place Prize (Required)</label>
+                <div class="flex items-center gap-2">
+                  <span class="text-gray-400">Rs.</span>
+                  <input
+                    v-model.number="tournamentForm.prizes.first"
+                    type="number"
+                    min="0"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
+                    required
+                  />
+                </div>
+                <p v-if="errors.prizeFirst" class="text-xs text-red-400 mt-1">{{ errors.prizeFirst }}</p>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">2nd Place Prize (Optional)</label>
+                <div class="flex items-center gap-2">
+                  <span class="text-gray-400">Rs.</span>
+                  <input
+                    v-model.number="tournamentForm.prizes.second"
+                    type="number"
+                    min="0"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <p v-if="errors.prizeSecond" class="text-xs text-red-400 mt-1">{{ errors.prizeSecond }}</p>
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">3rd Place Prize (Optional)</label>
+                <div class="flex items-center gap-2">
+                  <span class="text-gray-400">Rs.</span>
+                  <input
+                    v-model.number="tournamentForm.prizes.third"
+                    type="number"
+                    min="0"
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-green-500 focus:border-green-500"
+                  />
+                </div>
+                <p v-if="errors.prizeThird" class="text-xs text-red-400 mt-1">{{ errors.prizeThird }}</p>
               </div>
             </div>
           </div>
@@ -290,6 +360,7 @@
               placeholder="Enter tournament rules and regulations..."
               required
             ></textarea>
+            <p v-if="errors.rules" class="text-xs text-red-400 mt-1">{{ errors.rules }}</p>
           </div>
         </div>
 
@@ -303,6 +374,7 @@
             placeholder="Upload a banner image for your tournament"
             @error="handleImageError"
           />
+          <p v-if="errors.image" class="text-xs text-red-400 mt-1">{{ errors.image }}</p>
         </div>
       </form>
     </template>
@@ -384,7 +456,10 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500">Registration Deadline</label>
-            <p class="text-white">{{ new Date(selectedTournament.registrationDeadline).toLocaleDateString() }}</p>
+            <p class="text-white">
+              {{ new Date(selectedTournament.registrationDeadline).toLocaleDateString() }}
+              {{ selectedTournament.registrationDeadlineTime ? ` at ${selectedTournament.registrationDeadlineTime}` : '' }}
+            </p>
           </div>
           <div>
             <label class="block text-xs text-gray-500">End Date</label>
@@ -410,6 +485,10 @@
           <h4 class="text-sm font-semibold text-gray-300">Team Information</h4>
           <div class="grid grid-cols-2 gap-4">
             <div>
+              <label class="block text-xs text-gray-500">Minimum Teams</label>
+              <p class="text-white">{{ selectedTournament.minTeams }} Teams</p>
+            </div>
+            <div>
               <label class="block text-xs text-gray-500">Maximum Teams</label>
               <p class="text-white">{{ selectedTournament.maxTeams }} Teams</p>
             </div>
@@ -428,8 +507,26 @@
               <p class="text-white">Rs. {{ selectedTournament.registrationFee }}</p>
             </div>
             <div>
-              <label class="block text-xs text-gray-500">Prize Pool</label>
+              <label class="block text-xs text-gray-500">Total Prize Pool</label>
               <p class="text-white">Rs. {{ selectedTournament.prizePool }}</p>
+            </div>
+          </div>
+          
+          <div v-if="selectedTournament.prizes && (selectedTournament.prizes.first || selectedTournament.prizes.second || selectedTournament.prizes.third)" class="mt-3">
+            <label class="block text-xs text-gray-500 mb-2">Prize Breakdown</label>
+            <div class="grid grid-cols-3 gap-4">
+              <div v-if="selectedTournament.prizes.first">
+                <span class="inline-block px-2 py-1 bg-yellow-400/20 text-yellow-300 rounded-full text-xs mb-1">1st Place</span>
+                <p class="text-white">Rs. {{ selectedTournament.prizes.first }}</p>
+              </div>
+              <div v-if="selectedTournament.prizes.second">
+                <span class="inline-block px-2 py-1 bg-gray-400/20 text-gray-300 rounded-full text-xs mb-1">2nd Place</span>
+                <p class="text-white">Rs. {{ selectedTournament.prizes.second }}</p>
+              </div>
+              <div v-if="selectedTournament.prizes.third">
+                <span class="inline-block px-2 py-1 bg-amber-600/20 text-amber-500 rounded-full text-xs mb-1">3rd Place</span>
+                <p class="text-white">Rs. {{ selectedTournament.prizes.third }}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -463,12 +560,14 @@ import ImageUpload from '@/components/ImageUpload.vue'
 import LoadingState from '@/components/states/LoadingState.vue'
 import EmptyState from '@/components/states/EmptyState.vue'
 import PageLayout from '@/components/layout/PageLayout.vue'
+import { useToast } from 'vue-toastification' // Import useToast
 import {
   PlusIcon, CalendarIcon, UsersIcon, TrophyIcon,
   Loader2Icon,
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router';
 
+const toast = useToast() // Initialize toast
 const router = useRouter();
 const API_URL = 'http://localhost:5000/api';
 // State Management
@@ -494,17 +593,23 @@ const tournamentForm = ref({
   description: '',
   startDate: '',
   registrationDeadline: '',
+  registrationDeadlineTime: '',
   startTime: '',
   endDate: '',
   halfDuration: 20,
   breakDuration: 5,
   format: 'single',
+  minTeams: 4,
   maxTeams: 8,
   teamSize: 5,
   substitutes: 2,
   registrationFee: 0,
-  prizePool: 0,
-  rules: ''
+  rules: '',
+  prizes: {
+    first: null,
+    second: null,
+    third: null
+  }
 })
 
 // Status Color Classes for Tournament - ADDED FUNCTIONS HERE!
@@ -538,17 +643,23 @@ const resetForm = () => {
     description: '',
     startDate: '',
     registrationDeadline: '',
+    registrationDeadlineTime: '',
     startTime: '',
     endDate: '',
     halfDuration: 20,
     breakDuration: 5,
     format: 'single',
+    minTeams: 4,
     maxTeams: 8,
     teamSize: 5,
     substitutes: 2,
     registrationFee: 0,
-    prizePool: 0,
-    rules: ''
+    rules: '',
+    prizes: {
+      first: null,
+      second: null,
+      third: null
+    }
   };
   tournamentImages.value = [];
   errors.value = {};
@@ -605,7 +716,6 @@ const fetchTournaments = async () => {
   }
 };
 // Form Validation
-// Form Validation
 const validateForm = () => {
   errors.value = {}
   let isValid = true
@@ -625,24 +735,34 @@ const validateForm = () => {
   }
 
   if (!tournamentForm.value.registrationDeadline) {
-    errors.value.registrationDeadline = 'Registration deadline is required'
+    errors.value.registrationDeadline = 'Registration deadline date is required'
     isValid = false
   }
 
-  if (new Date(tournamentForm.value.registrationDeadline) >= new Date(tournamentForm.value.startDate)) {
-    errors.value.registrationDeadline = 'Registration deadline must be before start date'
+  if (!tournamentForm.value.registrationDeadlineTime) {
+    errors.value.registrationDeadlineTime = 'Registration deadline time is required'
     isValid = false
   }
 
-  // Update this condition to allow same-day tournaments
-  const startDate = new Date(tournamentForm.value.startDate)
-  const endDate = new Date(tournamentForm.value.endDate)
-  startDate.setHours(0, 0, 0, 0)
-  endDate.setHours(0, 0, 0, 0)
-  
-  if (endDate < startDate) { // Changed from <= to 
-    errors.value.endDate = 'End date must be on or after start date'
-    isValid = false
+  if (tournamentForm.value.startDate && tournamentForm.value.startTime && 
+      tournamentForm.value.registrationDeadline && tournamentForm.value.registrationDeadlineTime) {
+    try {
+      const deadlineDateTime = new Date(`${tournamentForm.value.registrationDeadline}T${tournamentForm.value.registrationDeadlineTime}`);
+      const startDateTime = new Date(`${tournamentForm.value.startDate}T${tournamentForm.value.startTime}`);
+      
+      if (isNaN(deadlineDateTime.getTime()) || isNaN(startDateTime.getTime())) {
+        errors.value.registrationDeadline = errors.value.registrationDeadline || 'Invalid deadline date/time format';
+        errors.value.startTime = errors.value.startTime || 'Invalid start date/time format';
+        isValid = false;
+      } else if (deadlineDateTime >= startDateTime) {
+        errors.value.registrationDeadlineTime = 'Registration deadline must be strictly before the tournament start time';
+        isValid = false;
+      }
+    } catch (e) {
+       console.error("Date parsing error:", e);
+       errors.value.registrationDeadline = errors.value.registrationDeadline || 'Invalid deadline date/time format';
+       isValid = false; 
+    }
   }
 
   if (tournamentForm.value.halfDuration < 10 || tournamentForm.value.halfDuration > 45) {
@@ -655,13 +775,27 @@ const validateForm = () => {
     isValid = false
   }
 
-  if (tournamentForm.value.registrationFee < 0) {
-    errors.value.registrationFee = 'Registration fee cannot be negative'
+  if (tournamentForm.value.registrationFee === null || tournamentForm.value.registrationFee === undefined || tournamentForm.value.registrationFee < 0) {
+    errors.value.registrationFee = 'Valid registration fee is required'
     isValid = false
   }
 
-  if (tournamentForm.value.prizePool < 0) {
-    errors.value.prizePool = 'Prize pool cannot be negative'
+  // Prize Validation
+  if (tournamentForm.value.prizes.first === null || tournamentForm.value.prizes.first === undefined || tournamentForm.value.prizes.first < 0) { // 1st prize is required
+    errors.value.prizeFirst = '1st Place Prize is required and cannot be negative'
+    isValid = false
+  }
+  if (tournamentForm.value.prizes?.second !== null && tournamentForm.value.prizes?.second < 0) { // 2nd is optional, but validate if present
+    errors.value.prizeSecond = '2nd prize cannot be negative'
+    isValid = false
+  }
+  if (tournamentForm.value.prizes?.third !== null && tournamentForm.value.prizes?.third < 0) { // 3rd is optional, but validate if present
+    errors.value.prizeThird = '3rd prize cannot be negative'
+    isValid = false
+  }
+
+  if (!tournamentForm.value.rules?.trim()) { // Rules are required
+    errors.value.rules = 'Tournament rules are required'
     isValid = false
   }
 
@@ -690,9 +824,12 @@ const updateTournamentStatus = () => {
 const handleCreateTournament = async () => {
   try {
     console.log('Starting tournament creation/update...');
+    
+    // Explicitly call validateForm and check return value
     if (!validateForm()) {
       console.log('Form validation failed:', errors.value);
-      return;
+      toast.error('Please fix the errors in the form.'); // Add toast notification
+      return; 
     }
 
     isSubmitting.value = true;
@@ -700,10 +837,16 @@ const handleCreateTournament = async () => {
 
     // Add form fields to FormData
     Object.entries(tournamentForm.value).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
+      // Skip the prizes object itself, handle its fields individually
+      if (key !== 'prizes' && value !== null && value !== undefined) {
         formData.append(key, value);
       }
     });
+
+    // Append prizes fields explicitly 
+    formData.append('prizes.first', tournamentForm.value.prizes.first ?? 0); 
+    formData.append('prizes.second', tournamentForm.value.prizes.second ?? 0);
+    formData.append('prizes.third', tournamentForm.value.prizes.third ?? 0);
 
     // Add banner only if it's a File object
     if (tournamentImages.value.length > 0) {
@@ -760,28 +903,31 @@ const editTournament = (tournament) => {
   editingTournamentId.value = tournament._id;
   selectedTournament.value = tournament;
   
-  // Copy tournament data to form
   tournamentForm.value = {
     name: tournament.name,
     description: tournament.description,
-    startDate: tournament.startDate.split('T')[0], // Format date correctly
+    startDate: tournament.startDate.split('T')[0], 
     endDate: tournament.endDate.split('T')[0],
     startTime: tournament.startTime,
     registrationDeadline: tournament.registrationDeadline.split('T')[0],
+    registrationDeadlineTime: tournament.registrationDeadlineTime || '',
     halfDuration: tournament.halfDuration,
     breakDuration: tournament.breakDuration,
     format: tournament.format,
+    minTeams: tournament.minTeams,
     maxTeams: tournament.maxTeams,
     teamSize: tournament.teamSize,
     substitutes: tournament.substitutes,
     registrationFee: tournament.registrationFee,
-    prizePool: tournament.prizePool,
-    rules: tournament.rules
+    rules: tournament.rules,
+    prizes: {
+      first: tournament.prizes?.first ?? null,
+      second: tournament.prizes?.second ?? null,
+      third: tournament.prizes?.third ?? null
+    }
   };
 
-  // Handle banner image
   tournamentImages.value = tournament.banner ? [tournament.banner] : [];
-  
   showCreateTournamentModal.value = true;
 };
 
@@ -805,6 +951,35 @@ const deleteTournament = async (tournamentToDelete) => {
     await fetchTournaments();
   } catch (error) {
     console.error('Error deleting tournament:', error);
+  }
+};
+
+const navigateToBracket = (tournament) => {
+  if (!tournament || !tournament._id || !tournament.registrationDeadline || !tournament.registrationDeadlineTime) {
+    console.error('Cannot navigate to bracket: Invalid or incomplete tournament data provided.', tournament);
+    toast.error('Could not open bracket view for this tournament.');
+    return; 
+  }
+
+  const now = new Date();
+  let registrationDeadlineDateTime;
+  try {
+    // Combine date and time string, then parse
+    registrationDeadlineDateTime = new Date(`${tournament.registrationDeadline}T${tournament.registrationDeadlineTime}`);
+    if (isNaN(registrationDeadlineDateTime.getTime())) {
+      throw new Error('Invalid date/time format from tournament data');
+    }
+  } catch (e) {
+    console.error('Error parsing registration deadline:', e, tournament);
+    toast.error('Could not read tournament deadline.');
+    return;
+  }
+
+  if (now < registrationDeadlineDateTime) {
+    toast.info('Bracket will be available after the registration deadline passes.');
+  } else {
+    // Only navigate if the deadline has passed
+    router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
   }
 };
 

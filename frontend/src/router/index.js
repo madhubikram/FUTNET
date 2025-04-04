@@ -86,6 +86,15 @@ const router = createRouter({
       }
     },
     {
+      path: '/admin-tournaments/:id/bracket',
+      name: 'adminTournamentBracket',
+      component: () => import('@/components/tournaments/TournamentBrackets.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: ['futsalAdmin']
+      }
+    },
+    {
       path: '/admin-bookings',
       name: 'adminBookings',
       component: () => import('../views/AdminBooking.vue'),

@@ -143,6 +143,10 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
         const courtData = {
             ...req.body,
             futsalId: req.user.futsal,
+            // Directly use new dimension fields from form
+            dimensionLength: Number(req.body.dimensionLength),
+            dimensionWidth: Number(req.body.dimensionWidth),
+            surfaceType: req.body.surfaceType, // Already a string from select
             images: req.files ? req.files.map(file => `/uploads/courts/${file.filename}`) : [],
             facilities: parseBooleans({
                 changingRooms: req.body['facilities.changingRooms'],
@@ -155,6 +159,9 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
             peakHours: parseNestedObject('peakHours', req.body),
             offPeakHours: parseNestedObject('offPeakHours', req.body)
         };
+
+        // Remove the old 'dimensions' field if it exists from form data
+        delete courtData.dimensions;
 
         // Convert price strings to numbers
         courtData.priceHourly = Number(courtData.priceHourly);
@@ -267,72 +274,61 @@ router.get('/:id/bookings', auth, async (req, res) => {
 // Update a court
 router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
     try {
-        // First, let's construct our update object carefully
-        const updateData = {};
-
-        // Handle basic fields
-        const basicFields = ['name', 'dimensions', 'surfaceType', 'courtType', 'status'];
-        basicFields.forEach(field => {
-            if (req.body[field]) {
-                updateData[field] = req.body[field];
-            }
-        });
-
-        // Handle numeric fields
-        updateData.priceHourly = Number(req.body.priceHourly);
-
-        // Handle boolean fields
-        updateData.hasPeakHours = req.body.hasPeakHours === 'true';
-        updateData.hasOffPeakHours = req.body.hasOffPeakHours === 'true';
-
-        // Handle facilities as a complete object
-        updateData.facilities = {
-            changingRooms: req.body['facilities.changingRooms'] === 'true',
-            lighting: req.body['facilities.lighting'] === 'true',
-            parking: req.body['facilities.parking'] === 'true',
-            shower: req.body['facilities.shower'] === 'true'
-        };
-
-        // Handle peak hours as a complete object
-        if (updateData.hasPeakHours) {
-            updateData.peakHours = {
-                start: req.body['peakHours.start'],
-                end: req.body['peakHours.end']
-            };
-            updateData.pricePeakHours = Number(req.body.pricePeakHours);
-        }
-
-        // Handle off-peak hours as a complete object
-        if (updateData.hasOffPeakHours) {
-            updateData.offPeakHours = {
-                start: req.body['offPeakHours.start'],
-                end: req.body['offPeakHours.end']
-            };
-            updateData.priceOffPeakHours = Number(req.body.priceOffPeakHours);
-        }
-
-        // Handle images if new ones are uploaded
-        if (req.files && req.files.length > 0) {
-            updateData.images = req.files.map(file => `/uploads/courts/${file.filename}`);
-        }
-
-        console.log('Update data:', updateData); // For debugging
-
-        // Use findByIdAndUpdate with the complete update object
-        const court = await Court.findByIdAndUpdate(
-            req.params.id,
-            updateData,
-            { 
-                new: true,
-                runValidators: true
-            }
-        );
-
+        const court = await Court.findById(req.params.id);
         if (!court) {
             return res.status(404).json({ message: 'Court not found' });
         }
 
-        res.json(court);
+        // Ensure the user owns the futsal this court belongs to
+        if (court.futsalId.toString() !== req.user.futsal.toString()) {
+            return res.status(403).json({ message: 'User not authorized to update this court' });
+        }
+
+        // ... (parseBooleans, parseNestedObject functions remain the same) ...
+
+        const updateData = {
+            ...req.body,
+             // Directly use new dimension fields from form
+             dimensionLength: Number(req.body.dimensionLength),
+             dimensionWidth: Number(req.body.dimensionWidth),
+             surfaceType: req.body.surfaceType, // Already a string from select
+             facilities: parseBooleans({
+                 changingRooms: req.body['facilities.changingRooms'],
+                 lighting: req.body['facilities.lighting'],
+                 parking: req.body['facilities.parking'],
+                 shower: req.body['facilities.shower']
+             }),
+             hasPeakHours: req.body.hasPeakHours === 'true',
+             hasOffPeakHours: req.body.hasOffPeakHours === 'true',
+             peakHours: parseNestedObject('peakHours', req.body),
+             offPeakHours: parseNestedObject('offPeakHours', req.body)
+        };
+        
+        // Remove the old 'dimensions' field if it exists from form data
+        delete updateData.dimensions;
+
+        // Convert price strings to numbers
+        updateData.priceHourly = Number(updateData.priceHourly);
+        if (updateData.hasPeakHours) {
+            updateData.pricePeakHours = Number(updateData.pricePeakHours);
+        }
+        if (updateData.hasOffPeakHours) {
+            updateData.priceOffPeakHours = Number(updateData.priceOffPeakHours);
+        }
+
+        // Handle image updates
+        if (req.files && req.files.length > 0) {
+            // Optionally delete old images first if needed
+            updateData.images = req.files.map(file => `/uploads/courts/${file.filename}`);
+        } else {
+            // If no new files are uploaded, keep existing images (remove this line if you want to clear images)
+            // delete updateData.images; 
+        }
+
+        console.log('Court data being updated:', updateData);
+
+        const updatedCourt = await Court.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
+        res.json(updatedCourt);
     } catch (error) {
         console.error('Error updating court:', error);
         res.status(400).json({ 

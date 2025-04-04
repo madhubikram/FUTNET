@@ -53,7 +53,7 @@
     </div>
   </div>
 
-  <BaseModal v-if="showAddCourtModal" @close="showAddCourtModal = false">
+  <BaseModal v-if="showAddCourtModal" @close="closeModal">
     <template #header>
       <h3 class="text-xl font-semibold text-white">
         {{ editingCourt ? 'Edit Court' : 'Add New Court' }}
@@ -77,50 +77,68 @@
           </div>
 
           <div>
-            <label class="block text-sm font-medium text-gray-400 mb-1">Dimensions</label>
-            <input
-              v-model="courtForm.dimensions"
-              type="text"
-              placeholder="e.g. 78x27 ft"
-              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              required
-            >
-            <p v-if="formErrors.dimensions" class="text-xs text-red-400 mt-1">
-              {{ formErrors.dimensions }}
-            </p>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-400 mb-1">Surface Type</label>
-            <input
-              v-model="courtForm.surfaceType"
-              type="text"
-              placeholder="e.g. Synthetic Turf"
-              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              required
-            >
-            <p v-if="formErrors.surfaceType" class="text-xs text-red-400 mt-1">
-              {{ formErrors.surfaceType }}
-            </p>
-          </div>
-
-          <div>
             <label class="block text-sm font-medium text-gray-400 mb-1">Court Type</label>
-            <select
-              v-model="courtForm.courtType"
-              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
-              required
-            >
-              <option value="Indoor">Indoor</option>
-              <option value="Outdoor">Outdoor</option>
-            </select>
-            <p v-if="formErrors.courtType" class="text-xs text-red-400 mt-1">
-              {{ formErrors.courtType }}
-            </p>
-          </div>
+             <select
+               v-model="courtForm.courtType"
+               class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+               required
+             >
+               <option value="Indoor">Indoor</option>
+               <option value="Outdoor">Outdoor</option>
+             </select>
+             <p v-if="formErrors.courtType" class="text-xs text-red-400 mt-1">
+               {{ formErrors.courtType }}
+             </p>
+           </div>
         </div>
+
+         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+           <div>
+             <label class="block text-sm font-medium text-gray-400 mb-1">Surface Type</label>
+             <select
+               v-model="courtForm.surfaceType"
+               class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+               required
+             >
+               <option value="">Select Surface Type</option>
+               <option value="Synthetic Turf">Synthetic Turf</option>
+               <option value="Wooden Flooring">Wooden Flooring</option>
+               <option value="Concrete">Concrete</option>
+               <option value="Rubber Flooring">Rubber Flooring</option>
+               <option value="Gripper Tiles">Gripper Tiles</option>
+             </select>
+             <p v-if="formErrors.surfaceType" class="text-xs text-red-400 mt-1">
+               {{ formErrors.surfaceType }}
+             </p>
+           </div>
+
+           <div>
+             <label class="block text-sm font-medium text-gray-400 mb-1">Dimensions (Length x Width)</label>
+             <div class="flex items-center gap-2">
+               <input
+                 v-model.number="courtForm.dimensionLength"
+                 type="number"
+                 min="1"
+                 placeholder="Length"
+                 class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                 required
+               >
+               <span class="text-gray-400">x</span>
+               <input
+                 v-model.number="courtForm.dimensionWidth"
+                 type="number"
+                 min="1"
+                 placeholder="Width"
+                 class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white"
+                 required
+               >
+               <span class="text-gray-400">ft</span>
+             </div>
+             <p v-if="formErrors.dimensionLength || formErrors.dimensionWidth" class="text-xs text-red-400 mt-1">
+               {{ formErrors.dimensionLength || formErrors.dimensionWidth }} 
+             </p>
+           </div>
+         </div>
 
         <div class="space-y-4">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -426,9 +444,12 @@ import BaseModal from '@/components/BaseModal.vue'
 import LoadingState from '@/components/states/LoadingState.vue'
 import EmptyState from '@/components/states/EmptyState.vue'
 import PageLayout from '@/components/layout/PageLayout.vue'
+import { useToast } from 'vue-toastification'
 import {
   PlusIcon, ImageIcon, XIcon, Loader2Icon
 } from 'lucide-vue-next'
+
+const toast = useToast()
 
 const imagePreviewUrls = computed(() => {
   return selectedImages.value.map(image => {
@@ -547,49 +568,77 @@ const validateTimes = () => {
 }
 
 
-const validateRequiredFields = () => {
+const validateForm = () => {
+  formErrors.value = {};
   let isValid = true;
-  Object.keys(formErrors.value).forEach(key => formErrors.value[key] = ''); // Reset errors
 
-  const requiredFields = [
-    { field: 'name', message: 'Court name is required' },
-    { field: 'dimensions', message: 'Dimensions are required' },
-    { field: 'surfaceType', message: 'Surface type is required' },
-    { field: 'courtType', message: 'Court type is required' },
-    { field: 'courtSide', message: 'Court side is required' },
-    { field: 'priceHourly', message: 'Valid price is required', condition: (value) => !value || value <= 0 },
-    { field: 'status', message: 'Status is required' }
-  ];
+  if (!courtForm.value.name?.trim()) {
+    formErrors.value.name = 'Court name is required.';
+    isValid = false;
+  }
 
-  for (const { field, message, condition } of requiredFields) {
-    const fieldValue = courtForm.value[field];
-    if (condition ? condition(fieldValue) : !fieldValue?.trim()) {
-      formErrors.value[field] = message;
-      isValid = false;
-    }
+  if (!courtForm.value.dimensionLength || courtForm.value.dimensionLength <= 0) {
+     formErrors.value.dimensionLength = 'Valid court length is required.'; 
+     isValid = false;
+  }
+  if (!courtForm.value.dimensionWidth || courtForm.value.dimensionWidth <= 0) {
+    formErrors.value.dimensionWidth = 'Valid court width is required.';
+    isValid = false;
+  }
+
+  if (!courtForm.value.surfaceType) {
+    formErrors.value.surfaceType = 'Surface type is required.';
+    isValid = false;
+  }
+  
+  if (!courtForm.value.courtType) {
+    formErrors.value.courtType = 'Court type is required.';
+    isValid = false;
+  }
+  
+  if (!courtForm.value.courtSide) {
+    formErrors.value.courtSide = 'Court side is required.';
+    isValid = false;
+  }
+
+  if (courtForm.value.priceHourly === null || courtForm.value.priceHourly < 0) {
+    formErrors.value.priceHourly = 'Valid regular price is required.';
+    isValid = false;
+  }
+
+  if (!courtForm.value.status) {
+    formErrors.value.status = 'Status is required.';
+    isValid = false;
+  }
+
+  validateTimes();
+  validatePrices();
+  if (formErrors.value.peakHours || formErrors.value.offPeakHours || formErrors.value.pricePeakHours || formErrors.value.priceOffPeakHours) {
+    isValid = false;
   }
 
   if (courtForm.value.hasPeakHours) {
     if (!courtForm.value.peakHours.start || !courtForm.value.peakHours.end) {
-      formErrors.value.peakHours = 'Peak hours time range is required';
+      formErrors.value.peakHours = 'Peak hours time range is required when enabled';
       isValid = false;
     }
-    if (!courtForm.value.pricePeakHours || courtForm.value.pricePeakHours < 0) {
-      formErrors.value.pricePeakHours = 'Valid peak hours price is required';
+    if (courtForm.value.pricePeakHours === null || courtForm.value.pricePeakHours < 0) {
+      formErrors.value.pricePeakHours = 'Valid peak hours price is required when enabled';
+      isValid = false;
+    }
+  }
+   
+  if (courtForm.value.hasOffPeakHours) {
+    if (!courtForm.value.offPeakHours.start || !courtForm.value.offPeakHours.end) {
+      formErrors.value.offPeakHours = 'Off-peak hours time range is required when enabled';
+      isValid = false;
+    }
+    if (courtForm.value.priceOffPeakHours === null || courtForm.value.priceOffPeakHours < 0) {
+      formErrors.value.priceOffPeakHours = 'Valid off-peak hours price is required when enabled';
       isValid = false;
     }
   }
 
-  if (courtForm.value.hasOffPeakHours) {
-    if (!courtForm.value.offPeakHours.start || !courtForm.value.offPeakHours.end) {
-      formErrors.value.offPeakHours = 'Off-peak hours time range is required';
-      isValid = false;
-    }
-    if (!courtForm.value.priceOffPeakHours || courtForm.value.priceOffPeakHours < 0) {
-      formErrors.value.priceOffPeakHours = 'Valid off-peak hours price is required';
-      isValid = false;
-    }
-  }
   return isValid;
 };
 
@@ -611,25 +660,20 @@ const isSubmitting = ref(false)
 const selectedImages = ref([])
 const fileInput = ref(null)
 
-const courtForm = ref({
+const initialCourtForm = () => ({
   name: '',
-  dimensions: '',
+  dimensionLength: null,
+  dimensionWidth: null,
   surfaceType: '',
   courtType: 'Indoor',
-  priceHourly: '',
   courtSide: '5A',
+  priceHourly: null,
   hasPeakHours: false,
-  peakHours: {
-    start: '',
-    end: ''
-  },
-  pricePeakHours: '',
+  peakHours: { start: '', end: '' },
+  pricePeakHours: null,
   hasOffPeakHours: false,
-  offPeakHours: {
-    start: '',
-    end: ''
-  },
-  priceOffPeakHours: '',
+  offPeakHours: { start: '', end: '' },
+  priceOffPeakHours: null,
   facilities: {
     changingRooms: false,
     lighting: false,
@@ -638,6 +682,16 @@ const courtForm = ref({
   },
   status: 'Active'
 })
+
+const courtForm = ref(initialCourtForm())
+
+const closeModal = () => {
+  showAddCourtModal.value = false;
+  editingCourt.value = null;
+  courtForm.value = initialCourtForm();
+  selectedImages.value = [];
+  formErrors.value = {};
+}
 
 onMounted(async () => {
   await fetchCourts()
@@ -699,9 +753,50 @@ const handleImageFiles = (files) => {
 const removeImage = (index) => selectedImages.value.splice(index, 1);
 
 const editCourt = (court) => {
-  editingCourt.value = court;
-  courtForm.value = { ...court, facilities: { ...court.facilities } };
-  selectedImages.value = [...court.images];
+  editingCourt.value = { ...court };
+  
+  let length = null;
+  let width = null;
+  if (court.dimensionLength && court.dimensionWidth) {
+      length = court.dimensionLength;
+      width = court.dimensionWidth;
+  } else if (court.dimensions && typeof court.dimensions === 'string') {
+     const parts = court.dimensions.toLowerCase().replace('ft', '').trim().split('x');
+     if (parts.length === 2) {
+       length = parseInt(parts[0], 10);
+       width = parseInt(parts[1], 10);
+     }
+  }
+
+  courtForm.value = {
+    name: court.name || '',
+    dimensionLength: !isNaN(length) ? length : null,
+    dimensionWidth: !isNaN(width) ? width : null,
+    surfaceType: court.surfaceType || '',
+    courtType: court.courtType || 'Indoor',
+    courtSide: court.courtSide || '5A',
+    priceHourly: court.priceHourly ?? null,
+    hasPeakHours: !!(court.peakHours && court.peakHours.start && court.peakHours.end),
+    peakHours: {
+      start: court.peakHours?.start || '',
+      end: court.peakHours?.end || ''
+    },
+    pricePeakHours: court.pricePeakHours ?? null,
+    hasOffPeakHours: !!(court.offPeakHours && court.offPeakHours.start && court.offPeakHours.end),
+    offPeakHours: {
+      start: court.offPeakHours?.start || '',
+      end: court.offPeakHours?.end || ''
+    },
+    priceOffPeakHours: court.priceOffPeakHours ?? null,
+    facilities: {
+        changingRooms: court.facilities?.changingRooms || false,
+        lighting: court.facilities?.lighting || false,
+        parking: court.facilities?.parking || false,
+        shower: court.facilities?.shower || false
+      },
+    status: court.status || 'Active'
+  };
+  selectedImages.value = court.images ? [...court.images] : [];
   showAddCourtModal.value = true;
 };
 
@@ -719,79 +814,115 @@ const deleteCourt = async (courtId) => {
   }
 };
 
-
 const handleSubmit = async () => {
-    validatePrices();
-    validateTimes();
-    if (!validateRequiredFields()) return;
+  if (!validateForm()) {
+    toast.error('Please fix the errors in the form.');
+    return;
+  }
 
-    isSubmitting.value = true;
-    try {
-        const formData = new FormData();
+  isSubmitting.value = true;
+  const formData = new FormData();
 
-        // Add basic fields
-        formData.append('name', courtForm.value.name);
-        formData.append('dimensions', courtForm.value.dimensions);
-        formData.append('surfaceType', courtForm.value.surfaceType);
-        formData.append('courtType', courtForm.value.courtType);
-        formData.append('priceHourly', courtForm.value.priceHourly);
-        formData.append('status', courtForm.value.status);
+  // Add a calculated dimensions field to satisfy backend validation
+  if (courtForm.value.dimensionLength && courtForm.value.dimensionWidth) {
+    formData.append('dimensions', `${courtForm.value.dimensionLength} x ${courtForm.value.dimensionWidth} ft`);
+  }
 
-        // Add facilities
-        formData.append('facilities.changingRooms', courtForm.value.facilities.changingRooms);
-        formData.append('facilities.lighting', courtForm.value.facilities.lighting);
-        formData.append('facilities.parking', courtForm.value.facilities.parking);
-        formData.append('facilities.shower', courtForm.value.facilities.shower);
-
-        formData.append('requirePrepayment', requirePrepayment.value);
-        formData.append('courtSide', courtForm.value.courtSide);
-        // Add peak hours data
-        formData.append('hasPeakHours', courtForm.value.hasPeakHours);
-        if (courtForm.value.hasPeakHours) {
-            formData.append('peakHours.start', courtForm.value.peakHours.start);
-            formData.append('peakHours.end', courtForm.value.peakHours.end);
-            formData.append('pricePeakHours', courtForm.value.pricePeakHours);
-        }
-
-        // Add off-peak hours data
-        formData.append('hasOffPeakHours', courtForm.value.hasOffPeakHours);
-        if (courtForm.value.hasOffPeakHours) {
-            formData.append('offPeakHours.start', courtForm.value.offPeakHours.start);
-            formData.append('offPeakHours.end', courtForm.value.offPeakHours.end);
-            formData.append('priceOffPeakHours', courtForm.value.priceOffPeakHours);
-        }
-
-        // Add images
-        selectedImages.value.forEach(image => {
-            if (image instanceof File) {
-                formData.append('images', image);
-            }
-        });
-
-        const url = editingCourt.value
-            ? `http://localhost:5000/api/courts/${editingCourt.value._id}`
-            : 'http://localhost:5000/api/courts';
-        const method = editingCourt.value ? 'PUT' : 'POST';
-
-        const response = await fetch(url, {
-            method,
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-            body: formData
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Failed to save court');
-        }
-
-        showAddCourtModal.value = false;
-        editingCourt.value = null;
-        await fetchCourts();
-
-    } catch (error) {
-        console.error('Error saving court:', error);
-    } finally {
-        isSubmitting.value = false;
+  Object.keys(courtForm.value).forEach(key => {
+    if (key !== 'hasPeakHours' && key !== 'hasOffPeakHours') { 
+      const value = courtForm.value[key];
+      
+      if (key === 'peakHours' || key === 'offPeakHours') {
+        if (courtForm.value[key === 'peakHours' ? 'hasPeakHours' : 'hasOffPeakHours']) {
+           Object.keys(value).forEach(subKey => {
+             if (value[subKey] !== null && value[subKey] !== undefined && value[subKey] !== '') {
+               formData.append(`${key}[${subKey}]`, value[subKey]);
+             }
+           });
+         }
+      } else if (key === 'facilities') {
+         Object.keys(value).forEach(subKey => {
+            formData.append(`${key}[${subKey}]`, value[subKey]);
+         });
+      } else if (value !== null && value !== undefined) {
+        formData.append(key, value);
+      }
     }
+  });
+   
+  formData.append('hasPeakHours', courtForm.value.hasPeakHours);
+  formData.append('hasOffPeakHours', courtForm.value.hasOffPeakHours);
+
+  const existingImageUrls = [];
+  selectedImages.value.forEach(image => {
+    if (image instanceof File) {
+      formData.append('images', image);
+    } else if (typeof image === 'string') {
+      existingImageUrls.push(image);
+    }
+  });
+
+  console.log('Form Data to be sent:');
+  for (let [key, value] of formData.entries()) {
+    if (value instanceof File) {
+        console.log(`${key}: ${value.name} (File)`);
+    } else {
+        console.log(`${key}: ${value}`);
+    }
+  }
+
+  try {
+    let response;
+    const token = localStorage.getItem('token');
+    const headers = { 
+        'Authorization': `Bearer ${token}`
+    };
+
+    if (editingCourt.value) {
+      response = await fetch(`http://localhost:5000/api/courts/${editingCourt.value._id}`, {
+        method: 'PUT',
+        headers: headers,
+        body: formData
+      });
+      if (!response.ok) throw new Error(await response.text());
+      toast.success('Court updated successfully!');
+      
+    } else {
+      response = await fetch('http://localhost:5000/api/courts', {
+        method: 'POST',
+        headers: headers,
+        body: formData
+      });
+       if (!response.ok) throw new Error(await response.text());
+       toast.success('Court added successfully!');
+    }
+    
+    if (!response.ok) {
+         const errorData = await response.json().catch(() => ({ message: 'An unknown error occurred.' }));
+         throw new Error(errorData.message || `HTTP error ${response.status}`);
+    }
+
+    await fetchCourts();
+    closeModal();
+  } catch (error) {
+    console.error('Error submitting court:', error);
+    let errorMessage = 'Failed to save court. Please try again.';
+    try {
+        const errorJson = JSON.parse(error.message || '{}'); 
+        if (errorJson.message) errorMessage = errorJson.message;
+        if (errorJson.details?.errors) {
+            Object.keys(errorJson.details.errors).forEach(key => {
+                formErrors.value[key] = errorJson.details.errors[key].message;
+            });
+            errorMessage = 'Please check the form for errors.';
+        }
+    } catch /* istanbul ignore next */ {
+        if (typeof error.message === 'string') errorMessage = error.message;
+    }
+    
+    toast.error(errorMessage);
+  } finally {
+    isSubmitting.value = false;
+  }
 };
 </script>

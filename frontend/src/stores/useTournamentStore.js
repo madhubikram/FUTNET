@@ -11,11 +11,9 @@ export const useTournamentStore = defineStore('tournament', () => {
 
   // Update your getters to use value property
   const upcomingTournaments = computed(() => {
-    const now = new Date();
-    return tournaments.value.filter(t => {
-      const deadlineDate = new Date(t.registrationDeadline);
-      return t.status === 'Upcoming' && deadlineDate > now;
-    });
+    // Filter by status only, since backend already determines the status 
+    // based on the start date and registration status
+    return tournaments.value.filter(t => t.status === 'Upcoming');
   });
 
   const ongoingTournaments = computed(() => 
@@ -95,7 +93,12 @@ export const useTournamentStore = defineStore('tournament', () => {
       // Update tournament registration status
       tournaments.value = tournaments.value.map(tournament => ({
         ...tournament,
-        isRegistered: registrations.some(reg => reg.tournamentId === tournament._id)
+        // Check if any registration's nested tournament ID matches this tournament ID
+        isRegistered: registrations.some(reg => 
+          // Handle potential variations in registration data structure
+          (reg.tournament?._id?.toString() === tournament._id?.toString()) || 
+          (reg.tournamentId?.toString() === tournament._id?.toString())
+        )
       }))
     } catch (err) {
       console.error('Error fetching registrations:', err)

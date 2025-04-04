@@ -47,21 +47,34 @@
       <slot name="pricing" v-if="$slots.pricing"></slot>
       <slot name="tournament-details" v-if="$slots['tournament-details']"></slot>
 
-      <button
-        @click.stop="$emit('view-details')"
-        class="w-full mt-6 px-4 py-3 bg-green-500/10 text-green-400 rounded-lg
-                hover:bg-green-500/20 transition-all duration-300 flex items-center justify-center gap-2
-                hover:scale-[1.02] active:scale-[0.98]"
-      >
-        <InfoIcon class="w-4 h-4" />
-        {{ detailsButtonText }}
-      </button>
+      <div class="mt-6 flex gap-3">
+        <button
+          @click.stop="$emit('view-details')"
+          class="flex-1 px-4 py-3 bg-green-500/10 text-green-400 rounded-lg
+                  hover:bg-green-500/20 transition-all duration-300 flex items-center justify-center gap-2
+                  hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <InfoIcon class="w-4 h-4" />
+          {{ detailsButtonText }}
+        </button>
+        <button
+          v-if="showAdminControls" 
+          @click.stop="$emit('view-bracket')"
+          class="flex-1 px-4 py-3 bg-purple-500/10 text-purple-400 rounded-lg
+                  hover:bg-purple-500/20 transition-all duration-300 flex items-center justify-center gap-2
+                  hover:scale-[1.02] active:scale-[0.98]"
+          :title="'View Bracket'"
+        >
+          <ProjectorIcon class="w-4 h-4" />
+          View Bracket
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { InfoIcon, EditIcon, Trash2Icon } from 'lucide-vue-next'
+import { InfoIcon, EditIcon, Trash2Icon, ProjectorIcon } from 'lucide-vue-next'
 
 defineProps({
   itemType: {
@@ -107,5 +120,5 @@ defineProps({
   }
 })
 
-defineEmits(['edit-item', 'delete-item', 'view-details'])
+defineEmits(['edit-item', 'delete-item', 'view-details', 'view-bracket'])
 </script>

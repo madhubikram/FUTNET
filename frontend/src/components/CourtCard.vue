@@ -53,6 +53,18 @@
         </span>
       </h3>
       
+      <!-- New Section for Type and Dimensions -->
+      <div class="flex justify-between items-center text-sm text-gray-400 mb-4">
+        <div class="flex items-center gap-1.5">
+           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-paint-roller"><path d="M16 5a2 2 0 0 0-2 2v10H6V7a2 2 0 0 0-2-2H2"/><path d="M18 9H6v11h12a2 2 0 0 0 2-2V11a2 2 0 0 0-2-2Z"/></svg> <!-- Simple Paint Roller Icon -->
+          <span>{{ court.surfaceType }}</span>
+        </div>
+         <div class="flex items-center gap-1.5">
+           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-maximize"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg> <!-- Maximize Icon -->
+           <span>{{ court.dimensionLength }} x {{ court.dimensionWidth }} ft</span>
+        </div>
+      </div>
+
       <!-- Pricing Information with Enhanced Design -->
       <div class="space-y-3">
         <div class="flex items-center justify-between p-3 bg-gray-700/50 rounded-lg">

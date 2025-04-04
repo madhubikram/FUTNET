@@ -110,7 +110,9 @@ const props = defineProps({
 const courtDetails = computed(() => [
   {
     label: 'Dimensions',
-    value: props.court.dimensions,
+    value: props.court.dimensionLength && props.court.dimensionWidth 
+           ? `${props.court.dimensionLength} x ${props.court.dimensionWidth} ft`
+           : props.court.dimensions || 'Not specified',
     icon: RulerIcon
   },
   {

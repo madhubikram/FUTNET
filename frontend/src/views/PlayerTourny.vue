@@ -302,10 +302,22 @@ const handleRegister = (tournament) => {
 
 const confirmRegistration = async ({ tournament, teamInfo }) => {
   try {
+    // 1. Register the user
     await tournamentStore.registerForTournament(tournament._id, teamInfo)
+    
+    // 2. Refetch ALL tournament data to ensure state consistency
+    // This automatically includes fetching user registrations again internally
+    await tournamentStore.fetchTournaments()
+    
+    // 3. Close the modal
     showRegisterModal.value = false
+    
+    // 4. Switch to the "My Tournaments" tab
+    currentTab.value = 'my-tournaments'
+    
   } catch (error) {
     console.error('Registration error:', error)
+    // Optionally show an error toast to the user
   }
 }
 

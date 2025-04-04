@@ -35,7 +35,7 @@
                 <div class="space-y-4">
                   <div>
                     <h3 class="text-gray-400 text-sm">Dimensions</h3>
-                    <p class="text-white">{{ court.dimensions }}</p>
+                    <p class="text-white">{{ court.dimensionLength }} x {{ court.dimensionWidth }} ft</p>
                   </div>
                   <div>
                     <h3 class="text-gray-400 text-sm">Surface Type</h3>

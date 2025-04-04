@@ -15,14 +15,21 @@ getCourtDetails: async (req, res) => {
             return res.status(404).json({ message: 'Court not found' });
         }
 
-        // Calculate and update average rating
-        court.averageRating = court.calculateAverageRating();
-        await court.save();
+        // Calculate average rating but DO NOT save it back here
+        // Saving here triggers validation on potentially old/invalid documents
+        const calculatedAverageRating = court.calculateAverageRating();
+        console.log(`[${court._id}] Calculated average rating: ${calculatedAverageRating}`);
 
-        res.json(court);
+        // Convert court document to a plain object to add the calculated rating
+        const courtData = court.toObject();
+        courtData.averageRating = calculatedAverageRating; 
+
+        // Return the fetched data + calculated rating
+        res.json(courtData); 
+        
     } catch (error) {
-        console.error('Error fetching court details:', error);
-        res.status(500).json({ message: error.message });
+        console.error(`[${req.params.id}] Error fetching court details:`, error); // Enhanced logging
+        res.status(500).json({ message: `Server error fetching details: ${error.message}` }); // More informative message
     }
 },
 
@@ -114,7 +121,16 @@ addReview: async (req, res) => {
         userId: req.user?._id,
         body: req.body
       })
-      const { rating, comment } = req.body;
+      
+      // Extract rating and comment, ensure comment has a default empty string
+      const { rating } = req.body;
+      const comment = req.body.comment || ''; // Default to empty string if comment is null/undefined
+      
+      // Validate rating is present and numeric
+      if (!rating || isNaN(Number(rating)) || Number(rating) < 1 || Number(rating) > 5) {
+        return res.status(400).json({ message: 'Rating is required and must be between 1-5' });
+      }
+      
       const court = await Court.findById(req.params.id);
       if (!req.user?._id) {
         return res.status(401).json({ message: 'User not authenticated' })
@@ -123,7 +139,6 @@ addReview: async (req, res) => {
       if (!court) {
         return res.status(404).json({ message: 'Court not found' });
       }
-      
   
       // Check if user has already reviewed
       const existingReview = court.reviews.find(
@@ -134,9 +149,10 @@ addReview: async (req, res) => {
         return res.status(400).json({ message: 'You have already reviewed this court' });
       }
   
+      // Add the review - comment can be empty string
       court.reviews.push({
         user: req.user._id,
-        rating,
+        rating: Number(rating),
         comment,
         reactions: []
       });
@@ -150,6 +166,7 @@ addReview: async (req, res) => {
   
       res.status(201).json(populatedCourt);
     } catch (error) {
+      console.error('Error adding review:', error);
       res.status(500).json({ message: error.message });
     }
   },

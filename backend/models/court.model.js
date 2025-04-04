@@ -5,13 +5,26 @@ const courtSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    dimensions: {
-        type: String,
-        required: true
+    dimensionLength: {
+        type: Number,
+        required: [true, 'Court length is required'],
+        min: [1, 'Court length must be positive']
+    },
+    dimensionWidth: {
+        type: Number,
+        required: [true, 'Court width is required'],
+        min: [1, 'Court width must be positive']
     },
     surfaceType: {
         type: String,
-        required: true
+        required: true,
+        enum: [
+            'Synthetic Turf',
+            'Wooden Flooring',
+            'Concrete',
+            'Rubber Flooring',
+            'Gripper Tiles'
+        ]
     },
     courtType: {
         type: String,
@@ -91,7 +104,8 @@ const courtSchema = new mongoose.Schema({
         },
         comment: {
           type: String,
-          required: true
+          required: false,
+          default: ''
         },
         createdAt: {
           type: Date,
@@ -124,48 +138,74 @@ const courtSchema = new mongoose.Schema({
 });
 
 courtSchema.methods.calculateAverageRating = function() {
-    if (this.reviews.length === 0) return 0;
+    if (!this.reviews || this.reviews.length === 0) return 0; // Added check for missing reviews array
     
-    const sum = this.reviews.reduce((acc, review) => acc + review.rating, 0);
-    return Math.round((sum / this.reviews.length) * 10) / 10;
+    // Ensure only numeric ratings are included in the sum
+    const sum = this.reviews.reduce((acc, review) => {
+        return acc + (typeof review?.rating === 'number' ? review.rating : 0);
+    }, 0);
+    
+    // Avoid division by zero if somehow no valid ratings were found
+    const validReviewsCount = this.reviews.filter(r => typeof r?.rating === 'number').length;
+    if (validReviewsCount === 0) return 0;
+
+    return Math.round((sum / validReviewsCount) * 10) / 10;
   };
 
 // Validate time ranges
 courtSchema.pre('save', function(next) {
-    if (this.hasPeakHours) {
-        if (!this.peakHours.start || !this.peakHours.end || !this.pricePeakHours) {
-            throw new Error('Peak hours settings are incomplete');
+    console.log('Running pre-save hook for court:', this._id); // Add logging
+    try {
+        if (this.hasPeakHours) {
+            if (!this.peakHours || !this.peakHours.start || !this.peakHours.end || this.pricePeakHours === null || this.pricePeakHours === undefined) {
+                return next(new Error('Peak hours settings are incomplete')); // Use next(error) pattern
+            }
         }
+
+        if (this.hasOffPeakHours) {
+            if (!this.offPeakHours || !this.offPeakHours.start || !this.offPeakHours.end || this.priceOffPeakHours === null || this.priceOffPeakHours === undefined) {
+                return next(new Error('Off-peak hours settings are incomplete')); // Use next(error) pattern
+            }
+        }
+
+        // Validate time overlap only if both types are enabled AND times are valid strings
+        if (this.hasPeakHours && this.hasOffPeakHours && 
+            typeof this.peakHours?.start === 'string' && typeof this.peakHours?.end === 'string' &&
+            typeof this.offPeakHours?.start === 'string' && typeof this.offPeakHours?.end === 'string') 
+        {
+            const timeToMinutes = (time) => {
+                if (!time || !time.includes(':')) return NaN; // Handle invalid time format
+                const [hours, minutes] = time.split(':').map(Number);
+                if (isNaN(hours) || isNaN(minutes)) return NaN; // Handle parsing errors
+                return hours * 60 + minutes;
+            };
+
+            const peakStart = timeToMinutes(this.peakHours.start);
+            const peakEnd = timeToMinutes(this.peakHours.end);
+            const offPeakStart = timeToMinutes(this.offPeakHours.start);
+            const offPeakEnd = timeToMinutes(this.offPeakHours.end);
+
+            // Check if any time conversion resulted in NaN
+            if (isNaN(peakStart) || isNaN(peakEnd) || isNaN(offPeakStart) || isNaN(offPeakEnd)) {
+                return next(new Error('Invalid time format detected in peak or off-peak hours'));
+            }
+
+            if (peakStart >= peakEnd || offPeakStart >= offPeakEnd) {
+                return next(new Error('End time must be after start time for peak/off-peak hours'));
+            }
+
+            // Check for overlap: (StartA < EndB) and (EndA > StartB)
+            if (peakStart < offPeakEnd && peakEnd > offPeakStart) {
+                return next(new Error('Peak and off-peak hours cannot overlap'));
+            }
+        }
+
+        console.log('Pre-save hook completed successfully for court:', this._id);
+        next(); // Proceed with saving if all checks pass
+    } catch (error) {
+        console.error('Error in pre-save hook:', error);
+        next(error); // Pass any unexpected errors to Mongoose
     }
-
-    if (this.hasOffPeakHours) {
-        if (!this.offPeakHours.start || !this.offPeakHours.end || !this.priceOffPeakHours) {
-            throw new Error('Off-peak hours settings are incomplete');
-        }
-    }
-
-    // Validate time overlap if both types are enabled
-    if (this.hasPeakHours && this.hasOffPeakHours) {
-        const timeToMinutes = (time) => {
-            const [hours, minutes] = time.split(':').map(Number);
-            return hours * 60 + minutes;
-        };
-
-        const peakStart = timeToMinutes(this.peakHours.start);
-        const peakEnd = timeToMinutes(this.peakHours.end);
-        const offPeakStart = timeToMinutes(this.offPeakHours.start);
-        const offPeakEnd = timeToMinutes(this.offPeakHours.end);
-
-        if (peakStart >= peakEnd || offPeakStart >= offPeakEnd) {
-            throw new Error('End time must be after start time');
-        }
-
-        if (!(peakEnd <= offPeakStart || offPeakEnd <= peakStart)) {
-            throw new Error('Peak and off-peak hours cannot overlap');
-        }
-    }
-
-    next();
 });
 
 module.exports = mongoose.model('Court', courtSchema);

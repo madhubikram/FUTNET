@@ -127,6 +127,7 @@
                     <h3 class="text-sm font-medium text-gray-300 mb-2">Tournament Structure</h3>
                     <ul class="space-y-2 text-gray-400">
                       <li>• {{ tournament?.format === 'single' ? 'Single Elimination' : 'Double Elimination' }}</li>
+                      <li>• Minimum {{ tournament?.minTeams }} teams</li>
                       <li>• Maximum {{ tournament?.maxTeams }} teams</li>
                     </ul>
                   </div>
@@ -163,10 +164,28 @@
               <!-- Registration Status Card -->
               <div class="bg-gray-800 rounded-xl p-6 sticky top-6">
                 <div class="space-y-4">
-                  <!-- Prize Pool -->
+                  <!-- Prize Info -->
                   <div class="text-center p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
-                    <h3 class="text-green-400 font-medium mb-1">Prize Pool</h3>
+                    <h3 class="text-green-400 font-medium mb-1">Total Prize Pool</h3>
                     <p class="text-2xl font-bold text-white">Rs. {{ tournament?.prizePool }}</p>
+                    
+                    <!-- Prize Breakdown -->
+                    <div v-if="tournament?.prizes && (tournament.prizes.first || tournament.prizes.second || tournament.prizes.third)" class="mt-3 pt-3 border-t border-green-500/20">
+                      <div class="grid grid-cols-3 gap-2 text-sm">
+                        <div v-if="tournament.prizes.first" class="text-center">
+                          <span class="inline-block px-2 py-1 bg-yellow-400/20 text-yellow-300 rounded-full text-xs">1st Place</span>
+                          <p class="text-white mt-1">Rs. {{ tournament.prizes.first }}</p>
+                        </div>
+                        <div v-if="tournament.prizes.second" class="text-center">
+                          <span class="inline-block px-2 py-1 bg-gray-400/20 text-gray-300 rounded-full text-xs">2nd Place</span>
+                          <p class="text-white mt-1">Rs. {{ tournament.prizes.second }}</p>
+                        </div>
+                        <div v-if="tournament.prizes.third" class="text-center">
+                          <span class="inline-block px-2 py-1 bg-amber-600/20 text-amber-500 rounded-full text-xs">3rd Place</span>
+                          <p class="text-white mt-1">Rs. {{ tournament.prizes.third }}</p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                   <!-- Registration Fee -->

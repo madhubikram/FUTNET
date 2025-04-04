@@ -4,10 +4,10 @@
     <div class="flex items-center justify-between mb-2">
       <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-green-400 via-emerald-500 to-teal-600 bg-clip-text text-transparent flex items-center">
         <Trophy class="h-6 w-6 mr-2 text-emerald-400" />
-        Tournament Master Pro
+        {{ tournamentName || 'Tournament Master Pro' }}
       </h1>
       
-      <div v-if="bracketGenerated" class="flex items-center gap-4">
+      <div v-if="bracketGenerated && !loading" class="flex items-center gap-4">
         <div class="flex items-center bg-gray-800/70 rounded-lg p-1 backdrop-blur-sm shadow-md">
           <button 
             @click="handleZoomOut"
@@ -28,15 +28,21 @@
         
         <button 
           @click="resetBracket"
-          class="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-md transition-all shadow-md hover:shadow-lg text-sm font-medium flex items-center"
+          :disabled="!!route.params.id"
+          class="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-md transition-all shadow-md hover:shadow-lg text-sm font-medium flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Reset Bracket
         </button>
       </div>
     </div>
     
+    <!-- Loading State -->
+    <div v-if="loading" class="flex items-center justify-center h-64">
+      <Loader2Icon class="w-12 h-12 text-emerald-500 animate-spin" />
+    </div>
+    
     <!-- Tournament Setup Screen -->
-    <div v-if="!bracketGenerated" class="flex flex-col gap-6 max-w-lg mx-auto w-full animate-fadeIn">
+    <div v-else-if="!route.params.id && !bracketGenerated" class="flex flex-col gap-6 max-w-lg mx-auto w-full animate-fadeIn">
       <div class="bg-gradient-to-b from-gray-800/80 to-gray-800/40 backdrop-blur-sm p-6 rounded-xl shadow-xl border border-gray-700/50">
         <div class="mb-5">
           <h2 class="text-xl font-semibold mb-2 bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent">Tournament Setup</h2>
@@ -161,7 +167,7 @@
     </div>
     
     <!-- Tournament Content (Bracket + Stats) -->
-    <div v-else class="flex flex-col gap-5 animate-fadeIn">
+    <div v-else-if="(bracketGenerated || route.params.id) && !loading" class="flex flex-col gap-5 animate-fadeIn">
       <!-- Tabs -->
       <div class="flex bg-gray-800/70 backdrop-blur-sm rounded-lg p-1 w-fit">
         <button
@@ -365,7 +371,7 @@
                         type="number"
                         min="0"
                         v-model.number="match.score1"
-                        @input="updateMatch(roundIndex, matchIndex, 'score1', match.score1)"
+                        @input="updateMatch(roundIndex, matchIndex, 'score1')"
                         :class="[
                           'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
                           match.winner === match.team1 ? 'bg-emerald-950/30 border-emerald-700/30 focus:ring-emerald-500/50' : 'bg-gray-800 border-gray-700'
@@ -378,7 +384,7 @@
                           type="number"
                           min="0"
                           v-model.number="match.pk1"
-                          @input="updateMatch(roundIndex, matchIndex, 'pk1', match.pk1)"
+                          @input="updateMatch(roundIndex, matchIndex, 'pk1')"
                           :class="[
                             'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
                             match.winner === match.team1 && match.pk1 > match.pk2 ? 'bg-emerald-950/30 border-emerald-700/30 focus:ring-emerald-500/50' : 'bg-gray-800 border-gray-700'
@@ -408,7 +414,7 @@
                         type="number"
                         min="0"
                         v-model.number="match.score2"
-                        @input="updateMatch(roundIndex, matchIndex, 'score2', match.score2)"
+                        @input="updateMatch(roundIndex, matchIndex, 'score2')"
                         :class="[
                           'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
                           match.winner === match.team2 ? 'bg-emerald-950/30 border-emerald-700/30 focus:ring-emerald-500/50' : 'bg-gray-800 border-gray-700'
@@ -421,7 +427,7 @@
                           type="number"
                           min="0"
                           v-model.number="match.pk2"
-                          @input="updateMatch(roundIndex, matchIndex, 'pk2', match.pk2)"
+                          @input="updateMatch(roundIndex, matchIndex, 'pk2')"
                           :class="[
                             'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
                             match.winner === match.team2 && match.pk2 > match.pk1 ? 'bg-emerald-950/30 border-emerald-700/30 focus:ring-emerald-500/50' : 'bg-gray-800 border-gray-700'
@@ -522,14 +528,18 @@
 
 <script>
 import { ref, computed, reactive, onMounted, watch } from 'vue';
-import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight } from 'lucide-vue-next';
+import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon } from 'lucide-vue-next';
+import { useRoute } from 'vue-router';
+
+const API_URL = 'http://localhost:5000/api';
 
 export default {
   name: 'TournamentBrackets',
   components: {
-    Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight
+    Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon
   },
   setup() {
+    const route = useRoute();
     // Refs for DOM elements
     const teamInputRef = ref(null);
     const bracketContainerRef = ref(null);
@@ -541,6 +551,9 @@ export default {
     const bracketGenerated = ref(false);
     const zoomLevel = ref(100);
     const activeTab = ref('bracket');
+    const loading = ref(false);
+    const tournamentName = ref('');
+    const error = ref(null);
     
     // Tournament stats
     const tournamentStats = reactive({
@@ -590,7 +603,6 @@ export default {
       
       // Calculate total slots needed (power of 2)
       const totalSlots = Math.pow(2, numRounds);
-      const byeCount = totalSlots - teams.value.length;
       
       // Create a copy of teams and distribute byes
       let teamsCopy = [...teams.value];
@@ -741,7 +753,7 @@ export default {
     };
 
     // Handle match score update
-    const updateMatch = (roundIndex, matchIndex, field, value) => {
+    const updateMatch = (roundIndex, matchIndex, field) => {
       const updatedRounds = [...rounds.value];
       const match = updatedRounds[roundIndex].matches[matchIndex];
       
@@ -907,11 +919,118 @@ export default {
       return rounds.value[0]?.matches.filter(m => m.hasBye).length || 0;
     });
     
+    // Fetch Tournament Bracket Data
+    const fetchTournamentBracket = async (id) => {
+      loading.value = true;
+      error.value = null;
+      console.log(`Fetching bracket for tournament ID: ${id}`);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication token not found.');
+        }
+        const response = await fetch(`${API_URL}/tournaments/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.message || `HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Fetched tournament data:', data);
+
+        tournamentName.value = data.name;
+        
+        // Assuming the API returns registered teams in 'registeredTeamsDetails' or similar
+        // and bracket structure in 'bracket' (which should match the 'rounds' structure)
+        if (data.registeredTeamsDetails && data.registeredTeamsDetails.length > 0) {
+            // Map fetched team details to the format expected by the bracket generation/display
+             teams.value = data.registeredTeamsDetails.map(teamDetail => ({
+                id: teamDetail._id, // Use actual team ID
+                name: teamDetail.teamName 
+            }));
+        } else {
+            teams.value = []; // Set teams to empty if none registered
+        }
+
+
+        if (data.bracket && data.bracket.rounds && data.bracket.rounds.length > 0) {
+          // Ensure team objects within the bracket data have id and name
+          const processedRounds = data.bracket.rounds.map(round => ({
+              ...round,
+              matches: round.matches.map(match => ({
+                  ...match,
+                  // Ensure team objects are correctly structured or look them up in teams.value
+                  team1: match.team1 ? teams.value.find(t => t.id === match.team1) || { id: match.team1, name: 'Unknown Team' } : null,
+                  team2: match.team2 ? teams.value.find(t => t.id === match.team2) || { id: match.team2, name: 'Unknown Team' } : null,
+                  winner: match.winner ? teams.value.find(t => t.id === match.winner) || { id: match.winner, name: 'Unknown Team' } : null,
+                  // Ensure topScorer has default values if missing
+                  topScorer: match.topScorer || { name: '', goals: 0 },
+                  // Set default date/time if missing
+                  date: match.date || '',
+                  time: match.time || '',
+                  score1: match.score1 ?? 0,
+                  score2: match.score2 ?? 0,
+                  pk1: match.pk1 ?? null,
+                  pk2: match.pk2 ?? null,
+              }))
+          }));
+
+          rounds.value = processedRounds;
+          bracketGenerated.value = true;
+          console.log('Bracket loaded from fetched data.');
+
+          // Load stats if available
+          if (data.stats) {
+             Object.assign(tournamentStats, data.stats);
+             // Ensure nested objects are handled correctly
+             if (!tournamentStats.topScorer) tournamentStats.topScorer = { name: '', goals: 0 };
+             if (!tournamentStats.mvp) tournamentStats.mvp = '';
+             if (!tournamentStats.playerOfTournament) tournamentStats.playerOfTournament = '';
+          } else {
+             // Reset stats if not provided
+             Object.assign(tournamentStats, {
+                topScorer: { name: '', goals: 0 },
+                mvp: '',
+                playerOfTournament: ''
+             });
+          }
+
+
+        } else if (teams.value.length >= 2) {
+           console.log('No existing bracket found in data, generating new one based on registered teams.');
+           // If no bracket exists but teams are registered, generate a fresh bracket
+           generateBracket(); // This function uses the populated teams.value
+        } else {
+           console.log('No bracket data found and not enough teams to generate.');
+           // Handle case where there's no bracket and not enough teams (e.g., show a message)
+           bracketGenerated.value = false; // Ensure setup screen isn't skipped
+           // Optionally, set an error or status message here
+        }
+
+      } catch (err) {
+        console.error('Error fetching tournament bracket:', err);
+        error.value = err.message;
+        // Handle error display to the user if needed
+      } finally {
+        loading.value = false;
+      }
+    };
+
     // Lifecycle hooks
     onMounted(() => {
-      // Focus the team input field when the component mounts
-      if (teamInputRef.value && !bracketGenerated.value) {
-        teamInputRef.value.focus();
+      const tournamentId = route.params.id;
+      if (tournamentId) {
+        fetchTournamentBracket(tournamentId);
+      } else {
+         // Focus the team input field when the component mounts (only if creating new)
+         if (teamInputRef.value && !bracketGenerated.value) {
+           teamInputRef.value.focus();
+         }
       }
     });
     
@@ -933,6 +1052,10 @@ export default {
       zoomLevel,
       activeTab,
       tournamentStats,
+      loading,
+      tournamentName,
+      error,
+      route,
       
       // Refs
       teamInputRef,
