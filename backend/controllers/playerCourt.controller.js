@@ -1,7 +1,9 @@
 // Route: /backend/controllers/playerCourt.controller.js
 
 const Court = require('../models/court.model');
+const Booking = require('../models/booking.model'); // Import Booking model
 const { isWithinOperatingHours, getTimeSlots } = require('../utils/timeUtils');
+const { startOfDay, endOfDay } = require('date-fns'); // Import date-fns helpers
 
 const playerCourtController = {
 // Export each controller function individually for better error tracking
@@ -36,22 +38,25 @@ getCourtDetails: async (req, res) => {
 checkAvailability: async (req, res) => {
     try {
         const { date, time } = req.query;
-        
+        const FREE_SLOT_LIMIT = 2; // Define the limit for free slots
+
         // Input validation
         if (!date || !time) {
-            return res.status(400).json({ 
+            return res.status(400).json({
                 message: 'Date and time are required',
                 available: false
             });
         }
 
-        // Get court details
-        const court = await Court.findById(req.params.id)
-            .populate('futsalId', 'operatingHours');
+        const requestedDate = new Date(date); // Parse the date string once
 
-        if (!court) {
-            return res.status(404).json({ 
-                message: 'Court not found',
+        // Get court details, including futsal's prepayment setting
+        const court = await Court.findById(req.params.id)
+            .populate('futsalId', 'operatingHours requirePrepayment'); // Added requirePrepayment
+
+        if (!court || !court.futsalId) { // Check if court and populated futsalId exist
+            return res.status(404).json({
+                message: 'Court or associated Futsal not found',
                 available: false
             });
         }
@@ -61,53 +66,97 @@ checkAvailability: async (req, res) => {
             return res.json({
                 available: false,
                 rate: 0,
-                message: 'Court is not active'
+                message: 'Court is not active',
+                isFreeSlotAvailable: false
             });
         }
 
         // Check operating hours
-        const isAvailable = isWithinOperatingHours(
+        const isWithinOpHours = isWithinOperatingHours(
             time,
             court.futsalId.operatingHours.opening,
             court.futsalId.operatingHours.closing
         );
 
-        if (!isAvailable) {
+        if (!isWithinOpHours) {
             return res.json({
                 available: false,
                 rate: 0,
-                message: 'Outside operating hours'
+                message: 'Outside operating hours',
+                isFreeSlotAvailable: false
             });
         }
 
-        // Check existing bookings
-        let existingBooking = null;
-        if (court.bookings && Array.isArray(court.bookings)) {
-            existingBooking = court.bookings.find(
-                booking => 
-                    booking.date.toDateString() === new Date(date).toDateString() &&
-                    booking.startTime === time &&
-                    booking.status !== 'cancelled'
-            );
+        // Check existing booking for this specific slot
+        const existingBooking = await Booking.findOne({
+            court: court._id,
+            date: {
+                 $gte: startOfDay(requestedDate),
+                 $lt: endOfDay(requestedDate)
+            },
+            startTime: time,
+            status: { $ne: 'cancelled' }
+        });
+
+        if (existingBooking) {
+            return res.json({
+                available: false,
+                rate: 0, // Rate doesn't matter if unavailable
+                message: 'Time slot is already booked',
+                isFreeSlotAvailable: false,
+                bookedByUserId: existingBooking.user // Add the user ID here
+            });
         }
 
-        // Calculate rate based on time
+        // Calculate base rate based on time
         let rate = court.priceHourly;
+        let priceType = 'regular'; // Default price type
         if (court.hasPeakHours && isWithinOperatingHours(time, court.peakHours.start, court.peakHours.end)) {
             rate = court.pricePeakHours;
+            priceType = 'peak';
         } else if (court.hasOffPeakHours && isWithinOperatingHours(time, court.offPeakHours.start, court.offPeakHours.end)) {
             rate = court.priceOffPeakHours;
+            priceType = 'offPeak';
+        }
+
+        let isFreeSlotAvailable = false;
+        // Check for free slots if prepayment is not required
+        if (!court.futsalId.requirePrepayment) {
+            const freeBookingCount = await Booking.countDocuments({
+                // We need to find bookings associated with any court of this futsal
+                // Assuming court model has futsalId populated. If not, we need to adjust.
+                // Let's query courts belonging to this futsal first
+                 court: { $in: await Court.find({ futsalId: court.futsalId._id }).select('_id') },
+                 date: {
+                     $gte: startOfDay(requestedDate),
+                     $lt: endOfDay(requestedDate)
+                 },
+                 isSlotFree: true,
+                 status: { $ne: 'cancelled' }
+            });
+
+            console.log(`[Free Slot Check] Futsal: ${court.futsalId._id}, Date: ${requestedDate.toDateString()}, Free Bookings Today: ${freeBookingCount}`);
+
+
+            if (freeBookingCount < FREE_SLOT_LIMIT) {
+                rate = 0;
+                isFreeSlotAvailable = true;
+                priceType = 'free'; // Indicate free slot price type
+                console.log(`[Free Slot Check] Offering free slot for ${court.name} at ${time} on ${requestedDate.toDateString()}`);
+            }
         }
 
         return res.json({
-            available: !existingBooking,
+            available: true, // Slot is available
             rate,
-            message: existingBooking ? 'Time slot is already booked' : 'Time slot is available'
+            priceType, // Send price type
+            message: isFreeSlotAvailable ? 'Free time slot available' : 'Time slot is available',
+            isFreeSlotAvailable
         });
 
     } catch (error) {
         console.error('Error checking availability:', error);
-        return res.status(500).json({ 
+        return res.status(500).json({
             message: 'Error checking availability',
             error: error.message,
             available: false

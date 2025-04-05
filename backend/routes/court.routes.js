@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const Booking = require('../models/booking.model');
 const mongoose = require('mongoose');
+const { startOfDay, endOfDay } = require('date-fns'); // Import date-fns helpers
 
 
 
@@ -118,9 +119,11 @@ router.put('/prepayment', auth, async (req, res) => {
 // Create a new court
 router.post('/', auth, upload.array('images', 5), async (req, res) => {
     console.log('User data:', req.user);
+    console.log('Received req.body for court creation:', req.body); // Log incoming body
     try {
-        // Parse boolean values
+        // Parse boolean values from the nested facilities object
         const parseBooleans = (obj) => {
+            if (!obj) return {}; // Handle cases where facilities might not be sent
             const result = {};
             for (const [key, value] of Object.entries(obj)) {
                 result[key] = value === 'true';
@@ -128,57 +131,60 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
             return result;
         };
 
-        // Parse nested objects from form data
-        const parseNestedObject = (prefix, body) => {
-            const obj = {};
-            Object.keys(body)
-                .filter(key => key.startsWith(`${prefix}.`))
-                .forEach(key => {
-                    const nestedKey = key.split('.')[1];
-                    obj[nestedKey] = body[key];
-                });
-            return obj;
-        };
-
         const courtData = {
-            ...req.body,
+            name: req.body.name,
             futsalId: req.user.futsal,
-            // Directly use new dimension fields from form
             dimensionLength: Number(req.body.dimensionLength),
             dimensionWidth: Number(req.body.dimensionWidth),
-            surfaceType: req.body.surfaceType, // Already a string from select
-            images: req.files ? req.files.map(file => `/uploads/courts/${file.filename}`) : [],
-            facilities: parseBooleans({
-                changingRooms: req.body['facilities.changingRooms'],
-                lighting: req.body['facilities.lighting'],
-                parking: req.body['facilities.parking'],
-                shower: req.body['facilities.shower']
-            }),
+            surfaceType: req.body.surfaceType,
+            courtType: req.body.courtType,
+            courtSide: req.body.courtSide,
+            priceHourly: Number(req.body.priceHourly),
+            status: req.body.status || 'Active',
             hasPeakHours: req.body.hasPeakHours === 'true',
             hasOffPeakHours: req.body.hasOffPeakHours === 'true',
-            peakHours: parseNestedObject('peakHours', req.body),
-            offPeakHours: parseNestedObject('offPeakHours', req.body)
+            // Access the nested facilities object directly
+            facilities: parseBooleans(req.body.facilities),
+            images: req.files ? req.files.map(file => `/uploads/courts/${file.filename}`) : [],
         };
 
-        // Remove the old 'dimensions' field if it exists from form data
-        delete courtData.dimensions;
-
-        // Convert price strings to numbers
-        courtData.priceHourly = Number(courtData.priceHourly);
+        // Conditionally add peak hours data using nested access
         if (courtData.hasPeakHours) {
-            courtData.pricePeakHours = Number(courtData.pricePeakHours);
-        }
-        if (courtData.hasOffPeakHours) {
-            courtData.priceOffPeakHours = Number(courtData.priceOffPeakHours);
+            courtData.peakHours = {
+                // Use correct nested access with optional chaining
+                start: req.body.peakHours?.start,
+                end: req.body.peakHours?.end 
+            };
+            // Ensure pricePeakHours exists before converting
+            courtData.pricePeakHours = req.body.pricePeakHours ? Number(req.body.pricePeakHours) : undefined;
         }
 
-        console.log('Court data being saved:', courtData);
+        // Conditionally add off-peak hours data using nested access
+        if (courtData.hasOffPeakHours) {
+             courtData.offPeakHours = {
+                 // Use correct nested access with optional chaining
+                 start: req.body.offPeakHours?.start,
+                 end: req.body.offPeakHours?.end
+             };
+             // Ensure priceOffPeakHours exists before converting
+            courtData.priceOffPeakHours = req.body.priceOffPeakHours ? Number(req.body.priceOffPeakHours) : undefined;
+        }
+        
+        // Add console log right before saving
+        console.log('[Court Save] Attempting to save court with data:', JSON.stringify(courtData, null, 2));
 
         const court = new Court(courtData);
-        await court.save();
+        console.log('Running pre-save hook for court:', court._id);
+        await court.save(); // Validation runs here
+        console.log('Court saved successfully:', court._id);
         res.status(201).json(court);
     } catch (error) {
         console.error('Error saving court:', error);
+        // Check if it's a Mongoose validation error
+        if (error.name === 'ValidationError') {
+            // Log the specific validation errors
+            console.error('Validation Errors:', JSON.stringify(error.errors, null, 2));
+        }
         res.status(400).json({ 
             message: error.message, 
             details: error.errors || error 
@@ -246,19 +252,37 @@ router.get('/:id/bookings', auth, async (req, res) => {
         return res.status(400).json({ message: 'Date is required' });
       }
       
-      // Parse the date
-      const bookingDate = new Date(date);
+      // Parse the date safely
+      let requestedDate;
+      try {
+        requestedDate = new Date(date);
+        if (isNaN(requestedDate.getTime())) {
+            throw new Error('Invalid date format');
+        }
+      } catch (e) {
+         return res.status(400).json({ message: 'Invalid date format provided' });
+      }
       
-      // Get all bookings for this court on this date
+      // Log the exact date objects used for the query
+      const startDate = startOfDay(requestedDate);
+      const endDate = endOfDay(requestedDate);
+      console.log(`[GET /bookings] Querying date range: GTE=${startDate.toISOString()}, LT=${endDate.toISOString()}`);
+
+      // Use startOfDay and endOfDay for accurate range query
       const bookings = await Booking.find({
         court: req.params.id,
         date: {
-          $gte: new Date(bookingDate.setHours(0, 0, 0, 0)),
-          $lt: new Date(bookingDate.setHours(23, 59, 59, 999))
+          $gte: startDate,
+          $lt: endDate 
         },
         status: { $ne: 'cancelled' }
-      });
+      })
+      .populate('user', 'name _id'); // Optionally populate user info if needed by frontend
       
+      // Log the result directly from the database query
+      console.log(`[GET /bookings] DB query result for court ${req.params.id} on ${date}:`, JSON.stringify(bookings, null, 2));
+
+      console.log(`[GET /bookings] Found ${bookings.length} bookings for court ${req.params.id} on ${date}`);
       res.json(bookings);
       
     } catch (error) {
@@ -300,8 +324,14 @@ router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
              }),
              hasPeakHours: req.body.hasPeakHours === 'true',
              hasOffPeakHours: req.body.hasOffPeakHours === 'true',
-             peakHours: parseNestedObject('peakHours', req.body),
-             offPeakHours: parseNestedObject('offPeakHours', req.body)
+             peakHours: {
+                 start: req.body['peakHours[start]'],
+                 end: req.body['peakHours[end]']
+             },
+             offPeakHours: {
+                 start: req.body['offPeakHours[start]'],
+                 end: req.body['offPeakHours[end]']
+             }
         };
         
         // Remove the old 'dimensions' field if it exists from form data
@@ -341,10 +371,55 @@ router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
 // Delete a court
 router.delete('/:id', auth, async (req, res) => {
     try {
-        await Court.findByIdAndDelete(req.params.id);
-        res.json({ message: 'Court deleted successfully' });
+        const courtId = req.params.id;
+        
+        // Handle associated bookings
+        const Booking = require('../models/booking.model');
+        
+        // Mark all future bookings as cancelled and removed from history
+        await Booking.updateMany(
+            { 
+                court: courtId,
+                date: { $gte: new Date() }, // Future bookings
+                status: { $in: ['pending', 'confirmed'] }
+            },
+            { 
+                status: 'cancelled',
+                cancellationReason: 'Court has been removed by the futsal admin',
+                cancellationDate: new Date(),
+                isDeletedFromHistory: true
+            }
+        );
+        
+        // Mark past bookings as deleted from history
+        await Booking.updateMany(
+            {
+                court: courtId,
+                date: { $lt: new Date() }, // Past bookings
+                status: { $in: ['completed', 'cancelled'] }
+            },
+            {
+                isDeletedFromHistory: true
+            }
+        );
+        
+        // Delete timeslots for this court
+        const TimeSlot = require('../models/timeSlot.model');
+        await TimeSlot.deleteMany({ court: courtId });
+        
+        // Now delete the court
+        await Court.findByIdAndDelete(courtId);
+        
+        res.json({ 
+            message: 'Court deleted successfully. All associated bookings have been cancelled.',
+            courtId
+        });
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error('Error deleting court:', error);
+        res.status(500).json({ 
+            message: 'An error occurred while deleting the court',
+            error: error.message 
+        });
     }
 });
 

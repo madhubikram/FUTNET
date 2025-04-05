@@ -154,18 +154,32 @@ courtSchema.methods.calculateAverageRating = function() {
 
 // Validate time ranges
 courtSchema.pre('save', function(next) {
-    console.log('Running pre-save hook for court:', this._id); // Add logging
+    console.log('Running pre-save hook for court:', this._id); 
     try {
+        // Validate Peak Hours Times if enabled
         if (this.hasPeakHours) {
-            if (!this.peakHours || !this.peakHours.start || !this.peakHours.end || this.pricePeakHours === null || this.pricePeakHours === undefined) {
-                return next(new Error('Peak hours settings are incomplete')); // Use next(error) pattern
+            if (!this.peakHours || !this.peakHours.start || !this.peakHours.end) {
+                console.error('[Validation Error] Peak hours enabled but times are missing:', this.peakHours);
+                return next(new Error('Peak hours start and end times are required when peak hours are enabled.'));
+            }
+            // Validate Peak Price separately (it already has min: 0 validation)
+            if (this.pricePeakHours === null || this.pricePeakHours === undefined) {
+                 console.error('[Validation Error] Peak hours enabled but price is missing:', this.pricePeakHours);
+                 return next(new Error('Peak hours price is required when peak hours are enabled.'));
             }
         }
 
+        // Validate Off-Peak Hours Times if enabled
         if (this.hasOffPeakHours) {
-            if (!this.offPeakHours || !this.offPeakHours.start || !this.offPeakHours.end || this.priceOffPeakHours === null || this.priceOffPeakHours === undefined) {
-                return next(new Error('Off-peak hours settings are incomplete')); // Use next(error) pattern
+            if (!this.offPeakHours || !this.offPeakHours.start || !this.offPeakHours.end) {
+                 console.error('[Validation Error] Off-peak hours enabled but times are missing:', this.offPeakHours);
+                 return next(new Error('Off-peak hours start and end times are required when off-peak hours are enabled.'));
             }
+             // Validate Off-Peak Price separately
+             if (this.priceOffPeakHours === null || this.priceOffPeakHours === undefined) {
+                 console.error('[Validation Error] Off-peak hours enabled but price is missing:', this.priceOffPeakHours);
+                 return next(new Error('Off-peak hours price is required when off-peak hours are enabled.'));
+             }
         }
 
         // Validate time overlap only if both types are enabled AND times are valid strings

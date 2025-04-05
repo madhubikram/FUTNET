@@ -68,13 +68,24 @@
           <ProjectorIcon class="w-4 h-4" />
           View Bracket
         </button>
+        <button
+          v-if="showViewTeamsButton" 
+          @click.stop="$emit('view-teams')"
+          class="flex-1 px-4 py-3 bg-blue-500/10 text-blue-400 rounded-lg
+                  hover:bg-blue-500/20 transition-all duration-300 flex items-center justify-center gap-2
+                  hover:scale-[1.02] active:scale-[0.98]"
+          :title="'View Teams'"
+        >
+          <UsersIcon class="w-4 h-4" />
+          View Teams
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { InfoIcon, EditIcon, Trash2Icon, ProjectorIcon } from 'lucide-vue-next'
+import { InfoIcon, EditIcon, Trash2Icon, ProjectorIcon, UsersIcon } from 'lucide-vue-next'
 
 defineProps({
   itemType: {
@@ -117,8 +128,12 @@ defineProps({
   statusDotClass: {
     type: String,
     required: true
+  },
+  showViewTeamsButton: {
+    type: Boolean,
+    default: false
   }
 })
 
-defineEmits(['edit-item', 'delete-item', 'view-details', 'view-bracket'])
+defineEmits(['edit-item', 'delete-item', 'view-details', 'view-bracket', 'view-teams'])
 </script>

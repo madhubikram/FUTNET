@@ -14,30 +14,33 @@
           <div class="space-y-2 text-gray-300">
             <div class="flex justify-between">
               <span>Booking ID</span>
-              <span>{{ bookingDetails.bookingId }}</span>
+              <span>{{ bookingDetails.bookingId || 'N/A' }}</span>
             </div>
             <div class="flex justify-between">
               <span>Date</span>
-              <span>{{ formatDate(bookingDetails.date) }}</span>
+              <span>{{ safeFormatDate(bookingDetails.date) }}</span>
             </div>
             <div class="flex justify-between">
               <span>Duration</span>
-              <span>{{ bookingDetails.duration }}</span>
+              <span>{{ bookingDetails.duration || (bookingDetails.slots?.length ? `${bookingDetails.slots.length} hour(s)` : 'N/A') }}</span>
             </div>
             <div class="mt-2 space-y-1">
               <div class="text-sm font-medium text-gray-400">Time Slots:</div>
-              <div 
-                v-for="slot in bookingDetails.slots" 
-                :key="slot.time"
-                class="flex justify-between text-sm"
-              >
-                <span>{{ formatTime(slot.time) }}</span>
-                <span>Rs. {{ slot.rate }}</span>
+              <div v-if="bookingDetails.slots && bookingDetails.slots.length > 0" class="space-y-1">
+                <div 
+                  v-for="slot in bookingDetails.slots" 
+                  :key="slot.time"
+                  class="flex justify-between text-sm"
+                >
+                  <span>{{ formatTime(slot.time) }}</span>
+                  <span>Rs. {{ slot.rate }}</span>
+                </div>
               </div>
+              <div v-else class="text-sm text-gray-400">No time slots selected</div>
             </div>
             <div class="mt-3 pt-3 border-t border-gray-600 flex justify-between font-semibold">
               <span>Total Amount</span>
-              <span class="text-green-400">Rs. {{ bookingDetails.totalAmount }}</span>
+              <span class="text-green-400">Rs. {{ bookingDetails.totalAmount || 0 }}</span>
             </div>
           </div>
         </div>
@@ -141,6 +144,32 @@ import BaseModal from '@/components/BaseModal.vue'
 import { Loader2Icon, CheckCircleIcon  } from 'lucide-vue-next'
 import { useTimeFormatting } from '@/composables/useTimeFormatting'
 const { formatTime, formatDate } = useTimeFormatting()
+
+// Safe date formatter that handles invalid dates
+const safeFormatDate = (dateValue) => {
+  try {
+    if (!dateValue) return 'N/A';
+    
+    // Handle string dates
+    if (typeof dateValue === 'string') {
+      // Check if it's a valid date string
+      const parsedDate = new Date(dateValue);
+      if (isNaN(parsedDate.getTime())) return 'N/A';
+      return formatDate(dateValue);
+    }
+    
+    // Handle Date objects
+    if (dateValue instanceof Date) {
+      if (isNaN(dateValue.getTime())) return 'N/A';
+      return formatDate(dateValue.toISOString().split('T')[0]);
+    }
+    
+    return 'N/A';
+  } catch (error) {
+    console.error('Error formatting date:', error);
+    return 'N/A';
+  }
+};
 
 defineProps({
   bookingDetails: {

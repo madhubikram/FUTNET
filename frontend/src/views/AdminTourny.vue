@@ -32,6 +32,7 @@
       :title="tournament.name"
       :show-admin-controls="true"
       :show-edit-button="tournament.status !== 'Completed'"
+      :show-view-teams-button="true"
       :details-button-text="'View Details'"
       :status-color-class="statusColorClass(tournament.status)"
       :status-dot-class="statusDotClass(tournament.status)"
@@ -39,6 +40,7 @@
       @delete-item="deleteTournament(tournament)"
       @view-details="viewTournament(tournament)"
       @view-bracket="navigateToBracket(tournament)"
+      @view-teams="navigateToTeams(tournament)"
     >
         <template #tournament-details>
           <div class="space-y-3">
@@ -955,31 +957,41 @@ const deleteTournament = async (tournamentToDelete) => {
 };
 
 const navigateToBracket = (tournament) => {
-  if (!tournament || !tournament._id || !tournament.registrationDeadline || !tournament.registrationDeadlineTime) {
+  if (!tournament || !tournament._id || !tournament.startDate || !tournament.startTime) {
     console.error('Cannot navigate to bracket: Invalid or incomplete tournament data provided.', tournament);
     toast.error('Could not open bracket view for this tournament.');
     return; 
   }
 
   const now = new Date();
-  let registrationDeadlineDateTime;
+  let startDateTime;
   try {
     // Combine date and time string, then parse
-    registrationDeadlineDateTime = new Date(`${tournament.registrationDeadline}T${tournament.registrationDeadlineTime}`);
-    if (isNaN(registrationDeadlineDateTime.getTime())) {
+    startDateTime = new Date(`${tournament.startDate}T${tournament.startTime}`);
+    if (isNaN(startDateTime.getTime())) {
       throw new Error('Invalid date/time format from tournament data');
     }
   } catch (e) {
-    console.error('Error parsing registration deadline:', e, tournament);
-    toast.error('Could not read tournament deadline.');
+    console.error('Error parsing tournament start date:', e, tournament);
+    toast.error('Could not read tournament start date.');
     return;
   }
 
-  if (now < registrationDeadlineDateTime) {
-    toast.info('Bracket will be available after the registration deadline passes.');
+  if (now < startDateTime) {
+    toast.info('Bracket will be available after the tournament start date.');
+    return; // Don't navigate if start date hasn't been reached
+  }
+  
+  // Only navigate if the start date has passed
+  router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
+};
+
+const navigateToTeams = (tournament) => {
+  if (tournament && tournament._id) {
+    router.push({ name: 'AdminTournamentTeams', params: { id: tournament._id } });
   } else {
-    // Only navigate if the deadline has passed
-    router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
+    console.error('Cannot navigate to teams view: Invalid tournament data.');
+    toast.error('Could not open the teams view for this tournament.');
   }
 };
 

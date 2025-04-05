@@ -13,6 +13,11 @@ const tournamentRegistrationSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  teamId: {
+    type: String,
+    required: true,
+    unique: true
+  },
   teamName: {
     type: String,
     required: true

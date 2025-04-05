@@ -245,6 +245,14 @@
                   <StarIcon class="w-3.5 h-3.5 md:w-4 md:h-4" />
                   Add Review
                 </button>
+                <button 
+                  v-if="booking.status === 'completed' || booking.status === 'cancelled'"
+                  @click="deleteBookingHistory(booking._id)"
+                  class="px-3 py-1.5 md:px-4 md:py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-sm"
+                >
+                  <TrashIcon class="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  Delete
+                </button>
               </div>
             </div>
           </div>
@@ -390,7 +398,8 @@ import { ref, computed, onMounted } from 'vue';
 import { 
   CalendarCheckIcon, HistoryIcon, SearchIcon, 
   ClockIcon, XCircleIcon, ClipboardIcon,
-  CheckCircleIcon, StarIcon, CalendarPlusIcon
+  CheckCircleIcon, StarIcon, CalendarPlusIcon,
+  TrashIcon
 } from 'lucide-vue-next';
 import PageLayout from '@/components/layout/PageLayout.vue';
 import ReviewModal from '@/components/ReviewModal.vue';
@@ -510,6 +519,48 @@ const cancelBooking = async (bookingId) => {
   } catch (error) {
     console.error('Error cancelling booking:', error);
     alert('Failed to cancel booking. Please try again.');
+  }
+};
+
+const deleteBookingHistory = async (bookingId) => {
+  try {
+    if (!confirm('Are you sure you want to delete this booking from your history?')) {
+      return;
+    }
+    
+    const token = localStorage.getItem('token');
+    const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/delete`, {
+      method: 'POST', 
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete booking');
+    }
+    
+    // Update the local booking status
+    const updatedBooking = await response.json();
+    console.log('Booking deleted successfully:', updatedBooking);
+    
+    // Find and update the booking in our list
+    const index = bookings.value.findIndex(b => b._id === bookingId);
+    if (index !== -1) {
+      bookings.value.splice(index, 1);
+      // Close modal if the deleted booking was being viewed
+      if (selectedBooking.value && selectedBooking.value._id === bookingId) {
+        showModal.value = false;
+      }
+    }
+    
+    // Show success message
+    alert('Booking deleted successfully');
+    
+  } catch (error) {
+    console.error('Error deleting booking:', error);
+    alert('Failed to delete booking. Please try again.');
   }
 };
 

@@ -140,6 +140,31 @@
         </div>
     </Transition>
 
+    <!-- ========== Bulk Actions Bar (New) ========== -->
+    <Transition
+        enter-active-class="transition ease-out duration-200"
+        enter-from-class="opacity-0 -translate-y-2"
+        enter-to-class="opacity-100 translate-y-0"
+        leave-active-class="transition ease-in duration-150"
+        leave-from-class="opacity-100 translate-y-0"
+        leave-to-class="opacity-0 -translate-y-2"
+      >
+       <div v-if="selectedCount > 0" class="mb-6 px-1 flex items-center justify-between bg-gray-700/60 border border-gray-600/80 rounded-lg p-3 shadow-md">
+         <span class="text-sm text-gray-300 font-medium">{{ selectedCount }} booking{{ selectedCount > 1 ? 's' : '' }} selected</span>
+         <div class="flex items-center space-x-3">
+            <!-- Placeholder Bulk Action Buttons -->
+            <button @click="handleBulkMarkPaid" class="action-button text-xs !px-3 !py-1.5 bg-yellow-600 hover:bg-yellow-500 text-white focus-visible:ring-yellow-400">
+              <CreditCard class="w-3.5 h-3.5"/> Mark Paid
+            </button>
+             <button @click="handleBulkCancel" class="action-button text-xs !px-3 !py-1.5 bg-orange-600 hover:bg-orange-500 text-white focus-visible:ring-orange-400">
+              <XCircle class="w-3.5 h-3.5"/> Cancel Selected
+            </button>
+             <button @click="handleBulkDelete" class="action-button text-xs !px-3 !py-1.5 bg-red-700 hover:bg-red-600 text-white focus-visible:ring-red-500">
+              <Trash2 class="w-3.5 h-3.5"/> Delete Selected
+            </button>
+         </div>
+       </div>
+      </Transition>
 
     <!-- ========== Booking Table Section - Enhanced ========== -->
     <div class="bg-gray-800/70 backdrop-blur-sm rounded-xl border border-gray-700/50 shadow-lg overflow-hidden">
@@ -165,48 +190,74 @@
       </div>
 
       <div v-else class="overflow-x-auto relative custom-scrollbar">
-        <table class="w-full min-w-[1100px]"> <!-- Increased min-width slightly -->
-          <thead class="bg-gray-900/60 border-b-2 border-gray-700"> <!-- Bolder border -->
+        <table class="w-full min-w-[1000px]"> <!-- Adjust min-width if needed -->
+          <thead class="bg-gray-900/60 border-b-2 border-gray-700">
             <tr>
+              <!-- SELECT ALL CHECKBOX -->
+              <th class="table-th pl-4 pr-2 w-12">
+                 <input
+                    type="checkbox"
+                    :checked="isAllSelected"
+                    @change="toggleSelectAll"
+                    class="h-4 w-4 rounded border-gray-600 text-emerald-500 bg-gray-700 focus:ring-emerald-500 focus:ring-offset-gray-900"
+                    title="Select/Deselect All Visible"
+                  />
+              </th>
+              <!-- END SELECT ALL CHECKBOX -->
               <th class="table-th">Court</th>
-              <th class="table-th">Date & Time</th>
+              <th class="table-th hidden md:table-cell">Date & Time</th> <!-- Hide on small screens -->
               <th class="table-th">Player</th>
-              <th class="table-th">Booking</th>
-              <th class="table-th">Payment</th>
+              <th class="table-th">Booking</th> <!-- Removed hidden class -->
+              <th class="table-th">Payment</th> <!-- Removed hidden class -->
               <th class="table-th text-center">Actions</th>
             </tr>
           </thead>
-          <!-- Softer divider, added row stripes -->
           <tbody class="divide-y divide-gray-700/50">
-            <tr v-for="booking in bookings" :key="booking._id" class="table-row group">
+            <tr v-for="booking in bookings" :key="booking._id" class="table-row group" :class="{'bg-emerald-900/30 hover:bg-emerald-800/40': isSelected(booking._id)}">
+              <!-- ROW CHECKBOX -->
+               <td class="table-td pl-4 pr-2">
+                  <input
+                    type="checkbox"
+                    :checked="isSelected(booking._id)"
+                    @change="() => handleRowSelection(booking._id)"
+                    class="h-4 w-4 rounded border-gray-600 text-emerald-500 bg-gray-700 focus:ring-emerald-500 focus:ring-offset-gray-900"
+                  />
+               </td>
+               <!-- END ROW CHECKBOX -->
               <td class="table-td">
                 <div class="font-semibold text-white">{{ booking.courtDetails?.name || booking.court?.name || 'N/A' }}</div>
-                <div class="text-xs text-gray-400">{{ booking.courtDetails?.type || booking.court?.type || 'N/A' }}</div>
               </td>
-              <td class="table-td">
+              <td class="table-td hidden md:table-cell"> <!-- Hide on small screens -->
                 <div class="font-medium text-white">{{ booking.date ? formatFullDate(booking.date) : 'N/A' }}</div>
                 <div class="text-xs text-gray-400 font-mono">{{ booking.startTime }} - {{ booking.endTime }} ({{ calculateDuration(booking.startTime, booking.endTime) }})</div>
               </td>
               <td class="table-td">
                  <div class="flex items-center gap-3">
-                     <!-- Enhanced Avatar -->
                     <div class="avatar-placeholder">
                       {{ getInitials(booking.userInfo?.name) }}
                     </div>
                     <div class="min-w-0">
                       <div class="text-sm font-medium text-white truncate" :title="booking.userInfo?.name">{{ booking.userInfo?.name || 'Guest User' }}</div>
-                      <div class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors truncate">
-                        <a :href="'mailto:'+booking.userInfo?.email" :title="booking.userInfo?.email">{{ booking.userInfo?.email || 'No Email Provided' }}</a>
+                      <!-- Hide contact details on smaller screens -->
+                      <div class="text-xs text-cyan-400 hover:text-cyan-300 transition-colors truncate hidden lg:block">
+                        <a :href="'mailto:'+booking.userInfo?.email" :title="booking.userInfo?.email">{{ booking.userInfo?.email || 'No Email' }}</a>
                       </div>
-                      <div class="text-xs text-gray-500 mt-0.5 truncate" :title="booking.userInfo?.phone">
-                          {{ booking.userInfo?.phone || 'No Phone Provided' }}
+                      <div class="text-xs text-gray-500 mt-0.5 truncate hidden lg:block" :title="booking.userInfo?.phone">
+                          {{ booking.userInfo?.phone || 'No Phone' }}
+                      </div>
+                      <!-- Show minimal info on smaller screens -->
+                       <div class="text-xs text-gray-400 font-mono mt-1 md:hidden">{{ booking.date ? formatFullDate(booking.date) : 'N/A' }}</div>
+                       <div class="text-xs text-gray-400 font-mono md:hidden">{{ booking.startTime }} - {{ booking.endTime }}</div>
+                       <!-- Show statuses on small screens below player name -->
+                        <div class="flex items-center gap-2 mt-1 sm:hidden">
+                          <BookingStatusBadge :status="booking.status" class="!text-[10px] !px-1.5 !py-0.5" />
+                          <PaymentStatusBadge :status="booking.paymentStatus" class="!text-[10px] !px-1.5 !py-0.5"/>
                       </div>
                     </div>
                  </div>
               </td>
-              <!-- Enhanced Badges - Assuming components are updated or use classes here -->
-              <td class="table-td"><BookingStatusBadge :status="booking.status" class="enhanced-badge" /></td>
-              <td class="table-td"><PaymentStatusBadge :status="booking.paymentStatus" class="enhanced-badge"/></td>
+              <td class="table-td"><BookingStatusBadge :status="booking.status" class="enhanced-badge hidden sm:inline-flex" /></td> <!-- Keep hidden on xs -->
+              <td class="table-td"><PaymentStatusBadge :status="booking.paymentStatus" class="enhanced-badge hidden sm:inline-flex"/></td> <!-- Keep hidden on xs -->
               <td class="table-td text-center relative">
                   <!-- Action button styling remains similar, focus adjusted in CSS -->
                  <button @click="toggleActionMenu(booking._id)" class="p-1.5 text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-all" :aria-expanded="activeActionMenu===booking._id" :aria-controls="'action-menu-'+booking._id">
@@ -217,7 +268,7 @@
                     <div v-if="activeActionMenu===booking._id" :id="'action-menu-'+booking._id" class="absolute right-8 lg:right-full lg:left-auto top-full lg:top-1/2 lg:-translate-y-1/2 mt-2 lg:mt-0 lg:mr-3 w-52 origin-top-right lg:origin-right bg-gray-700/90 backdrop-blur-md rounded-lg shadow-xl ring-1 ring-black/10 focus:outline-none z-10 border border-gray-600/50" role="menu" aria-orientation="vertical" @click.stop>
                       <div class="py-1.5" role="none"> <!-- Increased padding -->
                         <!-- Action items styling defined in CSS -->
-                        <template v-if="booking.status==='pending'"><button @click="updateBookingStatus(booking._id, 'confirmed')" class="action-menu-item"><CheckCircle class="action-menu-icon text-green-400"/>Confirm</button></template>
+                        <template v-if="booking.status==='pending' && !booking.isSlotFree"><button @click="updateBookingStatus(booking._id, 'confirmed')" class="action-menu-item"><CheckCircle class="action-menu-icon text-green-400"/>Confirm</button></template>
                         <template v-if="booking.paymentStatus==='pending'||booking.paymentStatus==='unpaid'"><button @click="updatePaymentStatus(booking._id, 'paid')" class="action-menu-item"><CreditCard class="action-menu-icon text-yellow-400"/>Mark Paid</button></template>
                         <template v-if="['pending', 'confirmed'].includes(booking.status)"><button @click="showRescheduleModal(booking)" class="action-menu-item"><Calendar class="action-menu-icon text-blue-400"/>Reschedule</button><button @click="cancelBooking(booking._id)" class="action-menu-item"><XCircle class="action-menu-icon text-orange-400"/>Cancel</button></template>
                         <div class="my-1.5 border-t border-gray-600/60" v-if="(['pending','confirmed'].includes(booking.status)||booking.paymentStatus==='pending'||booking.paymentStatus==='unpaid')"></div>
@@ -311,6 +362,8 @@ const modalType = ref(null);
 const selectedBooking = ref(null);
 const cancelReason = ref('');
 const rescheduleData = reactive({ date: '', startTime: '', endTime: '', });
+const selectedBookingIds = ref(new Set());
+const isProcessingBulkAction = ref(false);
 
 const todayDate = computed(() => new Date().toISOString().split('T')[0]);
 const activeFilterCount = computed(() => {
@@ -330,6 +383,110 @@ const currentSort = computed(() => {
     if (field === 'courtName') return { sortBy: 'court.name', sortOrder: order };
     return { sortBy: field, sortOrder: order };
 });
+
+// Computed properties for selection
+const selectedCount = computed(() => selectedBookingIds.value.size);
+
+const isAllSelected = computed(() => {
+  if (bookings.value.length === 0) return false;
+  // Check if all *currently visible* bookings are selected
+  return bookings.value.every(b => selectedBookingIds.value.has(b._id));
+});
+
+// Methods for selection
+const isSelected = (bookingId) => {
+  return selectedBookingIds.value.has(bookingId);
+};
+
+const handleRowSelection = (bookingId) => {
+  if (selectedBookingIds.value.has(bookingId)) {
+    selectedBookingIds.value.delete(bookingId);
+  } else {
+    selectedBookingIds.value.add(bookingId);
+  }
+};
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    // Deselect all visible
+    selectedBookingIds.value.clear();
+  } else {
+    // Select all visible
+    bookings.value.forEach(b => selectedBookingIds.value.add(b._id));
+  }
+};
+
+// Updated Bulk Action Handlers
+const handleBulkMarkPaid = async () => {
+  if (selectedCount.value === 0 || isProcessingBulkAction.value) return;
+  const ids = Array.from(selectedBookingIds.value);
+  console.log('Bulk Mark Paid:', ids);
+  isProcessingBulkAction.value = true;
+  try {
+    const response = await axios.patch('/api/bookings/admin/bulk-status', 
+      { 
+        ids: ids, 
+        paymentStatus: 'paid' 
+      },
+      { withCredentials: true }
+    );
+    toast.success(`${response.data.updatedCount || 0} booking(s) marked as paid.`);
+    await fetchData(); // Refresh data
+    selectedBookingIds.value.clear(); // Clear selection
+  } catch (error) {
+    console.error('Bulk Mark Paid Error:', error);
+    toast.error(error.response?.data?.message || 'Failed to mark bookings as paid.');
+  } finally {
+    isProcessingBulkAction.value = false;
+  }
+};
+
+const handleBulkCancel = async () => {
+  if (selectedCount.value === 0 || isProcessingBulkAction.value) return;
+  const ids = Array.from(selectedBookingIds.value);
+  console.log('Bulk Cancel:', ids);
+  if (confirm(`Are you sure you want to cancel ${ids.length} selected booking(s)?`)) {
+    isProcessingBulkAction.value = true;
+    try {
+        const response = await axios.patch('/api/bookings/admin/bulk-cancel', 
+          { ids: ids }, 
+          { withCredentials: true }
+        );
+        toast.success(`${response.data.updatedCount || 0} booking(s) cancelled.`);
+        await fetchData(); // Refresh data
+        selectedBookingIds.value.clear(); // Clear selection
+    } catch (error) {
+        console.error('Bulk Cancel Error:', error);
+        toast.error(error.response?.data?.message || 'Failed to cancel bookings.');
+    } finally {
+      isProcessingBulkAction.value = false;
+    }
+  }
+};
+
+const handleBulkDelete = async () => {
+  if (selectedCount.value === 0 || isProcessingBulkAction.value) return;
+  const ids = Array.from(selectedBookingIds.value);
+  console.log('Bulk Delete:', ids);
+  if (confirm(`Are you sure you want to permanently delete ${ids.length} selected booking(s)? This also deletes associated timeslots and cannot be undone.`)) {
+    isProcessingBulkAction.value = true;
+    try {
+        // Using POST for bulk delete to avoid URL length issues with many IDs
+        const response = await axios.post('/api/bookings/admin/bulk-delete', 
+          { ids: ids }, 
+          { withCredentials: true }
+        );
+        toast.success(`${response.data.deletedCount || 0} booking(s) deleted.`);
+        await fetchData(); // Refresh data
+        selectedBookingIds.value.clear(); // Clear selection
+    } catch (error) {
+        console.error('Bulk Delete Error:', error);
+        toast.error(error.response?.data?.message || 'Failed to delete bookings.');
+    } finally {
+      isProcessingBulkAction.value = false;
+    }
+  }
+};
 
 onMounted(async () => { document.addEventListener('click', handleOutsideClick); document.addEventListener('keydown', handleKeydown); await fetchCourts(); await fetchData(); });
 onBeforeUnmount(() => { document.removeEventListener('click', handleOutsideClick); document.removeEventListener('keydown', handleKeydown); });
@@ -354,8 +511,18 @@ const refreshBookings = async () => { toast.info('Refreshing...'); await fetchDa
 const fetchCourts = async () => { try { const r = await axios.get('/api/courts'); courts.value = r.data; } catch (error) { console.error('Court Fetch Error:', error); toast.warning('Could not load courts.'); } };
 const closeFilterPanel = () => { showFilterPanel.value = false; };
 const toggleFilterPanel = () => { showFilterPanel.value = !showFilterPanel.value; };
-const applyFiltersAndClosePanel = async () => { await fetchData(); closeFilterPanel(); };
-const resetFiltersAndClosePanel = async () => { Object.assign(filters, initialFilters); selectedSort.value = 'date_desc'; await fetchData(); closeFilterPanel(); };
+const applyFiltersAndClosePanel = async () => {
+  selectedBookingIds.value.clear(); // Clear selection before applying filters
+  await fetchData(); 
+  closeFilterPanel(); 
+};
+const resetFiltersAndClosePanel = async () => {
+  Object.assign(filters, initialFilters); 
+  selectedSort.value = 'date_desc'; 
+  selectedBookingIds.value.clear(); // Clear selection before fetching reset data
+  await fetchData(); 
+  closeFilterPanel(); 
+};
 const handleKeydown = (event) => { if (event.key === 'Escape') { if (showModal.value) closeModal(); else if (showFilterPanel.value) closeFilterPanel(); else if (activeActionMenu.value) closeActionMenu(); }};
 const handleOutsideClick = (event) => { if (activeActionMenu.value) { const button = document.querySelector(`button[aria-controls='action-menu-${activeActionMenu.value}']`); const menu = document.getElementById(`action-menu-${activeActionMenu.value}`); if (button && !button.contains(event.target) && menu && !menu.contains(event.target)) closeActionMenu(); }};
 const toggleActionMenu = (bookingId) => { activeActionMenu.value = activeActionMenu.value === bookingId ? null : bookingId; };
@@ -363,12 +530,12 @@ const closeActionMenu = () => { activeActionMenu.value = null; };
 
 const updateBookingStatus = async (id, status) => {
   isSubmitting.value = true; closeActionMenu();
-  try { await axios.put(`/api/bookings/admin/${id}/status`, { status }, { withCredentials: true }); toast.success(`Booking confirmed`); await fetchData(); }
+  try { await axios.patch(`/api/bookings/admin/${id}/status`, { status }, { withCredentials: true }); toast.success(`Booking confirmed`); await fetchData(); }
   catch (error) { console.error('Status Update Error:', error); toast.error(error.response?.data?.message || 'Failed update.'); } finally { isSubmitting.value = false; }
 };
 const updatePaymentStatus = async (id, status) => {
     isSubmitting.value = true; closeActionMenu();
-    try { await axios.put(`/api/bookings/admin/${id}/payment-status`, { paymentStatus: status }, { withCredentials: true }); toast.success(`Payment marked as ${status}`); await fetchData(); }
+    try { await axios.patch(`/api/bookings/admin/${id}/payment-status`, { paymentStatus: status }, { withCredentials: true }); toast.success(`Payment marked as ${status}`); await fetchData(); }
     catch (error) { console.error('Payment Update Error:', error); toast.error(error.response?.data?.message || 'Failed update.'); } finally { isSubmitting.value = false; }
 };
 const deleteBooking = async (id) => {
@@ -384,20 +551,40 @@ const showRescheduleModal = (booking) => {
   rescheduleData.startTime = booking.startTime; rescheduleData.endTime = booking.endTime;
   modalType.value = 'reschedule'; showModal.value = true; closeActionMenu();
 };
-const cancelBooking = (id) => {
+const cancelBooking = async (id) => {
   if (!id) { console.error("Invalid ID"); toast.error("Cannot cancel."); return; }
   selectedBooking.value = bookings.value.find(b => b._id === id);
   if (!selectedBooking.value) { console.error(`Booking ${id} not found`); toast.error("Not found."); return; }
   cancelReason.value = ''; modalType.value = 'cancel'; showModal.value = true; closeActionMenu();
 };
 const confirmCancel = async () => {
-  if (!selectedBooking.value) return; isSubmitting.value = true;
-  try { await axios.put(`/api/bookings/admin/${selectedBooking.value._id}/cancel`, { reason: cancelReason.value||'Cancelled' }, { withCredentials: true }); toast.success('Cancelled'); await fetchData(); closeModal(); }
-  catch (error) { console.error('Cancel Error:', error); toast.error(error.response?.data?.message||'Failed cancel.'); } finally { isSubmitting.value = false; }
+  if (!selectedBooking.value) return; 
+  isSubmitting.value = true;
+  try { 
+    // Use the correct admin status update endpoint
+    await axios.patch(
+      `/api/bookings/admin/${selectedBooking.value._id}/status`,
+      { 
+        status: 'cancelled', 
+        reason: cancelReason.value || 'Cancelled by Admin' // Send reason in body
+      }, 
+      { withCredentials: true }
+    );
+    toast.success('Booking cancelled successfully'); 
+    await fetchData(); 
+    closeModal(); 
+  } catch (error) { 
+    console.error('Cancel Error:', error);
+    // Use a more specific error message if possible
+    const errorMessage = error.response?.data?.message || 'Failed to cancel booking.'; 
+    toast.error(errorMessage); 
+  } finally { 
+    isSubmitting.value = false; 
+  }
 };
 const confirmReschedule = async () => {
   if (!selectedBooking.value || !rescheduleData.date || !rescheduleData.startTime || !rescheduleData.endTime) { toast.warning('Select date/time.'); return; } isSubmitting.value = true;
-  try { const fmtDate = new Date(rescheduleData.date).toISOString().split('T')[0]; await axios.put(`/api/bookings/admin/${selectedBooking.value._id}/reschedule`, { date: fmtDate, startTime: rescheduleData.startTime, endTime: rescheduleData.endTime }, { withCredentials: true }); toast.success('Rescheduled'); await fetchData(); closeModal(); }
+  try { const fmtDate = new Date(rescheduleData.date).toISOString().split('T')[0]; await axios.patch(`/api/bookings/admin/${selectedBooking.value._id}/reschedule`, { date: fmtDate, startTime: rescheduleData.startTime, endTime: rescheduleData.endTime }, { withCredentials: true }); toast.success('Rescheduled'); await fetchData(); closeModal(); }
   catch (error) { console.error('Reschedule Error:', error); toast.error(error.response?.data?.message || 'Reschedule failed.'); } finally { isSubmitting.value = false; }
 };
 const closeModal = () => { showModal.value = false; setTimeout(() => { selectedBooking.value = null; modalType.value = null; cancelReason.value = ''; Object.assign(rescheduleData,{date:'',startTime:'',endTime:''}); }, 300); };
@@ -459,4 +646,15 @@ input[type="date"]::-webkit-calendar-picker-indicator { @apply opacity-60 cursor
 *:focus-visible { @apply outline-none ring-2 ring-offset-2 ring-offset-gray-900 ring-emerald-400 rounded-md; }
 .filter-select:focus, .filter-input:focus { @apply ring-2 ring-emerald-500 border-emerald-500; }
 .spinner-xs { @apply inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-current; }
+
+/* Add styles for selected row if needed */
+.table-row.selected {
+  /* Example: Slightly different background */
+  /* @apply bg-emerald-900/30 hover:bg-emerald-800/40; */
+}
+
+/* Style for checkboxes (optional, Tailwind plugin handles focus well) */
+input[type="checkbox"] {
+  /* Add custom styles if desired */
+}
 </style>

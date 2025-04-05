@@ -60,6 +60,13 @@ try {
         tournamentController.deleteTournament
     );
 
+    // Get all registered teams for a specific tournament
+    router.get(
+      '/:id/registrations',
+      auth,
+      tournamentController.getTournamentRegistrations
+    );
+
     console.log('Tournament routes loaded'); // <--- ADD THIS LOG AT THE VERY END of the file
     module.exports = router;
 } catch (error) {

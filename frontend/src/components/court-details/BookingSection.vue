@@ -73,14 +73,16 @@
             'bg-gray-800/50 text-gray-500 cursor-not-allowed': !slot.available,
             'bg-red-500/20 border border-red-500 text-gray-400 cursor-not-allowed': slot.booked && !slot.yourBooking,
             'bg-blue-500/20 border border-blue-500 text-white': slot.yourBooking,
+            'bg-yellow-500/20 border border-yellow-500 text-white': slot.isPending,
             'bg-green-500/20 border-2 border-green-500 text-white': isSlotSelected(slot) && slot.available,
-            'bg-gray-800 hover:bg-gray-700 text-white': slot.available && !isSlotSelected(slot) && !slot.booked
+            'bg-gray-800 hover:bg-gray-700 text-white': slot.available && !isSlotSelected(slot) && !slot.booked && !slot.isPending
           }
         ]"
-        :disabled="!slot.available || slot.booked"
+        :disabled="!slot.available || slot.booked || slot.isPending"
       >
         {{ formatTime(slot.time) }}
         <div v-if="slot.yourBooking" class="mt-1 text-xs text-blue-300">Your booking</div>
+        <div v-if="slot.isPending" class="mt-1 text-xs text-yellow-300">Pending</div>
       </button>
     </div>
 
@@ -178,6 +180,7 @@
               <div>
                 <p class="text-sm text-blue-300">Free Slots Available</p>
                 <p class="text-lg font-semibold text-blue-400">{{ freeBookingsRemaining }}</p>
+                <p class="text-xs text-blue-200 mt-1">Free slots are automatically confirmed!</p>
               </div>
               <div class="text-sm text-blue-300">
                 <p>You're using free slots</p>
@@ -216,8 +219,11 @@
             <span v-if="exceedsFreeSlots && !props.court.requirePrepayment">
               Proceed to Payment
             </span>
+            <span v-else-if="!exceedsFreeSlots && freeBookingsRemaining > 0 && !props.court.requirePrepayment">
+              Book Now (Auto-Confirm)
+            </span>
             <span v-else>
-              Proceed to Booking
+              Book Now
             </span>
           </button>
         </div>
@@ -227,7 +233,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, defineExpose } from 'vue'
 import { XCircleIcon, AlertTriangleIcon  } from 'lucide-vue-next'
 import { useTimeFormatting } from '@/composables/useTimeFormatting'
 import { usePriceCalculation } from '@/composables/usePriceCalculation'
@@ -254,12 +260,23 @@ const props = defineProps({
   }
 })
 
-onMounted(async () => {
+const emit = defineEmits(['proceed-booking'])
+
+// --- Create the refresh method ---
+const refreshBookingData = async () => {
+  console.log("[BookingSection] Refreshing booking data...");
   await fetchFreeSlots();
   await generateTimeSlots();
-});
+  // Reset selected slots after refresh
+  selectedTimeSlots.value = [];
+  redeemedPoints.value = 0; // Reset redeemed points as well
+}
+// --- Expose the refresh method ---
+defineExpose({ refreshBookingData })
 
-const emit = defineEmits(['proceed-booking'])
+onMounted(async () => {
+  await refreshBookingData(); // Call the new refresh method
+});
 
 const bookingId = computed(() => generateBookingId())
 
@@ -299,44 +316,82 @@ const handlePointsRedemption = ({ points, remainingAmount: remaining }) => {
 }
 
 const proceedToBooking = () => {
-  // For courts without prepayment, determine if this should be a free booking
-  const isFreeBooking = !props.court.requirePrepayment && 
-                        !exceedsFreeSlots.value && 
-                        freeBookingsRemaining.value >= selectedTimeSlots.value.length;
+  if (selectedTimeSlots.value.length === 0) {
+    alert('Please select at least one time slot');
+    return;
+  }
+
+  // Confirm before proceeding if prepayment is required
+  // This check might need adjustment based on actual payment flow
+  if (props.court.requirePrepayment && !confirm('This court requires prepayment. Proceed?')) {
+    return;
+  }
+
+  // Determine if the booking requires payment
+  const requiresPayment = props.court.requirePrepayment || exceedsFreeSlots.value;
   
-  emit('proceed-booking', {
+  // Construct the booking details object to emit
+  const detailsToEmit = {
     bookingId: generateBookingId(),
     date: selectedDate.value,
-    slots: selectedTimeSlots.value,
+    slots: selectedTimeSlots.value.map(slot => ({
+      time: slot.time,
+      rate: slot.rate
+    })),
     totalAmount: totalAmount.value,
     duration: `${selectedTimeSlots.value.length} hour(s)`,
-    redeemedPoints: redeemedPoints.value,
-    remainingAmount: remainingAmount.value || totalAmount.value,
-    pointsDiscount: redeemedPoints.value,
-    requiresPayment: !isFreeBooking, // Require payment if not free booking
-    isFreeBooking: isFreeBooking   // Flag to indicate if this is a free booking
-  });
+    redeemedPoints: redeemedPoints.value, // Include redeemed points
+    remainingAmount: totalAmount.value - redeemedPoints.value, // Calculate amount after points
+    pointsDiscount: redeemedPoints.value, // Same as redeemedPoints for clarity
+    requiresPayment: requiresPayment,
+    isFreeBooking: !requiresPayment && !props.court.requirePrepayment // Explicitly mark if it's free
+  };
+
+  console.log('Emitting proceed-booking with details:', JSON.stringify(detailsToEmit, null, 2));
+
+  // Emit the event with the full details
+  emit('proceed-booking', detailsToEmit);
 };
 
 const fetchFreeSlots = async () => {
   try {
     const token = localStorage.getItem('token');
-    const response = await fetch('http://localhost:5000/api/bookings/free-slots', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const dateQueryParam = `?date=${selectedDate.value}`; // Add selected date as query param
+    
+    console.log(`[BookingSection] Fetching free slots for date: ${selectedDate.value}`); // Log the date being fetched
+    
+    const response = await fetch(
+      `http://localhost:5000/api/bookings/free-slots${dateQueryParam}`, // Append date query
+      {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json' 
+        }
+      }
+    );
     
     if (response.ok) {
       const data = await response.json();
-      freeBookingsRemaining.value = data.freeBookingsRemaining || 0;
+      // Use the date-specific remaining count from the response
+      freeBookingsRemaining.value = data.freeBookingsRemainingToday ?? 0; 
+      console.log(`[BookingSection] Fetched free slots remaining for ${selectedDate.value}:`, freeBookingsRemaining.value);
+    } else {
+      console.warn(`[BookingSection] Failed to fetch free slots: ${response.status} ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({})); 
+      console.warn("[BookingSection] Error details:", errorData);
+      freeBookingsRemaining.value = 0; // Default to 0 on error
     }
   } catch (error) {
-    console.error('Error fetching free slots:', error);
+    console.error('[BookingSection] Error fetching free slots:', error);
+    freeBookingsRemaining.value = 0; // Default to 0 on network/other errors
   }
 };
 
 const generateTimeSlots = async () => {
+  console.log(`[BookingSection] generateTimeSlots called for date: ${selectedDate.value}`); // Log start
   const { opening, closing } = props.court.futsalId?.operatingHours || {};
   if (!opening || !closing) {
+    console.warn('[BookingSection] Operating hours not found, cannot generate slots.');
     availableTimeSlots.value = [];
     return;
   }
@@ -353,54 +408,69 @@ const generateTimeSlots = async () => {
   
   // Fetch existing bookings for this court on this date
   const token = localStorage.getItem('token');
-  const userId = localStorage.getItem('userId');
+  const userId = localStorage.getItem('userId'); // Get userId for comparison
   let existingBookings = [];
   
   try {
+    console.log(`[BookingSection] Fetching bookings for court ${props.court._id} on ${selectedDate.value}...`);
     const response = await fetch(
       `http://localhost:5000/api/courts/${props.court._id}/bookings?date=${selectedDate.value}`,
       {
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 
+          'Authorization': `Bearer ${token}`
+         }
       }
     );
     
     if (response.ok) {
       existingBookings = await response.json();
+      console.log('[BookingSection] Fetched existing bookings for date:', selectedDate.value, JSON.parse(JSON.stringify(existingBookings))); // Log fetched bookings
+    } else {
+       console.error('[BookingSection] Failed to fetch existing bookings:', response.status, await response.text()); // Log error response
     }
   } catch (error) {
-    console.error('Error fetching existing bookings:', error);
+    console.error('[BookingSection] Error fetching existing bookings:', error);
   }
 
   while (currentTime < closing) {
     try {
-      // Check if time slot is already booked
-      const isBooked = existingBookings.some(booking => 
-        booking.startTime === currentTime && booking.status !== 'cancelled'
+      // Find booking that OVERLAPS with the current slot time
+      const bookingForSlot = existingBookings.find(booking => 
+        booking.status !== 'cancelled' &&
+        booking.startTime <= currentTime && // Booking starts at or before this slot
+        booking.endTime > currentTime      // Booking ends after this slot starts
       );
-      
+
+      // Log details for each slot check
+      // console.log(`[BookingSection] Checking slot ${currentTime}: Found overlapping booking?`, bookingForSlot ? JSON.parse(JSON.stringify(bookingForSlot)) : 'No'); 
+
+      const isBooked = !!bookingForSlot;
+      const isPending = isBooked && bookingForSlot.status === 'pending';
+      // Comparison logic for yourBooking remains the same
+      const isYourBooking = isBooked && bookingForSlot.user?._id?.toString() === userId?.toString(); 
+
+      if (isBooked) { 
+        console.log(`[BookingSection] Slot ${currentTime}: isBooked=${isBooked}, isYourBooking=${isYourBooking}, currentUserId=${userId}, bookingUserId=${bookingForSlot?.user?._id?.toString()}`);
+      }
+
       // Check if this time is in the past (for today only)
       const [hours, minutes] = currentTime.split(':').map(Number);
       const isPastTime = isToday && (hours < currentHour || (hours === currentHour && minutes < currentMinutes));
-      
-      // Check if it's booked by the current user
-      const isYourBooking = existingBookings.some(booking => 
-        booking.startTime === currentTime && 
-        booking.status !== 'cancelled' && 
-        booking.user === userId
-      );
       
       const rate = determineRate(props.court, currentTime);
 
       slots.push({
         time: currentTime,
+        // Slot is available only if it's not booked (by anyone), not pending (by anyone), and not in the past
         available: !isBooked && !isPastTime,
-        booked: isBooked,
-        yourBooking: isYourBooking,
+        booked: isBooked && !isYourBooking, // Mark as booked if it exists and isn't yours
+        isPending: isPending && !isYourBooking, // Show pending only if it's not your pending booking
+        yourBooking: isYourBooking, // Show as your booking (blue) regardless of pending/confirmed
         isPastTime: isPastTime,
         rate: Number(rate)
       });
     } catch (error) {
-      console.error('Error checking slot availability:', error);
+      console.error('[BookingSection] Error processing slot:', currentTime, error);
     }
 
     // Increment time by 1 hour
@@ -412,6 +482,7 @@ const generateTimeSlots = async () => {
   }
 
   availableTimeSlots.value = slots;
+  console.log('[BookingSection] Updated availableTimeSlots state:', JSON.parse(JSON.stringify(availableTimeSlots.value))); // Log final state
 };
 
 const toggleTimeSlot = (slot) => {
@@ -430,12 +501,12 @@ const isSlotSelected = (slot) => {
 }
 
 // Watch for date changes to regenerate time slots
-watch(selectedDate, generateTimeSlots)
+watch(selectedDate, refreshBookingData) // Use refreshBookingData here too
 
 watch(selectedTimeSlots, () => {
-  console.log(`Selected slots: ${selectedTimeSlots.value.length}, Free bookings remaining: ${freeBookingsRemaining.value}`);
+  console.log(`[BookingSection] Selected slots changed: ${selectedTimeSlots.value.length}, Free remaining: ${freeBookingsRemaining.value}`);
 }, { deep: true });
 
 // Initialize time slots when component mounts
-generateTimeSlots()
+// No need to call generateTimeSlots() here anymore, onMounted calls refreshBookingData
 </script>

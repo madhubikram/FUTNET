@@ -108,8 +108,11 @@
           <div class="flex justify-between items-start mb-0.5">
             <span class="text-[0.6rem] text-gray-400">No Current Rate</span>
           </div>
-          <div class="text-xs text-gray-400">
+          <div v-if="futsal.operatingHours?.opening" class="text-xs text-gray-400">
             Opens at {{ formatTimeForDisplay(futsal.operatingHours?.opening) }}
+          </div>
+          <div v-else class="text-xs text-gray-400">
+            Operating hours unavailable
           </div>
         </div>
 
@@ -119,12 +122,15 @@
         >
           <div class="flex justify-between items-start mb-0.5">
             <span class="text-[0.6rem] text-blue-300">Peak Hours</span>
-            <span class="text-[0.5rem] text-blue-300">
+            <span v-if="futsal.peakHours?.start && futsal.peakHours?.end" class="text-[0.5rem] text-blue-300">
               {{ formatTimeRange(futsal.peakHours?.start, futsal.peakHours?.end) }}
+            </span>
+            <span v-else class="text-[0.5rem] text-blue-300">
+              Not set
             </span>
           </div>
           <div class="text-xs font-semibold text-blue-300">
-            Rs. {{ futsal.peakPrice }}
+            Rs. {{ futsal.peakPrice || futsal.regularPrice || 'N/A' }}
           </div>
         </div>
 
@@ -136,7 +142,7 @@
             <span class="text-[0.6rem] text-gray-300">Normal Hours</span>
           </div>
           <div class="text-xs font-semibold text-gray-300">
-            Rs. {{ futsal.regularPrice }}
+            Rs. {{ futsal.regularPrice || 'N/A' }}
           </div>
         </div>
 
@@ -146,12 +152,15 @@
         >
           <div class="flex justify-between items-start mb-0.5">
             <span class="text-[0.6rem] text-purple-300">Off-Peak</span>
-            <span class="text-[0.5rem] text-purple-300">
+            <span v-if="futsal.offPeakHours?.start && futsal.offPeakHours?.end" class="text-[0.5rem] text-purple-300">
               {{ formatTimeRange(futsal.offPeakHours?.start, futsal.offPeakHours?.end) }}
+            </span>
+            <span v-else class="text-[0.5rem] text-purple-300">
+              Not set
             </span>
           </div>
           <div class="text-xs font-semibold text-purple-300">
-            Rs. {{ futsal.offPeakPrice }}
+            Rs. {{ futsal.offPeakPrice || futsal.regularPrice || 'N/A' }}
           </div>
         </div>
       </div>
@@ -207,9 +216,11 @@ onMounted(() => {
       hasAvailableSlots: props.futsal.availableSlots && Array.isArray(props.futsal.availableSlots),
       totalSlots: props.futsal.availableSlots ? props.futsal.availableSlots.length : 0,
       operatingHours: {
-        opening: props.futsal.peakHours?.start,
-        closing: props.futsal.peakHours?.end
-      }
+        opening: props.futsal.operatingHours?.opening || 'undefined',
+        closing: props.futsal.operatingHours?.closing || 'undefined'
+      },
+      peakHours: props.futsal.peakHours || 'none',
+      offPeakHours: props.futsal.offPeakHours || 'none'
     });
   }
 });
@@ -319,7 +330,7 @@ const formatTimeForDisplay = (time) => {
     
     console.log(`[${props.futsal.futsalName}] Getting opening time:`, {
       providedTime: time,
-      operatingHours: props.futsal.operatingHours,
+      operatingHours: props.futsal.operatingHours || 'undefined',
       openingTime
     });
 

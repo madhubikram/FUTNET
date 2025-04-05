@@ -86,6 +86,7 @@
         <div v-else-if="currentTab === 'timetable'" class="space-y-8">
           <!-- Booking Section Component -->
           <BookingSection
+            ref="bookingSectionRef"
             :court="court"
             @proceed-booking="handleProceedBooking"
           />
@@ -131,6 +132,7 @@ const currentTab = ref('description')
 const showBookingModal = ref(false)
 const bookingDetails = ref(null)
 const isProcessingBooking = ref(false)
+const bookingSectionRef = ref(null)
 
 // Constants and Computed Properties
 const tabs = [
@@ -323,7 +325,14 @@ const handleToggleReaction = async ({ reviewId, type }) => {
 
 // Booking related handlers
 const handleProceedBooking = (details) => {
-  bookingDetails.value = details
+  // Ensure the bookingDetails has the proper structure expected by the confirmation modal
+  bookingDetails.value = {
+    ...details,
+    date: details.date,  // Keep the original date format from the form
+    slots: details.slots || [],
+    totalAmount: details.totalAmount || 0,
+    duration: details.duration || (details.slots ? `${details.slots.length} hour(s)` : 'N/A')
+  }
   showBookingModal.value = true
 }
 
@@ -332,15 +341,89 @@ const handleConfirmBooking = async () => {
     isProcessingBooking.value = true;
     
     if (!court.value.requirePrepayment) {
+      // Format the date to ISO format (YYYY-MM-DD)
+      let formattedDate;
+      try {
+        if (typeof bookingDetails.value.date === 'string') {
+          // Try to ensure it's a valid date string in YYYY-MM-DD format
+          const parts = bookingDetails.value.date.split('-');
+          if (parts.length === 3) {
+            formattedDate = bookingDetails.value.date;
+          } else {
+            const date = new Date(bookingDetails.value.date);
+            formattedDate = date.toISOString().split('T')[0];
+          }
+        } else if (bookingDetails.value.date instanceof Date) {
+          formattedDate = bookingDetails.value.date.toISOString().split('T')[0];
+        } else {
+          // Fallback to today's date if we can't determine the date
+          formattedDate = new Date().toISOString().split('T')[0];
+        }
+      } catch (dateError) {
+        console.error('Error formatting date:', dateError);
+        formattedDate = new Date().toISOString().split('T')[0]; // Use today as fallback
+      }
+      
+      // Debug info to see the full structure of bookingDetails
+      console.log('Full booking details:', JSON.stringify(bookingDetails.value, null, 2));
+      
+      // Check if at least one slot is selected
+      if (!bookingDetails.value.slots || bookingDetails.value.slots.length === 0) {
+        alert('No time slots selected. Please select at least one time slot.');
+        isProcessingBooking.value = false;
+        return;
+      }
+      
+      // Get the first and last selected time slot
+      const firstSlot = bookingDetails.value.slots[0];
+      const lastSlot = bookingDetails.value.slots[bookingDetails.value.slots.length - 1];
+      
+      // Calculate end time (assuming 1-hour slots)
+      const calculateEndTime = (startTime) => {
+        const [hours, minutes] = startTime.split(':').map(Number);
+        const totalMinutes = hours * 60 + minutes + 60; // Add 1 hour (60 minutes)
+        const newHours = Math.floor(totalMinutes / 60);
+        const newMinutes = totalMinutes % 60;
+        return `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
+      };
+      
+      // If time slot doesn't have startTime/endTime properties, use the time property
+      const startTime = firstSlot.startTime || firstSlot.time || null;
+      let endTime;
+      
+      if (lastSlot.endTime) {
+        endTime = lastSlot.endTime;
+      } else if (lastSlot.time) {
+        endTime = calculateEndTime(lastSlot.time);
+      } else {
+        endTime = null;
+      }
+      
+      // Check if we have valid times
+      if (!startTime || !endTime) {
+        console.error('Invalid time slots:', bookingDetails.value.slots);
+        alert('Could not determine booking time. Please try again or select different time slots.');
+        isProcessingBooking.value = false;
+        return;
+      }
+      
       const bookingData = {
         courtId: route.params.id,
-        date: bookingDetails.value.date,
-        slots: bookingDetails.value.slots,
+        date: formattedDate,
+        // Just send time strings as HH:MM - the backend will handle the conversion
+        startTime: startTime,
+        endTime: endTime,
         totalAmount: bookingDetails.value.totalAmount,
         requiresPayment: bookingDetails.value.requiresPayment,
-        // Add this field to mark free bookings
-        isFreeBooking: !bookingDetails.value.requiresPayment
-      }
+        isSlotFree: !bookingDetails.value.requiresPayment,
+        userDetails: {
+          name: localStorage.getItem('username') || '',
+          email: localStorage.getItem('email') || '',
+          phone: localStorage.getItem('phone') || ''
+        }
+      };
+
+      console.log('Sending booking data:', bookingData);
 
       try {
         const response = await fetch(
@@ -355,26 +438,34 @@ const handleConfirmBooking = async () => {
           }
         );
 
+        const responseText = await response.text();
+        console.log('Response from booking API:', response.status, responseText);
+        
         if (!response.ok) {
-          throw new Error('Failed to create booking');
+          let errorData = { message: 'Failed to create booking' };
+          try {
+            errorData = JSON.parse(responseText);
+          } catch {
+            // If not JSON, use the text as is
+          }
+          throw new Error(errorData.message || 'Failed to create booking');
         }
         
-        const data = await response.json();
+        const data = JSON.parse(responseText);
         console.log('Booking created successfully:', data);
         
-        // Success handling
         showBookingModal.value = false;
         bookingDetails.value = null;
         
-        // Success message and redirect to bookings page
+        bookingSectionRef.value?.refreshBookingData();
+        
         alert('Booking confirmed successfully! You can view your bookings in the Bookings section.');
         router.push('/bookings');
       } catch (error) {
         console.error('Error creating booking:', error);
-        alert('Unable to complete booking. Please try again later.');
+        alert('Unable to complete booking: ' + error.message);
       }
     } else {
-      // Handle prepayment flow (to be implemented later)
       console.log('Prepayment required - implementation pending');
       alert('For demo purposes: Prepayment will be required in the production version.');
     }

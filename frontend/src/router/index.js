@@ -95,6 +95,16 @@ const router = createRouter({
       }
     },
     {
+      path: '/admin-tournaments/:id/teams',
+      name: 'AdminTournamentTeams',
+      component: () => import('@/views/AdminTournamentTeams.vue'),
+      props: true,
+      meta: {
+        requiresAuth: true,
+        roles: ['futsalAdmin']
+      }
+    },
+    {
       path: '/admin-bookings',
       name: 'adminBookings',
       component: () => import('../views/AdminBooking.vue'),

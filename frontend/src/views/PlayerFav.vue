@@ -78,6 +78,17 @@
   
       const courts = await response.json()
       
+      console.log("Raw court data for favorites:");
+      courts.forEach(court => {
+        if (favorites.includes(court._id)) {
+          console.log(`Court ${court.name} (${court._id}):`, {
+            futsalId: court.futsalId,
+            operatingHours: court.futsalId?.operatingHours,
+            hasOperatingHours: !!court.futsalId?.operatingHours
+          });
+        }
+      });
+      
       // Filter and map courts to only include favorites
       favoriteCourts.value = courts
         .filter(court => favorites.includes(court._id))
@@ -110,6 +121,22 @@
           const [area, city = 'Kathmandu'] = fullLocation.split(',').map(part => part.trim())
           const formattedLocation = `${area}, ${city}`
   
+          // Get available slots for today
+          let availableSlots = []
+          
+          // Use court operating hours to generate potential slots
+          if (court.futsalId?.operatingHours) {
+            const { opening, closing } = court.futsalId.operatingHours
+            
+            availableSlots = generateTimeSlots(opening, closing)
+            
+            console.log(`Court ${court.name || 'Unknown'} (${court._id}) availability:`, {
+              operatingHours: court.futsalId?.operatingHours,
+              availableSlots: availableSlots.length,
+              currentTime: new Date().toLocaleTimeString()
+            });
+          }
+  
           return {
             id: court._id,
             futsalName: court.futsalId?.name || 'Unknown Futsal',
@@ -134,9 +161,17 @@
               start: court.offPeakHours?.start,
               end: court.offPeakHours?.end
             } : null,
+            // Make sure to include the operating hours
+            operatingHours: court.futsalId?.operatingHours || {
+              opening: '09:00', // Default only if no operatingHours exists
+              closing: '21:00'
+            },
             isFavorite: true, // These are all favorites
             images: court.images?.map(img => `http://localhost:5000${img}`) || [],
-            prepaymentRequired: court.requirePrepayment || false
+            prepaymentRequired: court.requirePrepayment || false,
+            availableSlots: court.futsalId?.operatingHours ? 
+              generateTimeSlots(court.futsalId.operatingHours.opening, court.futsalId.operatingHours.closing) :
+              generateTimeSlots(court.peakHours?.start || '17:00', court.peakHours?.end || '20:00')
           }
         })
         
@@ -162,6 +197,65 @@
     
     return current >= startTime && current <= endTime
   }
+  
+  // Helper function to generate time slots
+  const generateTimeSlots = (opening, closing) => {
+    if (!opening || !closing) {
+      console.warn('Missing opening or closing time for slot generation');
+      return [];
+    }
+    
+    // Parse opening and closing times to minutes since midnight
+    const openingMinutes = timeToMinutes(opening);
+    const closingMinutes = timeToMinutes(closing);
+    
+    if (isNaN(openingMinutes) || isNaN(closingMinutes)) {
+      console.error('Invalid time format', { opening, closing });
+      return [];
+    }
+    
+    console.log(`Generating slots from ${opening} (${openingMinutes} mins) to ${closing} (${closingMinutes} mins)`);
+    
+    const slots = [];
+    let currentMinutes = openingMinutes;
+    
+    // Get current time to filter out past slots
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTotalMinutes = currentHour * 60 + currentMinute;
+    
+    // Generate slots every hour (60 minutes)
+    while (currentMinutes < closingMinutes) {
+      // Convert minutes back to HH:MM format
+      const hours = Math.floor(currentMinutes / 60);
+      const minutes = currentMinutes % 60;
+      const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      
+      // Only add future slots for today
+      if (currentMinutes > currentTotalMinutes) {
+        slots.push(timeStr);
+        console.log(`Added slot: ${timeStr}`);
+      } else {
+        console.log(`Skipped past slot: ${timeStr}`);
+      }
+      
+      // Move forward 60 minutes
+      currentMinutes += 60;
+    }
+    
+    console.log(`Generated ${slots.length} slots for ${opening} to ${closing}`);
+    return slots;
+  };
+  
+  const timeToMinutes = (time) => {
+    if (!time) return NaN;
+    
+    const [hours, minutes] = time.split(':').map(Number);
+    if (isNaN(hours) || isNaN(minutes)) return NaN;
+    
+    return hours * 60 + minutes;
+  };
   
   // Handle booking
   const handleBooking = (futsal) => {

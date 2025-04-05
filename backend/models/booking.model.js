@@ -30,7 +30,7 @@ const bookingSchema = new mongoose.Schema({
   },
   priceType: {
     type: String,
-    enum: ['regular', 'peak', 'offPeak'],
+    enum: ['regular', 'peak', 'offPeak', 'free'],
     required: true
   },
   status: {
@@ -58,6 +58,14 @@ const bookingSchema = new mongoose.Schema({
   pointsUsed: {
     type: Number,
     default: 0
+  },
+  isDeletedFromHistory: {
+    type: Boolean,
+    default: false
+  },
+  isSlotFree: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true

@@ -136,30 +136,51 @@ const tournamentPlayerController = {
       if (existingRegistration) {
         return res.status(400).json({ message: 'Already registered for this tournament' });
       }
-  
-      // Validate minimum players (captain + required players)
-      if (!req.body.players || req.body.players.length < tournament.teamSize) {
+      
+      console.log('Registration request body:', req.body);
+      
+      // Validate players data format
+      if (!req.body.players || !Array.isArray(req.body.players) || req.body.players.length < tournament.teamSize) {
         return res.status(400).json({ 
-          message: `This tournament requires at least ${tournament.teamSize} players (including captain)`
+          message: `This tournament requires at least ${tournament.teamSize} properly formatted player entries.`
         });
       }
+
+      // Generate a unique team ID 
+      // Format: TRN-{first 3 chars of tournament name}-{timestamp}-{random 3 digits}
+      const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+      const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+      const tournamentPrefix = tournament.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
+      const teamId = `TRN-${tournamentPrefix}-${timestamp}-${randomNum}`;
   
-      // Create registration
+      // Create registration with proper player format
       const registration = new TournamentRegistration({
         tournament: tournament._id,
         user: req.user._id,
+        teamId: teamId,
         teamName: req.body.teamName,
-        players: req.body.players
+        players: req.body.players // Make sure frontend is sending the correct player object format
+      });
+      
+      console.log('Creating registration:', {
+        tournamentId: tournament._id,
+        userId: req.user._id,
+        teamId: teamId,
+        teamName: req.body.teamName,
+        playerCount: req.body.players.length
       });
   
-      await registration.save();
+      const savedRegistration = await registration.save();
+      console.log('Registration saved with ID:', savedRegistration._id);
   
       // Update tournament registered teams count
       tournament.registeredTeams += 1;
       await tournament.save();
+      console.log(`Updated tournament ${tournament._id} registeredTeams to ${tournament.registeredTeams}`);
   
-      res.status(201).json(registration);
+      res.status(201).json(savedRegistration);
     } catch (error) {
+      console.error('Error registering for tournament:', error);
       res.status(500).json({ message: error.message });
     }
   }
