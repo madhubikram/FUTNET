@@ -21,7 +21,8 @@
           :class="{
             'bg-green-500/20 text-green-400 border border-green-500/20': tournament.status === 'Upcoming',
             'bg-blue-500/20 text-blue-400 border border-blue-500/20': tournament.status === 'Ongoing',
-            'bg-gray-500/20 text-gray-400 border border-gray-700/20': tournament.status === 'Completed'
+            'bg-gray-500/20 text-gray-400 border border-gray-700/20': tournament.status === 'Completed',
+            'bg-orange-500/20 text-orange-400 border border-orange-500/20': tournament.status === 'Cancelled (Low Teams)'
           }"
         >
           {{ tournament.status }}

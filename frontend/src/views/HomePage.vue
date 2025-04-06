@@ -58,7 +58,10 @@
             </div>
           </div>
 
-                    <button class="h-8 px-3 bg-gray-800 text-white text-sm rounded-lg flex items-center gap-1 hover:bg-gray-700">
+                    <button 
+            @click="openFilterModal"
+            class="h-8 px-3 bg-gray-800 text-white text-sm rounded-lg flex items-center gap-1 hover:bg-gray-700"
+          >
             <FilterIcon class="w-3 h-4" />
             <span class="text-sm md:text-base">Filter</span>
           </button>
@@ -132,6 +135,78 @@
       <MapIcon class="w-6 h-6" />
     </button>
   </PageLayout>
+
+  <!-- Filter Modal -->
+  <div v-if="showFilterModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4">
+      <!-- Modal Header -->
+      <div class="flex justify-between items-center p-4 border-b border-gray-700">
+        <h3 class="text-lg font-semibold text-white">Filters</h3>
+        <button @click="closeFilterModal" class="text-gray-400 hover:text-white">
+          <XIcon class="w-5 h-5" />
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 space-y-6">
+        <!-- Price Range Filter -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Price Range (Hourly Rate)</label>
+          <div class="flex items-center space-x-3">
+            <input 
+              v-model.number="tempPriceRange.min" 
+              type="number" 
+              placeholder="Min" 
+              min="0"
+              class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:ring-green-500 focus:border-green-500"
+            >
+            <span class="text-gray-400">-</span>
+            <input 
+              v-model.number="tempPriceRange.max" 
+              type="number" 
+              placeholder="Max" 
+              min="0"
+              class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:ring-green-500 focus:border-green-500"
+            >
+          </div>
+        </div>
+
+        <!-- Minimum Rating Filter -->
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">Minimum Rating</label>
+          <select 
+            v-model.number="tempMinRating"
+            class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:ring-green-500 focus:border-green-500"
+          >
+            <option value="0">Any Rating</option>
+            <option value="1">★☆☆☆☆ & Up</option>
+            <option value="2">★★☆☆☆ & Up</option>
+            <option value="3">★★★☆☆ & Up</option>
+            <option value="4">★★★★☆ & Up</option>
+            <option value="5">★★★★★</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="flex justify-between items-center p-4 bg-gray-800/50 border-t border-gray-700 rounded-b-lg">
+         <button 
+          @click="clearFilters" 
+          class="px-4 py-2 text-sm text-gray-400 hover:text-red-400 rounded-md flex items-center gap-1 transition-colors duration-200"
+          title="Clear all filters"
+        >
+          <SearchXIcon class="w-4 h-4"/>
+          Clear Filters
+        </button>
+        <button 
+          @click="applyFilters" 
+          class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors duration-200"
+        >
+          Apply Filters
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup>
@@ -139,8 +214,7 @@ import { ref, computed, watch, onMounted  } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/layout/PageLayout.vue'
 import FutsalCard from '@/components/features/FutsalCard.vue'
-import {BellIcon, FilterIcon, MapIcon, ArrowUpDownIcon
-} from 'lucide-vue-next'
+import {BellIcon, FilterIcon, MapIcon, ArrowUpDownIcon, XIcon, SearchXIcon } from 'lucide-vue-next'
 import LoyaltyPointsDisplay from '@/components/features/LoyaltyPointsDisplay.vue'
 
 const error = ref(null);
@@ -152,6 +226,12 @@ const username = ref('Madhu Bikram')
 const searchQuery = ref('')
 const isShowingSortOptions = ref(false)
 const sortOption = ref({ field: 'name', direction: 'asc' })
+const showFilterModal = ref(false)
+const priceRangeFilter = ref({ min: null, max: null })
+const minRatingFilter = ref(0)
+// Temporary refs for filter modal inputs
+const tempPriceRange = ref({ min: null, max: null })
+const tempMinRating = ref(0)
 
 // Pagination
 const currentPage = ref(1)
@@ -173,6 +253,35 @@ const sortBy = (field) => {
   }
   isShowingSortOptions.value = false // Close sort options after selection
 }
+
+// Filter functions
+const openFilterModal = () => {
+  // Load current filters into temp refs when opening
+  tempPriceRange.value = { ...priceRangeFilter.value };
+  tempMinRating.value = minRatingFilter.value;
+  showFilterModal.value = true;
+};
+
+const closeFilterModal = () => {
+  showFilterModal.value = false;
+};
+
+const applyFilters = () => {
+  priceRangeFilter.value = { ...tempPriceRange.value };
+  minRatingFilter.value = tempMinRating.value;
+  currentPage.value = 1; // Reset to first page after applying filters
+  closeFilterModal();
+};
+
+const clearFilters = () => {
+  priceRangeFilter.value = { min: null, max: null };
+  minRatingFilter.value = 0;
+  tempPriceRange.value = { min: null, max: null }; // Clear temps too
+  tempMinRating.value = 0;
+  currentPage.value = 1; // Reset to first page
+  // Optionally close modal after clearing, or keep it open
+  // closeFilterModal(); 
+};
 
 const handleBooking = (futsal) => {
   console.log('Booking futsal:', futsal.name)
@@ -218,9 +327,26 @@ const filteredFutsals = computed(() => {
   if (searchQuery.value) {
     const lowerCaseQuery = searchQuery.value.toLowerCase();
     result = result.filter(futsal =>
-      futsal.name.toLowerCase().includes(lowerCaseQuery) ||
-      futsal.location.toLowerCase().includes(lowerCaseQuery)
+      futsal.futsalName.toLowerCase().includes(lowerCaseQuery) || // Search futsal name
+      futsal.courtName.toLowerCase().includes(lowerCaseQuery) ||  // Search court name
+      futsal.location.toLowerCase().includes(lowerCaseQuery)     // Search location
     );
+  }
+
+  // Apply price range filter
+  if (priceRangeFilter.value.min !== null && priceRangeFilter.value.min >= 0) {
+    result = result.filter(futsal => futsal.regularPrice >= priceRangeFilter.value.min);
+  }
+  if (priceRangeFilter.value.max !== null && priceRangeFilter.value.max >= 0) {
+    // Make sure max is >= min if both are set
+    if (priceRangeFilter.value.min === null || priceRangeFilter.value.max >= priceRangeFilter.value.min) {
+       result = result.filter(futsal => futsal.regularPrice <= priceRangeFilter.value.max);
+    }
+  }
+
+  // Apply minimum rating filter
+  if (minRatingFilter.value > 0) {
+    result = result.filter(futsal => futsal.rating >= minRatingFilter.value);
   }
 
   // Apply sorting
@@ -414,12 +540,12 @@ const generateTimeSlots = (opening, closing) => {
     const minutes = currentMinutes % 60;
     const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
     
-    // Only add future slots for today
+    // Only add future slots for today (This condition was correct)
     if (currentMinutes > currentTotalMinutes) {
-      slots.push(timeStr);
-      console.log(`Added slot: ${timeStr}`);
+      slots.push(timeStr); // Just push the time string
+      // console.log(`Added slot: ${timeStr}`); // Keep console log commented or remove
     } else {
-      console.log(`Skipped past slot: ${timeStr}`);
+      // console.log(`Skipped past slot: ${timeStr}`); // Keep console log commented or remove
     }
     
     // Move forward 60 minutes

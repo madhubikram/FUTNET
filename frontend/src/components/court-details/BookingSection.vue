@@ -463,10 +463,11 @@ const generateTimeSlots = async () => {
         time: currentTime,
         // Slot is available only if it's not booked (by anyone), not pending (by anyone), and not in the past
         available: !isBooked && !isPastTime,
-        booked: isBooked && !isYourBooking, // Mark as booked if it exists and isn't yours
-        isPending: isPending && !isYourBooking, // Show pending only if it's not your pending booking
-        yourBooking: isYourBooking, // Show as your booking (blue) regardless of pending/confirmed
-        isPastTime: isPastTime,
+        // Only show booked/pending/your status if the slot is NOT in the past
+        booked: !isPastTime && isBooked && !isYourBooking, 
+        isPending: !isPastTime && isPending && !isYourBooking, 
+        yourBooking: !isPastTime && isYourBooking, 
+        isPastTime: isPastTime, // Keep this flag internally, might be useful later
         rate: Number(rate)
       });
     } catch (error) {

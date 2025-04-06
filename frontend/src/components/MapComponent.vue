@@ -1,12 +1,11 @@
 <template>
   <div class="relative w-full h-full">
     <LMap
-      ref="map"
       v-model:zoom="zoom"
       :center="center"
       :use-global-leaflet="false"
       class="h-full w-full"
-      @click="!readonly && handleMapClick"
+      @ready="onMapReady"
     >
       <LTileLayer
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -40,15 +39,16 @@
 
       <!-- Regular location marker -->
       <LMarker
-        v-if="markerPosition || readonly"
-        :lat-lng="readonly ? [props.initialLocation.lat, props.initialLocation.lng] : markerPosition"
+        v-if="markerPosition"
+        :lat-lng="markerPosition"
         :draggable="!readonly"
         @dragend="!readonly && handleMarkerDragend"
       >
+        <LIcon :icon-url="'/futsal-marker.svg'" :icon-size="[32, 32]" />
         <LPopup>
           <div class="popup-content">
             <p class="font-medium">{{ readonly ? 'Tournament Location' : 'Selected Location' }}</p>
-            <p class="text-sm mt-1">{{ selectedLocation?.address }}</p>
+            <p class="text-sm mt-1">{{ selectedLocation?.address || 'Location selected' }}</p>
           </div>
         </LPopup>
       </LMarker>
@@ -83,7 +83,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { LMap, LTileLayer, LMarker, LPopup, LIcon } from "@vue-leaflet/vue-leaflet"
 import "leaflet/dist/leaflet.css"
 import debounce from 'lodash/debounce'
@@ -110,6 +110,7 @@ const props = defineProps({
 
 const emit = defineEmits(['location-selected', 'futsal-selected'])
 
+const leafletMapInstance = ref(null)
 const zoom = ref(15)
 const center = ref([props.initialLocation.lat, props.initialLocation.lng])
 const markerPosition = ref(null)
@@ -127,8 +128,12 @@ const getFutsalIcon = (futsal) => {
 const handleMapClick = (event) => {
   if (props.readonly) return
   const { lat, lng } = event.latlng
+  console.log('Map clicked:', event.latlng)
   markerPosition.value = [lat, lng]
   center.value = [lat, lng]
+  // Emit immediately with coordinates
+  emit('location-selected', { lat, lng, address: 'Loading address...' })
+  // Then update with address
   updateSelectedLocation(lat, lng)
 }
 
@@ -138,6 +143,7 @@ const handleMarkerDragend = (event) => {
   markerPosition.value = [lat, lng]
   center.value = [lat, lng]
   updateSelectedLocation(lat, lng)
+  emit('location-selected', { lat, lng, address: selectedLocation.value?.address })
 }
 
 const handleFutsalClick = (futsal) => {
@@ -155,12 +161,16 @@ const updateSelectedLocation = async (lat, lng) => {
     selectedLocation.value = {
       lat,
       lng,
-      address: data.display_name
+      address: data.display_name || 'Address not found'
     }
     
+    console.log('Emitting location-selected from updateSelectedLocation:', selectedLocation.value);
     emit('location-selected', selectedLocation.value)
   } catch (error) {
     console.error('Error getting address:', error)
+    selectedLocation.value = { lat, lng, address: 'Could not fetch address' }
+    console.log('Emitting location-selected after address error:', selectedLocation.value);
+    emit('location-selected', selectedLocation.value)
   }
 }
 
@@ -207,11 +217,39 @@ watch(() => props.futsals, (newFutsals) => {
   }
 }, { deep: true });
 
+const onMapReady = (mapInstance) => {
+  console.log('LMap ready event fired.');
+  leafletMapInstance.value = mapInstance;
+  if (leafletMapInstance.value) {
+    leafletMapInstance.value.on('click', handleMapClick);
+    console.log('Native Leaflet click listener attached via @ready.');
+
+    if (markerPosition.value) {
+        console.log('Initial marker position set, fetching address...');
+        updateSelectedLocation(markerPosition.value[0], markerPosition.value[1]);
+    }
+  } else {
+    console.error('mapInstance provided by @ready event is invalid.');
+  }
+};
+
 onMounted(() => {
   if (props.initialLocation) {
-    updateSelectedLocation(props.initialLocation.lat, props.initialLocation.lng)
+    const { lat, lng } = props.initialLocation;
+    markerPosition.value = [lat, lng];
+    center.value = [lat, lng];
+    console.log('MapComponent mounted, initial markerPosition set:', markerPosition.value);
+  } else {
+    console.log('MapComponent mounted without initialLocation.');
   }
-})
+});
+
+onUnmounted(() => {
+  if (leafletMapInstance.value) {
+    leafletMapInstance.value.off('click', handleMapClick);
+    console.log('Native Leaflet click listener removed.');
+  }
+});
 </script>
 
 <style>

@@ -140,9 +140,19 @@
               </div>
               
               <div class="flex justify-end gap-2 md:gap-3">
-                <button v-if="booking.status === 'pending' || booking.status === 'confirmed'" 
+                <button 
+                  v-if="canCancelBooking(booking)" 
                   @click.stop="cancelBooking(booking._id)"
                   class="px-3 py-1.5 md:px-4 md:py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-sm"
+                >
+                  <XCircleIcon class="w-3.5 h-3.5 md:w-4 md:h-4" />
+                  Cancel
+                </button>
+                <button 
+                  v-else-if="['pending', 'confirmed'].includes(booking.status)" 
+                  disabled
+                  class="px-3 py-1.5 md:px-4 md:py-2 bg-gray-600/20 text-gray-500 rounded-lg flex items-center gap-1.5 text-sm cursor-not-allowed"
+                  title="Cannot cancel past bookings"
                 >
                   <XCircleIcon class="w-3.5 h-3.5 md:w-4 md:h-4" />
                   Cancel
@@ -176,9 +186,13 @@
               >
               <div class="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent md:bg-gradient-to-t"></div>
               <div class="absolute bottom-2 left-2 md:top-3 md:left-3">
-                <span class="px-2 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 bg-gray-600/80 text-gray-300">
+                <span v-if="booking.status === 'cancelled'" class="px-2 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 bg-red-600/80 text-red-200">
+                  <XCircleIcon class="w-3 h-3" />
+                  Cancelled
+                </span>
+                <span v-else class="px-2 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 bg-gray-600/80 text-gray-300">
                   <CheckCircleIcon class="w-3 h-3" />
-                  Completed
+                  {{ booking.status === 'completed' ? 'Completed' : 'Past' }}
                 </span>
               </div>
             </div>
@@ -197,7 +211,7 @@
                 <div class="md:text-right">
                   <p class="text-lg font-semibold text-gray-300">Rs. {{ booking.price }}</p>
                   <p class="text-xs text-gray-500">
-                    {{ booking.paymentMethod === 'free' ? 'Free Booking' : 'Paid' }}
+                    {{ booking.paymentMethod === 'free' ? 'Free Booking' : (booking.paymentStatus || 'N/A') }}
                   </p>
                 </div>
               </div>
@@ -216,7 +230,7 @@
                   <p class="text-sm text-gray-400">{{ booking._id.substring(0, 8) }}</p>
                 </div>
                 <div>
-                  <p class="text-xs text-gray-500 mb-1">Completed On</p>
+                  <p class="text-xs text-gray-500 mb-1">Completed/Cancelled On</p>
                   <p class="text-sm text-gray-400">{{ formatDate(booking.updatedAt) }}</p>
                 </div>
               </div>
@@ -230,7 +244,7 @@
                   Details
                 </button>
                 <button 
-                  v-if="booking.status === 'completed'"
+                  v-if="booking.status === 'completed'" 
                   @click="bookAgain(booking)"
                   class="px-3 py-1.5 md:px-4 md:py-2 bg-green-500/10 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-sm"
                 >
@@ -238,7 +252,7 @@
                   Book Again
                 </button>
                 <button 
-                  v-if="booking.status === 'completed'"
+                  v-if="booking.status === 'completed'" 
                   @click="openReviewModal(booking)"
                   class="px-3 py-1.5 md:px-4 md:py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-sm"
                 >
@@ -246,7 +260,7 @@
                   Add Review
                 </button>
                 <button 
-                  v-if="booking.status === 'completed' || booking.status === 'cancelled'"
+                  v-if="booking.status === 'completed' || booking.status === 'cancelled'" 
                   @click="deleteBookingHistory(booking._id)"
                   class="px-3 py-1.5 md:px-4 md:py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors flex items-center gap-1.5 text-sm"
                 >
@@ -357,18 +371,26 @@
           <!-- Actions -->
           <div class="flex justify-end gap-3">
             <button 
-                v-if="selectedBooking.status === 'pending' || selectedBooking.status === 'confirmed'"
+                v-if="canCancelBooking(selectedBooking)" 
                 @click="cancelBooking(selectedBooking._id)"
                 class="px-4 py-2 bg-red-500/10 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
               >
                 Cancel Booking
               </button>
-            <button
-              v-if="selectedBooking.status === 'completed'"
-              class="px-4 py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-            >
-              Add Review
-            </button>
+              <button
+                v-if="selectedBooking.status === 'completed'"
+                @click="openReviewModal(selectedBooking)"
+                class="px-4 py-2 bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+              >
+                Add Review
+              </button>
+              <button 
+                v-if="selectedBooking.status === 'completed' || selectedBooking.status === 'cancelled'" 
+                @click="deleteBookingHistory(selectedBooking._id)"
+                class="px-4 py-2 bg-gray-600/20 text-gray-400 hover:bg-gray-600 rounded-lg transition-colors"
+               >
+                Delete from History
+              </button>
           </div>
         </div>
         <ReviewModal
@@ -423,16 +445,70 @@ const bookingToReview = ref(null);
 
 // Computed properties
 const ongoingBookings = computed(() => {
-  return bookings.value.filter(booking => 
-    ['pending', 'confirmed'].includes(booking.status)
-  );
+  const now = new Date();
+  return bookings.value.filter(booking => {
+    // Must be pending or confirmed
+    if (!['pending', 'confirmed'].includes(booking.status)) {
+      return false;
+    }
+    // Check if end time is in the future
+    try {
+      const endDateTimeStr = `${booking.date.split('T')[0]}T${booking.endTime}:00`;
+      const endDateTime = new Date(endDateTimeStr);
+      // Add a small buffer (e.g., 1 minute) to keep it ongoing until just after the hour
+      endDateTime.setMinutes(endDateTime.getMinutes() + 1);
+      return endDateTime >= now;
+    } catch (e) {
+      console.error("Error parsing booking end time:", booking._id, e);
+      return false; // Treat as past if error occurs
+    }
+  });
 });
 
 const pastBookings = computed(() => {
-  return bookings.value.filter(booking => 
-    ['completed', 'cancelled'].includes(booking.status)
-  );
+  const now = new Date();
+  return bookings.value
+    .filter(booking => {
+      // Include completed or cancelled bookings
+      if (['completed', 'cancelled'].includes(booking.status)) {
+        return true;
+      }
+      // Include pending/confirmed bookings whose end time has passed
+      if (['pending', 'confirmed'].includes(booking.status)) {
+         try {
+          const endDateTimeStr = `${booking.date.split('T')[0]}T${booking.endTime}:00`;
+          const endDateTime = new Date(endDateTimeStr);
+          // Use the same buffer as ongoing check
+          endDateTime.setMinutes(endDateTime.getMinutes() + 1);
+          return endDateTime < now;
+        } catch (e) {
+          console.error("Error parsing booking end time for history:", booking._id, e);
+          return true; // Treat as past if error occurs
+        }
+      }
+      return false; // Should not happen unless status is unexpected
+    })
+    .sort((a, b) => new Date(b.date) - new Date(a.date)); // Sort history newest first
 });
+
+// Helper function to check if cancellation is allowed
+const canCancelBooking = (booking) => {
+  if (!['pending', 'confirmed'].includes(booking.status)) {
+    return false; // Can only cancel pending or confirmed
+  }
+  // Check if end time is in the future (same logic as ongoingBookings)
+   try {
+    const now = new Date();
+    const endDateTimeStr = `${booking.date.split('T')[0]}T${booking.endTime}:00`;
+    const endDateTime = new Date(endDateTimeStr);
+    // Add a small buffer (e.g., 1 minute)
+    endDateTime.setMinutes(endDateTime.getMinutes() + 1); 
+    return endDateTime >= now;
+  } catch (e) {
+    console.error("Error checking cancellability:", booking._id, e);
+    return false; // Cannot cancel if time check fails
+  }
+};
 
 // Methods
 

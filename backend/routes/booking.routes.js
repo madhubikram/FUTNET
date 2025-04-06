@@ -10,6 +10,10 @@ const TimeSlot = require('../models/timeSlot.model');
 const { getOrCreateTimeSlot } = require('../utils/timeSlotHelper');
 const { startOfDay, endOfDay } = require('date-fns');
 const { isTimeInRange } = require('../utils/timeUtils'); // Assuming helper exists here
+const LoyaltyTransaction = require('../models/loyaltyTransaction.model');
+const moment = require('moment'); // Import moment for duration calculation
+
+const POINTS_PER_HOUR = 10; // Define the points constant
 
 router.post('/', auth, async (req, res) => {
     try {
@@ -39,15 +43,24 @@ router.post('/', auth, async (req, res) => {
             return res.status(400).json({ message: 'Date and time are required' });
         }
 
-        // Format date properly
-        const bookingDate = new Date(date);
-        if (isNaN(bookingDate.getTime())) {
-            return res.status(400).json({ message: 'Invalid date format provided.' });
+        // Format date properly - Ensure UTC midnight
+        let bookingDateUTC;
+        try {
+            const [year, month, day] = date.split('-').map(Number);
+            // Create Date object using UTC values (month is 0-indexed)
+            bookingDateUTC = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+            if (isNaN(bookingDateUTC.getTime())) {
+                throw new Error('Invalid date components');
+            }
+        } catch (e) {
+            console.error(`[Booking] Invalid date string received: ${date}`, e);
+            return res.status(400).json({ message: 'Invalid date format provided. Use YYYY-MM-DD.' });
         }
-        
-        // === Use date-fns consistently for checks ===
-        const checkStartDate = startOfDay(bookingDate);
-        const checkEndDate = endOfDay(bookingDate);
+
+        // === Use the UTC date for checks ===
+        const checkStartDate = bookingDateUTC; // Already UTC midnight
+        // For end check, add 1 day and subtract 1 ms, all in UTC
+        const checkEndDate = new Date(bookingDateUTC.getTime() + 24 * 60 * 60 * 1000);
 
         // === START DEBUG LOGGING ===
         console.log(`[Booking Debug] Checking for existing bookings with params:`);
@@ -144,14 +157,14 @@ router.post('/', auth, async (req, res) => {
             }
             // ---- End: Corrected Price/Type Logic ----
             
-            // --- Save the START of the day for consistency ---
-            const bookingDateStartOfDay = startOfDay(bookingDate);
+            // --- Use the CORRECT UTC midnight date for saving ---
+            // const bookingDateStartOfDay = startOfDay(bookingDate); // REMOVE THIS
             
             // Create new booking with determined price and priceType
             const newBooking = new Booking({
                 court: courtId,
                 user: req.user._id,
-                date: bookingDateStartOfDay,
+                date: bookingDateUTC, // <-- SAVE THE UTC MIDNIGHT DATE
                 startTime,
                 endTime,
                 price: finalPrice, // Use the final price (could be regular/peak/offPeak)
@@ -719,168 +732,136 @@ router.get('/', auth, async (req, res) => {
     }
   });
 
-  // Update booking status by admin (Apply same fix)
-  router.patch('/admin/:id/status', auth, async (req, res) => {
+  // Helper function to calculate duration in hours (handle potential errors)
+  const calculateDurationHours = (startTime, endTime) => {
     try {
-      const { id } = req.params;
-      const { status, paymentStatus } = req.body;
-      
-      // Find the booking and check if it exists
-      const booking = await Booking.findById(id);
-      if (!booking) {
-        return res.status(404).json({ message: 'Booking not found' });
-      }
-      
-      // Store original status for comparison
-      const originalBooking = {
-        status: booking.status,
-        paymentStatus: booking.paymentStatus
-      };
-      
-      // Update the status if provided
-      if (status) {
-        booking.status = status;
-      }
-      
-      // Update the payment status if provided
-      if (paymentStatus) {
-        booking.paymentStatus = paymentStatus;
-      }
-      
-      // Save the updated booking
-      const updatedBooking = await booking.save();
-      
-      // Award loyalty points only when payment is marked as "paid"
-      if (paymentStatus === 'paid' && originalBooking.paymentStatus !== 'paid') {
-        // Check if this is not a free slot booking, or if admin policy is to award points for all bookings
-        if (!booking.isSlotFree) {
-          try {
-            const userId = booking.user;
-            const loyalty = await Loyalty.findOne({ user: userId });
+      // Assuming startTime and endTime are in HH:mm format
+      const start = moment(startTime, 'HH:mm');
+      const end = moment(endTime, 'HH:mm');
 
-            if (loyalty) {
-              // Add points based on booking price
-              const pointsToAdd = Loyalty.calculatePoints(booking.price);
-              await loyalty.addPoints(pointsToAdd, booking._id, `Booking at ${booking.court}`);
-              console.log(`Added ${pointsToAdd} loyalty points to user ${userId}`);
-            } else {
-              // Create new loyalty record with points
-              const pointsToAdd = Loyalty.calculatePoints(booking.price);
-              const newLoyalty = new Loyalty({
-                user: userId,
-                points: pointsToAdd,
-                transactions: [{
-                  type: 'earn',
-                  points: pointsToAdd,
-                  booking: booking._id,
-                  description: `Booking at ${booking.court}`,
-                  date: new Date()
-                }]
-              });
-              await newLoyalty.save();
-              console.log(`Created loyalty record with ${pointsToAdd} points for user ${userId}`);
-            }
-          } catch (err) {
-            console.error('Error updating loyalty points:', err);
-          }
-        }
+      // Handle cases where endTime is on the next day (e.g., 23:00 to 01:00)
+      if (end.isBefore(start)) {
+          end.add(1, 'day');
+      }
+
+      const duration = moment.duration(end.diff(start));
+      const hours = duration.asHours();
+      
+      // Basic validation for calculated hours
+      if (isNaN(hours) || hours <= 0) {
+        console.error(`Invalid duration calculated: ${hours} hours for ${startTime} - ${endTime}`);
+        return 0; // Return 0 or throw error based on desired handling
       }
       
-      // If booking was cancelled, update the availability in the timeslot
-      if (status === 'cancelled' && originalBooking.status !== 'cancelled') {
-        console.log(`[Admin Cancel] Attempting to free up timeslot for cancelled booking ${updatedBooking._id}`);
-        try {
-            console.log(`[Admin Cancel] Finding TimeSlot linked to Booking: ${updatedBooking._id}`);
-            const timeslot = await TimeSlot.findOne({ booking: updatedBooking._id });
-            
-            if (timeslot) {
-              console.log(`[Admin Cancel] Found timeslot ${timeslot._id}. Current isBooked: ${timeslot.isBooked}`);
-              if (timeslot.isBooked) {
-                timeslot.isBooked = false;
-                timeslot.bookedBy = null;
-                timeslot.booking = null; // Unlink the booking
-                await timeslot.save();
-                console.log(`[Admin Cancel] Timeslot ${timeslot._id} updated. New isBooked: ${timeslot.isBooked}`);
-              } else {
-                  console.log(`[Admin Cancel] Timeslot ${timeslot._id} was already available.`);
-              }
-            } else {
-              console.warn(`[Admin Cancel] Could not find TimeSlot document linked to booking ${updatedBooking._id}. Attempting fallback find...`);
-              // Fallback logic (same as above)
-                const bookingDateForSlot = startOfDay(updatedBooking.date);
-                const [startHour, startMinute] = updatedBooking.startTime.split(':').map(Number);
-                const exactStartTime = new Date(Date.UTC(bookingDateForSlot.getUTCFullYear(), bookingDateForSlot.getUTCMonth(), bookingDateForSlot.getUTCDate(), startHour, startMinute));
-                const fallbackTimeslot = await TimeSlot.findOne({ court: updatedBooking.court, startTime: exactStartTime });
-                if (fallbackTimeslot) {
-                    console.warn(`[Admin Cancel Fallback] Found timeslot ${fallbackTimeslot._id}. Updating.`);
-                    fallbackTimeslot.isBooked = false;
-                    fallbackTimeslot.bookedBy = null;
-                    fallbackTimeslot.booking = null;
-                    await fallbackTimeslot.save();
-                } else {
-                    console.error(`[Admin Cancel Fallback] Still could not find timeslot for booking ${updatedBooking._id}.`);
-                }
-            }
-        } catch (err) {
-             console.error(`[Admin Cancel] Error updating TimeSlot for booking ${updatedBooking._id}:`, err);
-        }
-      }
-      
-      res.json(updatedBooking);
+      return hours;
     } catch (error) {
-      console.error('Error updating booking status:', error);
-      res.status(500).json({
-        message: 'Failed to update booking status',
-        error: error.message
-      });
+        console.error('Error calculating duration:', error);
+        return 0; // Return 0 on error
     }
-  });
+  };
 
-  // Update payment status (admin only)
+  // Admin: Update Booking Payment Status
   router.patch('/admin/:id/payment', auth, async (req, res) => {
+    const { paymentStatus } = req.body;
+    const bookingId = req.params.id;
+    const adminUserId = req.user._id;
+
+    if (!paymentStatus || !['pending', 'paid', 'refunded', 'failed', 'unpaid'].includes(paymentStatus)) {
+        return res.status(400).json({ message: 'Invalid payment status provided.' });
+    }
+
     try {
-      // Check if user is admin
-      if (req.user.role !== 'futsalAdmin' && req.user.role !== 'superAdmin') {
-        return res.status(403).json({ message: 'Unauthorized: Admin access required' });
-      }
-      
-      const { paymentStatus } = req.body;
-      
-      if (!['pending', 'paid', 'refunded', 'failed', 'unpaid'].includes(paymentStatus)) {
-        return res.status(400).json({ message: 'Invalid payment status value' });
-      }
-      
-      const booking = await Booking.findById(req.params.id);
-      
-      if (!booking) {
-        return res.status(404).json({ message: 'Booking not found' });
-      }
-      
-      booking.paymentStatus = paymentStatus;
-      
-      // If marked as paid, update payment details
-      if (paymentStatus === 'paid' && booking.paymentStatus !== 'paid') {
-        booking.paymentDetails = {
-          ...booking.paymentDetails,
-          method: req.body.method || 'offline',
-          transactionId: req.body.transactionId || `ADMIN-PAY-${Date.now()}`,
-          paidAmount: booking.price,
-          paidAt: new Date()
-        };
-      }
-      
-      await booking.save();
-      
-      res.json({
-        message: 'Booking payment status updated successfully',
-        booking
-      });
+        const booking = await Booking.findById(bookingId).populate('user', 'loyalty');
+        if (!booking) {
+            return res.status(404).json({ message: 'Booking not found.' });
+        }
+
+        const oldStatus = booking.paymentStatus;
+        const newStatus = paymentStatus;
+
+        // Prevent redundant updates
+        if (oldStatus === newStatus) {
+            return res.status(200).json({ message: 'Payment status is already set to ' + newStatus, booking });
+        }
+
+        // Update booking status and potentially payment details
+        booking.paymentStatus = newStatus;
+        if (newStatus === 'paid') {
+            booking.paymentDetails = {
+                method: booking.paymentDetails?.method || 'offline', // Keep existing method or default to offline
+                transactionId: booking.paymentDetails?.transactionId || `ADMIN-PAY-${Date.now()}`,
+                paidAmount: booking.price, // Assume full price paid when admin marks paid
+                paidAt: new Date()
+            };
+        }
+
+        // --- Loyalty Points Logic ---
+        let loyaltyUpdate = null;
+        let transactionType = null;
+        let pointsChange = 0;
+        let loyaltyLogMessage = null;
+
+        if (newStatus === 'paid') {
+            // Award points for ANY booking marked as paid
+            const durationHours = calculateDurationHours(booking.startTime, booking.endTime);
+            pointsChange = Math.round(durationHours * POINTS_PER_HOUR); // Use defined constant
+            transactionType = 'credit';
+            loyaltyLogMessage = `Awarded ${pointsChange} points`;
+
+            // Find or create loyalty record - RESOLVED CONFLICT
+            loyaltyUpdate = await Loyalty.findOneAndUpdate(
+                { user: booking.user._id },
+                {
+                    $inc: { points: pointsChange }, // Increments points if doc exists, sets to pointsChange if inserting
+                    $setOnInsert: { user: booking.user._id } // Only set user field on insert
+                },
+                { upsert: true, new: true }
+            );
+
+        } else if (oldStatus === 'paid' && newStatus === 'unpaid') {
+            // Revoke points only if changing from paid to unpaid
+            const durationHours = calculateDurationHours(booking.startTime, booking.endTime);
+            pointsChange = Math.round(durationHours * POINTS_PER_HOUR); // Use defined constant
+            transactionType = 'debit';
+            loyaltyLogMessage = `Revoked ${pointsChange} points`;
+
+            // Find loyalty record
+            const loyalty = await Loyalty.findOne({ user: booking.user._id });
+            if (loyalty) {
+                // Correctly decrease points, ensuring it doesn't go below 0
+                loyalty.points = Math.max(0, loyalty.points - pointsChange);
+                loyaltyUpdate = await loyalty.save(); // Save the updated loyalty document
+            } else {
+                loyaltyLogMessage += ' (User has no loyalty record)';
+            }
+        }
+
+        // Save the booking changes
+        const updatedBooking = await booking.save();
+
+        // Log Loyalty Transaction if points changed
+        if (loyaltyUpdate && transactionType && pointsChange > 0) {
+            console.log(`[Loyalty] ${loyaltyLogMessage} to user ${booking.user._id} for booking ${bookingId}`);
+            await LoyaltyTransaction.create({
+                user: booking.user._id,
+                type: transactionType,
+                points: pointsChange,
+                reason: `Booking ${bookingId} status changed to ${newStatus} by admin ${adminUserId}`,
+                relatedBooking: bookingId
+            });
+        } else if (transactionType && pointsChange > 0) {
+             console.log(`[Loyalty] ${loyaltyLogMessage} for user ${booking.user._id} booking ${bookingId}`); // Log even if loyalty doc didn't exist for revoke
+        }
+
+        res.status(200).json({ message: `Booking payment status updated to ${newStatus}`, booking: updatedBooking });
+
     } catch (error) {
-      console.error('Error updating booking payment status:', error);
-      res.status(500).json({
-        message: 'Failed to update booking payment status',
-        error: error.message
-      });
+        console.error(`Error updating booking ${bookingId} payment status to ${paymentStatus}:`, error);
+        // Log the specific loyalty error if it occurred during the revoke attempt
+        if (error.message.includes('loyalty.save')) { 
+             console.error(`[Loyalty] Error saving loyalty update for booking ${bookingId}:`, error);
+        }
+        res.status(500).json({ message: 'Failed to update booking payment status.' });
     }
   });
 

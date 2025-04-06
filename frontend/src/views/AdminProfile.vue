@@ -273,10 +273,11 @@ const fetchProfileData = async () => {
 
 const hasDataChanged = () => {
   const profileChanged = !_.isEqual(profileData.value, initialProfileData.value);
-  // Remove image comparison
-  const { images: currentImages, ...currentFutsalRest } = futsalData.value;
-  const { images: initialImages, ...initialFutsalRest } = initialFutsalData.value || {};
-  const futsalDetailsChanged = !_.isEqual(currentFutsalRest, initialFutsalRest);
+  
+  // Simplified futsal details comparison, ignoring images array
+  const currentFutsalComparable = _.omit(futsalData.value, 'images');
+  const initialFutsalComparable = _.omit(initialFutsalData.value || {}, 'images');
+  const futsalDetailsChanged = !_.isEqual(currentFutsalComparable, initialFutsalComparable);
 
   console.log("Change Check:", { profileChanged, futsalDetailsChanged });
   return profileChanged || futsalDetailsChanged;
@@ -340,10 +341,13 @@ const saveChanges = async () => {
 // --- Location/Map Methods ---
 const handleMapClick = async ({ lat, lng }) => {
     futsalData.value.coordinates = { lat, lng };
-    try { const address = await reverseGeocode(lat, lng); futsalData.value.locationString = address; toast.info("Location updated.", { timeout: 1500 }); }
-    catch (error) 
-    { console.error("Reverse Geocode Error:", error); futsalData.value.locationString = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`; toast.warning("Could not get address.", { timeout: 2000 }); }
-    { futsalData.value.locationString = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`; toast.warning("Could not get address.", { timeout: 2000 }); }
+    try {
+        const address = await reverseGeocode(lat, lng);
+        futsalData.value.locationString = address;
+    } catch (error) { 
+        console.error("Reverse Geocode Error:", error);
+        futsalData.value.locationString = `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+    }
 };
 const handleLocationSelected = (location) => {
   if (location) {

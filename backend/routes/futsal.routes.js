@@ -11,26 +11,29 @@ router.post('/profile', auth, async (req, res) => {
     try {
         console.log('--- Futsal Profile Update Request ---');
         console.log('User:', req.user._id);
-        // Body will be JSON now, not FormData
         console.log('Request Body:', req.body);
 
         // --- VALIDATION ---
         if (!req.body.description || typeof req.body.description !== 'string' || req.body.description.trim() === '') {
             return res.status(400).json({ message: 'Missing required field: description' });
         }
-        if (!req.body.location || typeof req.body.location !== 'string' || req.body.location.trim() === '') {
-            return res.status(400).json({ message: 'Missing required field: location' });
+        // Validate the nested location object structure
+        if (!req.body.location || typeof req.body.location !== 'object' ||
+            !req.body.location.address || typeof req.body.location.address !== 'string' || req.body.location.address.trim() === '') {
+             console.error('Validation Error: Invalid or missing location.address', req.body.location);
+             return res.status(400).json({ message: 'Missing or invalid required field: location address' });
         }
 
-        // Validate coordinates directly from req.body
-        const lat = parseFloat(req.body.coordinates?.lat); // Use ?. for safety
-        const lng = parseFloat(req.body.coordinates?.lng);
+        // Validate coordinates from the nested location object
+        const lat = parseFloat(req.body.location?.lat); // Use ?. for safety
+        const lng = parseFloat(req.body.location?.lng);
 
         if (isNaN(lat) || isNaN(lng)) {
-             console.error('Validation Error: Invalid coordinates', req.body.coordinates);
+             console.error('Validation Error: Invalid coordinates in location object', req.body.location);
             return res.status(400).json({ message: 'Invalid or missing coordinates (latitude/longitude must be numbers)' });
         }
         if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+             console.error('Validation Error: Coordinates out of range', {lat, lng});
             return res.status(400).json({ message: 'Coordinates are out of valid range.' });
         }
 
@@ -44,21 +47,15 @@ router.post('/profile', auth, async (req, res) => {
         // --- END VALIDATION ---
 
         // --- IMAGE HANDLING REMOVED ---
-        // We are no longer handling image uploads/updates in this specific route.
-        // If images are sent in req.body (e.g., as an array of paths), they might pass through,
-        // but no new files are processed.
 
-        // Prepare Futsal Data for DB
+        // Prepare Futsal Data for DB - MAPPING CORRECTLY
         const futsalData = {
-            name: req.body.name || req.user.futsalName,
+            name: req.body.name || req.user.futsalName, // Use futsalName from user if available
             description: req.body.description.trim(),
-            location: req.body.location.trim(),
-            coordinates: { lat, lng },
-            operatingHours: { opening, closing }, // Use simple object
+            location: req.body.location.address.trim(), // Map address string here
+            coordinates: { lat, lng },                 // Map lat/lng object here
+            operatingHours: { opening, closing },
             owner: req.user._id,
-            // If you want to allow updating images via path array sent in body:
-            // images: Array.isArray(req.body.images) ? req.body.images : undefined
-            // Otherwise, exclude images from the update payload if not managing them here
         };
          // Conditionally add images only if they exist in the request body and are an array
         if (Array.isArray(req.body.images)) {
@@ -73,18 +70,20 @@ router.post('/profile', auth, async (req, res) => {
         const existingFutsal = await Futsal.findOne({ owner: req.user._id });
 
         if (existingFutsal) {
-            // Only update specified fields, exclude potentially missing 'images' field
-            // if it wasn't sent in req.body
             const updatePayload = { ...futsalData };
             if (!futsalData.images) {
                 delete updatePayload.images;
             }
-
             futsal = await Futsal.findByIdAndUpdate(existingFutsal._id, updatePayload, { new: true, runValidators: true });
             console.log('Futsal profile updated:', futsal._id);
         } else {
              isNew = true;
-            futsal = new Futsal(futsalData); // images will default if not provided
+            // Ensure the futsal name is provided for new entries
+            if (!futsalData.name) {
+                 console.error('Validation Error: Futsal name is required for new profile creation.');
+                 return res.status(400).json({ message: 'Futsal name is required when creating a new profile.' });
+            }
+            futsal = new Futsal(futsalData);
             await futsal.save();
             console.log('New futsal profile created:', futsal._id);
             await User.findByIdAndUpdate(req.user._id, {

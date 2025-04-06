@@ -268,10 +268,37 @@
                     <div v-if="activeActionMenu===booking._id" :id="'action-menu-'+booking._id" class="absolute right-8 lg:right-full lg:left-auto top-full lg:top-1/2 lg:-translate-y-1/2 mt-2 lg:mt-0 lg:mr-3 w-52 origin-top-right lg:origin-right bg-gray-700/90 backdrop-blur-md rounded-lg shadow-xl ring-1 ring-black/10 focus:outline-none z-10 border border-gray-600/50" role="menu" aria-orientation="vertical" @click.stop>
                       <div class="py-1.5" role="none"> <!-- Increased padding -->
                         <!-- Action items styling defined in CSS -->
-                        <template v-if="booking.status==='pending' && !booking.isSlotFree"><button @click="updateBookingStatus(booking._id, 'confirmed')" class="action-menu-item"><CheckCircle class="action-menu-icon text-green-400"/>Confirm</button></template>
-                        <template v-if="booking.paymentStatus==='pending'||booking.paymentStatus==='unpaid'"><button @click="updatePaymentStatus(booking._id, 'paid')" class="action-menu-item"><CreditCard class="action-menu-icon text-yellow-400"/>Mark Paid</button></template>
-                        <template v-if="['pending', 'confirmed'].includes(booking.status)"><button @click="showRescheduleModal(booking)" class="action-menu-item"><Calendar class="action-menu-icon text-blue-400"/>Reschedule</button><button @click="cancelBooking(booking._id)" class="action-menu-item"><XCircle class="action-menu-icon text-orange-400"/>Cancel</button></template>
-                        <div class="my-1.5 border-t border-gray-600/60" v-if="(['pending','confirmed'].includes(booking.status)||booking.paymentStatus==='pending'||booking.paymentStatus==='unpaid')"></div>
+                        <template v-if="booking.status==='pending' && !booking.isSlotFree && !isBookingInPast(booking)"><button @click="updateBookingStatus(booking._id, 'confirmed')" class="action-menu-item"><CheckCircle class="action-menu-icon text-green-400"/>Confirm</button></template>
+                        
+                        <template v-if="booking.paymentStatus==='pending' || booking.paymentStatus==='unpaid'"><button @click="updatePaymentStatus(booking._id, 'paid')" class="action-menu-item"><CreditCard class="action-menu-icon text-yellow-400"/>Mark Paid</button></template>
+                        
+                        <!-- NEW: Mark Unpaid option -->
+                        <template v-if="booking.paymentStatus === 'paid'">
+                          <button @click="updatePaymentStatus(booking._id, 'unpaid')" class="action-menu-item">
+                            <ArrowLeftRight class="action-menu-icon text-orange-400"/>Mark Unpaid
+                          </button>
+                        </template>
+                        
+                        <!-- Conditionally disable Reschedule/Cancel -->
+                        <template v-if="['pending', 'confirmed'].includes(booking.status)">
+                          <button 
+                            @click="showRescheduleModal(booking)" 
+                            class="action-menu-item" 
+                            :disabled="isBookingInPast(booking)"
+                            :title="isBookingInPast(booking) ? 'Cannot reschedule past bookings' : ''">
+                              <Calendar class="action-menu-icon text-blue-400"/>Reschedule
+                          </button>
+                          <button 
+                            @click="cancelBooking(booking._id)" 
+                            class="action-menu-item"
+                            :disabled="isBookingInPast(booking)"
+                            :title="isBookingInPast(booking) ? 'Cannot cancel past bookings' : ''">
+                              <XCircle class="action-menu-icon text-orange-400"/>Cancel
+                          </button>
+                        </template>
+
+                        <div class="my-1.5 border-t border-gray-600/60" v-if="((['pending','confirmed'].includes(booking.status) && !isBookingInPast(booking)) || booking.paymentStatus!=='cancelled')"></div>
+                        
                         <button @click="deleteBooking(booking._id)" class="action-menu-item text-red-400 hover:!bg-red-500/20 hover:!text-red-300"><Trash2 class="action-menu-icon"/>Delete</button>
                       </div>
                     </div>
@@ -338,7 +365,7 @@ import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue';
 import { useToast } from 'vue-toastification';
 import axios from 'axios';
 import {
-  RefreshCw, Filter, RotateCcw, CreditCard,
+  RefreshCw, Filter, RotateCcw, CreditCard, ArrowLeftRight,
   MoreVertical, CheckCircle, XCircle, Trash2, Calendar,
   Inbox, X, SlidersHorizontal
 } from 'lucide-vue-next';
@@ -535,7 +562,7 @@ const updateBookingStatus = async (id, status) => {
 };
 const updatePaymentStatus = async (id, status) => {
     isSubmitting.value = true; closeActionMenu();
-    try { await axios.patch(`/api/bookings/admin/${id}/payment-status`, { paymentStatus: status }, { withCredentials: true }); toast.success(`Payment marked as ${status}`); await fetchData(); }
+    try { await axios.patch(`/api/bookings/admin/${id}/payment`, { paymentStatus: status }, { withCredentials: true }); toast.success(`Payment marked as ${status}`); await fetchData(); }
     catch (error) { console.error('Payment Update Error:', error); toast.error(error.response?.data?.message || 'Failed update.'); } finally { isSubmitting.value = false; }
 };
 const deleteBooking = async (id) => {
@@ -603,6 +630,26 @@ const getInitials=(n)=>{
         // Catch any unexpected errors during string manipulation
         return '?';
     }
+};
+
+// --- Helper Function to check if booking time has passed ---
+const isBookingInPast = (booking) => {
+  if (!booking || !booking.date || !booking.endTime) {
+    return false; // Cannot determine if date/time is missing
+  }
+  try {
+    // Combine date and endTime. Assume endTime is HH:MM
+    const endDateTimeStr = `${booking.date.split('T')[0]}T${booking.endTime}:00`;
+    const endDateTime = new Date(endDateTimeStr);
+    // Add a small buffer (e.g., 5 minutes) to prevent disabling actions exactly on the hour
+    const bufferMinutes = 5; 
+    endDateTime.setMinutes(endDateTime.getMinutes() + bufferMinutes); 
+    
+    return endDateTime < new Date(); // Compare with current time
+  } catch (e) {
+    console.error("Error parsing booking date/time:", e);
+    return false; // Treat as not in the past if parsing fails
+  }
 };
 </script>
 

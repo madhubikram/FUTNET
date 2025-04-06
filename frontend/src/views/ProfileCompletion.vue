@@ -133,6 +133,7 @@ const timeErrorMessage = computed(() => {
 
 // Handle location selection from map
 const handleLocationSelected = (location) => {
+  console.log('Received location-selected event in ProfileCompletion:', location);
   selectedLocation.value = location
   formData.value.location = {
     address: location.address,
@@ -197,19 +198,19 @@ const handleSubmit = async () => {
 }
 
 onMounted(() => {
-  // Pre-populate the selected location with the initial values
+  // Commented out: Initial location setup is now handled by MapComponent's onMounted
+  /* 
   selectedLocation.value = {
     lat: initialLocation.lat,
     lng: initialLocation.lng,
-    address: "Loading address..." // Will be updated when the map loads
+    address: "Loading address..."
   }
-  
-  // Also initialize the form data location
   formData.value.location = {
     lat: initialLocation.lat,
     lng: initialLocation.lng,
     address: "Loading address..."
   }
+  */
 })
 </script>
 <style scoped>

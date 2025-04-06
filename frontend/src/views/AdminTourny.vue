@@ -622,6 +622,8 @@ const statusColorClass = (status) => {
       ? 'bg-blue-500 text-white'
       : status === 'Completed'
         ? 'bg-gray-500 text-white'
+        : status === 'Cancelled (Low Teams)'
+          ? 'bg-orange-500 text-white'
         : ''
 }
 
@@ -632,6 +634,8 @@ const statusDotClass = (status) => {
       ? 'bg-blue-300'
       : status === 'Completed'
         ? 'bg-gray-300'
+        : status === 'Cancelled (Low Teams)'
+          ? 'bg-orange-300'
         : ''
 }
 
@@ -812,13 +816,29 @@ const validateForm = () => {
 const updateTournamentStatus = () => {
   const now = new Date();
   tournaments.value.forEach(tournament => {
+    // Skip updates if already Completed or Cancelled
+    if (tournament.status === 'Completed' || tournament.status === 'Cancelled (Low Teams)') {
+      return;
+    }
+
     const startDateTime = new Date(`${tournament.startDate}T${tournament.startTime}`);
     const endDateTime = tournament.endDate ? new Date(tournament.endDate) : null;
+    const registrationDeadlineDateTime = new Date(`${tournament.registrationDeadline}T${tournament.registrationDeadlineTime || '00:00'}`); // Assume midnight if time is missing for comparison
 
-    if (tournament.status === 'Upcoming' && now >= startDateTime) {
-      tournament.status = 'Ongoing';
-    } else if (tournament.status === 'Ongoing' && endDateTime && now >= endDateTime) {
-      tournament.status = 'Completed';
+    // Check for Cancellation first (only if Upcoming)
+    if (tournament.status === 'Upcoming' && now > registrationDeadlineDateTime && tournament.registeredTeams < tournament.minTeams) {
+        console.log(`Tournament ${tournament.name} cancelled due to low teams. Registered: ${tournament.registeredTeams}, Min: ${tournament.minTeams}`);
+        tournament.status = 'Cancelled (Low Teams)';
+    } 
+    // Check for Ongoing transition (only if Upcoming and not cancelled)
+    else if (tournament.status === 'Upcoming' && now >= startDateTime) {
+        console.log(`Tournament ${tournament.name} status changed to Ongoing.`);
+        tournament.status = 'Ongoing';
+    } 
+    // Check for Completed transition (only if Ongoing)
+    else if (tournament.status === 'Ongoing' && endDateTime && now >= endDateTime) {
+        console.log(`Tournament ${tournament.name} status changed to Completed.`);
+        tournament.status = 'Completed';
     }
   });
 }

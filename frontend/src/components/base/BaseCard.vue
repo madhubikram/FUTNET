@@ -47,37 +47,37 @@
       <slot name="pricing" v-if="$slots.pricing"></slot>
       <slot name="tournament-details" v-if="$slots['tournament-details']"></slot>
 
-      <div class="mt-6 flex gap-3">
+      <div class="mt-6 flex flex-wrap gap-3">
         <button
           @click.stop="$emit('view-details')"
-          class="flex-1 px-4 py-3 bg-green-500/10 text-green-400 rounded-lg
+          class="flex-grow px-4 py-3 bg-green-500/10 text-green-400 rounded-lg
                   hover:bg-green-500/20 transition-all duration-300 flex items-center justify-center gap-2
                   hover:scale-[1.02] active:scale-[0.98]"
         >
-          <InfoIcon class="w-4 h-4" />
-          {{ detailsButtonText }}
+          <InfoIcon class="w-4 h-4 shrink-0" />
+          <span class="whitespace-nowrap">{{ detailsButtonText }}</span>
         </button>
         <button
           v-if="showAdminControls" 
           @click.stop="$emit('view-bracket')"
-          class="flex-1 px-4 py-3 bg-purple-500/10 text-purple-400 rounded-lg
+          class="flex-grow px-4 py-3 bg-purple-500/10 text-purple-400 rounded-lg
                   hover:bg-purple-500/20 transition-all duration-300 flex items-center justify-center gap-2
                   hover:scale-[1.02] active:scale-[0.98]"
           :title="'View Bracket'"
         >
-          <ProjectorIcon class="w-4 h-4" />
-          View Bracket
+          <ProjectorIcon class="w-4 h-4 shrink-0" />
+          <span class="whitespace-nowrap">View Bracket</span>
         </button>
         <button
           v-if="showViewTeamsButton" 
           @click.stop="$emit('view-teams')"
-          class="flex-1 px-4 py-3 bg-blue-500/10 text-blue-400 rounded-lg
+          class="flex-grow px-4 py-3 bg-blue-500/10 text-blue-400 rounded-lg
                   hover:bg-blue-500/20 transition-all duration-300 flex items-center justify-center gap-2
                   hover:scale-[1.02] active:scale-[0.98]"
           :title="'View Teams'"
         >
-          <UsersIcon class="w-4 h-4" />
-          View Teams
+          <UsersIcon class="w-4 h-4 shrink-0" />
+          <span class="whitespace-nowrap">View Teams</span>
         </button>
       </div>
     </div>
