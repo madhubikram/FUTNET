@@ -41,7 +41,10 @@
                 Team Name
               </th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                Captain
+                Captain Username
+              </th>
+              <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                Captain Email
               </th>
               <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                 Registered On
@@ -61,7 +64,10 @@
                   {{ registration.teamName }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                  {{ getCaptainName(registration) }}
+                  {{ registration.user?.username || 'N/A' }} 
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-400">
+                  {{ registration.user?.email || '(No Email)' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                   {{ formatDate(registration.createdAt) }}
@@ -79,7 +85,7 @@
               </tr>
               <!-- Expanded Row for Members -->
               <tr v-if="expandedRowIndex === index">
-                <td colspan="5" class="px-6 py-4 bg-gray-700/50">
+                <td colspan="6" class="px-6 py-4 bg-gray-700/50">
                   <h4 class="text-sm font-medium text-gray-300 mb-2">Team Members:</h4>
                   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                     <div v-for="player in registration.players" :key="player._id" 
@@ -140,7 +146,6 @@ const registrationDetails = ref([]);
 const loading = ref(true);
 const error = ref(null);
 const expandedRowIndex = ref(null); // Track which row is expanded
-const captainEmails = ref({}); // Store captain emails by registration ID
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -174,9 +179,6 @@ const fetchTournamentAndTeams = async () => {
         const data = await teamsResponse.json();
         console.log(`Received ${data.length} team registrations:`, data);
         registrationDetails.value = data;
-        
-        // After getting registrations, fetch captain details
-        await fetchCaptainDetails(data);
       } else if (teamsResponse.status === 403) {
         // If 403 Forbidden, treat it as "no teams yet" rather than an error
         console.log('Tournament exists but no access to registrations (403 error).');
@@ -200,41 +202,6 @@ const fetchTournamentAndTeams = async () => {
   }
 };
 
-// Fetch email addresses for team captains
-const fetchCaptainDetails = async (registrations) => {
-  try {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    
-    // Process each registration to get captain emails
-    for (const registration of registrations) {
-      // Find the captain in the players array
-      const captain = registration.players.find(p => p.role === 'captain');
-      
-      if (captain && captain.username) {
-        try {
-          // Fetch user details by username to get email
-          const response = await fetch(`${API_URL}/users/profile/${captain.username}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          
-          if (response.ok) {
-            const userData = await response.json();
-            if (userData && userData.email) {
-              // Store the email keyed by registration ID
-              captainEmails.value[registration._id] = userData.email;
-            }
-          }
-        } catch (error) {
-          console.error(`Error fetching details for captain ${captain.username}:`, error);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('Error fetching captain details:', error);
-  }
-};
-
 const goBack = () => {
   router.push({ name: 'adminTournaments' }); // Or use router.go(-1)
 };
@@ -246,16 +213,6 @@ const toggleExpand = (index) => {
 const formatDate = (dateString) => {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleDateString();
-};
-
-const getCaptainName = (registration) => {
-  if (!registration.players || !Array.isArray(registration.players) || registration.players.length === 0) {
-    return 'N/A';
-  }
-  
-  // Find captain (should be first player or player with role='captain')
-  const captain = registration.players.find(p => p.role === 'captain') || registration.players[0];
-  return captain?.fullName || 'N/A';
 };
 
 onMounted(fetchTournamentAndTeams);

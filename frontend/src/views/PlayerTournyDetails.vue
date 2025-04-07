@@ -198,7 +198,7 @@
                   <div class="text-center p-4 bg-gray-700/50 rounded-lg">
                     <h4 class="text-gray-400 text-sm mb-1">Registration Deadline</h4>
                     <p class="text-white">{{ formatDate(tournament?.registrationDeadline) }}</p>
-                    <p class="text-sm text-gray-400">{{ tournament?.startTime }}</p>
+                    <p class="text-sm text-gray-400">{{ tournament?.registrationDeadlineTime }}</p>
                   </div>
 
                   <!-- Registration Button/Status -->
@@ -234,6 +234,36 @@
             <h2 class="text-xl font-semibold text-white">Tournament Rules</h2>
             <div class="prose prose-invert max-w-none">
               <div class="text-gray-300 whitespace-pre-line">{{ tournament?.rules }}</div>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="currentTab === 'bracket'" class="space-y-6">
+          <!-- Bracket Section -->
+          <section class="bg-gray-800 rounded-xl p-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Tournament Bracket</h2>
+
+            <!-- Loading State -->
+            <div v-if="bracketLoading" class="flex justify-center items-center py-8">
+              <Loader2Icon class="w-6 h-6 text-green-400 animate-spin" />
+              <span class="ml-2 text-gray-400">Loading bracket...</span>
+            </div>
+
+            <!-- Error State -->
+            <div v-else-if="bracketError" class="text-center py-8 text-red-400">
+              {{ bracketError }}
+            </div>
+
+            <!-- Bracket Display (Raw JSON for now) -->
+            <div v-else-if="bracketData" class="text-gray-300">
+              <h3 class="text-lg font-medium mb-2">Bracket Data (Raw)</h3>
+              <pre class="bg-gray-900 p-4 rounded overflow-x-auto text-xs">{{ JSON.stringify(bracketData, null, 2) }}</pre>
+              <!-- TODO: Implement a visual bracket component here -->
+            </div>
+
+            <!-- Fallback if no data and no error -->
+            <div v-else class="text-center text-gray-400 py-8">
+              Bracket will be generated after the registration deadline passes, provided enough teams have registered.
             </div>
           </section>
         </div>
@@ -439,12 +469,10 @@ import {
 
 const route = useRoute()
 
-const tabs = [
+const tabs = ref([
   { id: 'details', name: 'Details' },
   { id: 'rules', name: 'Rules' }
-]
-
-
+]);
 
 // State
 const tournament = ref(null)
@@ -453,6 +481,9 @@ const showRegistrationModal = ref(false)
 const isSubmitting = ref(false)
 const error = ref(null);
 const currentTab = ref('details')
+const bracketData = ref(null);
+const bracketLoading = ref(false);
+const bracketError = ref(null);
 
 const initRegistrationForm = () => {
   const username = localStorage.getItem('username') || '';
@@ -659,6 +690,88 @@ const formatDate = (date) => {
     day: 'numeric'
   })
 }
+
+// Function to update tabs based on tournament status or bracket availability
+const updateTabs = () => {
+  const baseTabs = [
+    { id: 'details', name: 'Details' },
+    { id: 'rules', name: 'Rules' }
+  ];
+
+  let newTabs = [...baseTabs]; // Start with the base tabs
+
+  // Show bracket tab only if the bracket has been generated
+  if (tournament.value?.bracket?.generated) {
+    newTabs.push({ id: 'bracket', name: 'Bracket' });
+  }
+
+  tabs.value = newTabs; // Update the reactive tabs ref
+
+  // If the current tab is no longer valid (e.g., bracket was removed), switch back to details
+  if (!tabs.value.some(tab => tab.id === currentTab.value)) {
+    currentTab.value = 'details';
+  }
+};
+
+watch(tournament, (newTournament) => {
+  if (newTournament) {
+    registrationForm.value = initRegistrationForm();
+    updateTabs(); // Update tabs when tournament data is loaded/changed
+  }
+}, { immediate: true, deep: true });
+
+// Fetch Bracket Data
+const fetchBracketData = async () => {
+  if (!tournament.value?._id) return;
+
+  bracketLoading.value = true;
+  bracketError.value = null;
+  bracketData.value = null; // Clear previous data
+
+  try {
+    const response = await fetch(`http://localhost:5000/api/player/tournaments/${tournament.value._id}/bracket`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      // Handle specific case where bracket is not generated yet
+      if (response.status === 404 && errorData.message.includes('not generated')) {
+        throw new Error('Bracket not generated yet.');
+      } else {
+        throw new Error(errorData.message || 'Failed to fetch bracket data');
+      }
+    }
+
+    bracketData.value = await response.json();
+    console.log('Fetched bracket data:', bracketData.value);
+
+  } catch (err) {
+    console.error('Error fetching bracket data:', err);
+    bracketError.value = err.message;
+  } finally {
+    bracketLoading.value = false;
+  }
+};
+
+// Watch for tab changes to fetch bracket data
+watch(currentTab, (newTab) => {
+  if (newTab === 'bracket' && tournament.value?._id && !bracketData.value) {
+    fetchBracketData();
+  }
+});
+
+// Also watch tournament ID in case it changes after component mount
+watch(() => tournament.value?._id, (newId) => {
+  if (newId && currentTab.value === 'bracket') {
+     // Reset bracket state if tournament changes
+     bracketData.value = null;
+     bracketError.value = null;
+    fetchBracketData();
+  }
+});
 
 // Lifecycle Hooks
 onMounted(() => {

@@ -13,7 +13,7 @@
     </div>
 
     <div class="overflow-x-hidden">
-    <LoadingState v-if="loading" />
+    <LoadingState v-if="loading" message="Loading tournaments..." />
     <EmptyState v-else-if="!loading && tournaments.length === 0" message="No tournaments created yet." />
 
     <div
@@ -813,36 +813,6 @@ const validateForm = () => {
   return isValid
 }
 
-const updateTournamentStatus = () => {
-  const now = new Date();
-  tournaments.value.forEach(tournament => {
-    // Skip updates if already Completed or Cancelled
-    if (tournament.status === 'Completed' || tournament.status === 'Cancelled (Low Teams)') {
-      return;
-    }
-
-    const startDateTime = new Date(`${tournament.startDate}T${tournament.startTime}`);
-    const endDateTime = tournament.endDate ? new Date(tournament.endDate) : null;
-    const registrationDeadlineDateTime = new Date(`${tournament.registrationDeadline}T${tournament.registrationDeadlineTime || '00:00'}`); // Assume midnight if time is missing for comparison
-
-    // Check for Cancellation first (only if Upcoming)
-    if (tournament.status === 'Upcoming' && now > registrationDeadlineDateTime && tournament.registeredTeams < tournament.minTeams) {
-        console.log(`Tournament ${tournament.name} cancelled due to low teams. Registered: ${tournament.registeredTeams}, Min: ${tournament.minTeams}`);
-        tournament.status = 'Cancelled (Low Teams)';
-    } 
-    // Check for Ongoing transition (only if Upcoming and not cancelled)
-    else if (tournament.status === 'Upcoming' && now >= startDateTime) {
-        console.log(`Tournament ${tournament.name} status changed to Ongoing.`);
-        tournament.status = 'Ongoing';
-    } 
-    // Check for Completed transition (only if Ongoing)
-    else if (tournament.status === 'Ongoing' && endDateTime && now >= endDateTime) {
-        console.log(`Tournament ${tournament.name} status changed to Completed.`);
-        tournament.status = 'Completed';
-    }
-  });
-}
-
 const handleCreateTournament = async () => {
   try {
     console.log('Starting tournament creation/update...');
@@ -977,33 +947,23 @@ const deleteTournament = async (tournamentToDelete) => {
 };
 
 const navigateToBracket = (tournament) => {
-  if (!tournament || !tournament._id || !tournament.startDate || !tournament.startTime) {
-    console.error('Cannot navigate to bracket: Invalid or incomplete tournament data provided.', tournament);
+  if (!tournament || !tournament._id) {
+    console.error('Cannot navigate to bracket: Invalid tournament data provided.', tournament);
     toast.error('Could not open bracket view for this tournament.');
-    return; 
-  }
-
-  const now = new Date();
-  let startDateTime;
-  try {
-    // Combine date and time string, then parse
-    startDateTime = new Date(`${tournament.startDate}T${tournament.startTime}`);
-    if (isNaN(startDateTime.getTime())) {
-      throw new Error('Invalid date/time format from tournament data');
-    }
-  } catch (e) {
-    console.error('Error parsing tournament start date:', e, tournament);
-    toast.error('Could not read tournament start date.');
     return;
   }
 
-  if (now < startDateTime) {
-    toast.info('Bracket will be available after the tournament start date.');
-    return; // Don't navigate if start date hasn't been reached
+  // 1. Check if bracket is generated in the data we have
+  if (tournament.bracket?.generated) {
+    console.log('Bracket is generated, navigating...');
+    router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
+    return;
   }
-  
-  // Only navigate if the start date has passed
-  router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
+
+  // 2. If not generated, inform the user about the process.
+  // The actual generation happens on the backend when viewing details after the deadline.
+  toast.info('Bracket is not generated yet. Please view tournament details after the registration deadline passes to trigger generation (if minimum teams are met).');
+
 };
 
 const navigateToTeams = (tournament) => {
@@ -1015,17 +975,11 @@ const navigateToTeams = (tournament) => {
   }
 };
 
-let statusInterval = null;
-
 onMounted(async () => {
   await fetchTournaments();
-  updateTournamentStatus();
-  statusInterval = setInterval(updateTournamentStatus, 60000);
 });
 
 onUnmounted(() => {
-  if (statusInterval) {
-    clearInterval(statusInterval);
-  }
+  // Clear any potential leftover intervals if needed in the future
 });
 </script>

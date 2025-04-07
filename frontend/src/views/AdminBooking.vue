@@ -361,7 +361,7 @@
 
 <script setup>
 // Script content remains the same as the previous fixed version
-import { ref, reactive, onMounted, computed, onBeforeUnmount } from 'vue';
+import { ref, reactive, onMounted, computed, onBeforeUnmount, watch } from 'vue';
 import { useToast } from 'vue-toastification';
 import axios from 'axios';
 import {
@@ -519,6 +519,8 @@ onMounted(async () => { document.addEventListener('click', handleOutsideClick); 
 onBeforeUnmount(() => { document.removeEventListener('click', handleOutsideClick); document.removeEventListener('keydown', handleKeydown); });
 
 const fetchData = async () => {
+  // Clear selection when data is fetched due to sort/filter change
+  selectedBookingIds.value.clear(); 
   if (isLoading.value) return; isLoading.value = true; activeActionMenu.value = null;
   try {
       const queryParams = new URLSearchParams();
@@ -528,7 +530,8 @@ const fetchData = async () => {
       if (filters.endDate) queryParams.append('endDate', filters.endDate);
       if (filters.courtId) queryParams.append('courtId', filters.courtId);
       const { sortBy, sortOrder } = currentSort.value;
-      queryParams.append('sortBy', sortBy); queryParams.append('sortOrder', sortOrder);
+      queryParams.append('sortBy', sortBy);
+      queryParams.append('sortOrder', sortOrder);
       const response = await axios.get(`/api/bookings/admin?${queryParams.toString()}`);
       bookings.value = response.data;
   } catch (error) { console.error('Fetch Error:', error); toast.error(error.response?.data?.message || 'Failed to load.'); }
@@ -651,6 +654,12 @@ const isBookingInPast = (booking) => {
     return false; // Treat as not in the past if parsing fails
   }
 };
+
+// --- Watchers ---
+watch(selectedSort, () => {
+    console.log('Sort changed, fetching data...', selectedSort.value);
+    fetchData();
+});
 </script>
 
 <style scoped>

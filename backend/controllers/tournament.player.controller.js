@@ -3,6 +3,7 @@
 const Tournament = require('../models/tournament.model');
 const TournamentRegistration = require('../models/tournament.registration.model');
 const User = require('../models/user.model');
+const { generateSingleEliminationBracket } = require('../utils/bracketGenerator');
 
 const tournamentPlayerController = {
   getAllTournaments: async (req, res) => {
@@ -23,8 +24,58 @@ const tournamentPlayerController = {
       })
       .sort({ startDate: 1 });
 
-
       console.log('Found tournaments:', tournaments);
+
+      // Update status before sending
+      const now = new Date();
+      const updatedTournaments = await Promise.all(tournaments.map(async tournament => {
+        // First check for cancellation due to low teams after deadline
+        try {
+          const deadlineDateTime = new Date(`${tournament.registrationDeadline.toISOString().split('T')[0]}T${tournament.registrationDeadlineTime || '23:59'}`);
+          if (now > deadlineDateTime && tournament.registeredTeams < tournament.minTeams) {
+            tournament.status = 'Cancelled (Low Teams)';
+            await tournament.save();
+            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) cancelled due to low teams.`);
+            return tournament;
+          }
+        } catch (e) {
+          console.error(`[Error] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
+        }
+
+        // Skip further status updates if already Cancelled
+        if (tournament.status === 'Cancelled (Low Teams)') {
+          return tournament;
+        }
+
+        // Check for Ongoing transition
+        try {
+          const startDateTime = new Date(`${tournament.startDate.toISOString().split('T')[0]}T${tournament.startTime || '00:00'}`);
+          if (now >= startDateTime) {
+            tournament.status = 'Ongoing';
+            await tournament.save();
+            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Ongoing.`);
+            return tournament;
+          }
+        } catch (e) {
+          console.error(`[Error] Could not parse start date for tournament ${tournament._id}: ${e.message}`);
+        }
+
+        // Check for Completed transition - only if tournament has started
+        try {
+          const startDateTime = new Date(`${tournament.startDate.toISOString().split('T')[0]}T${tournament.startTime || '00:00'}`);
+          const endDateTime = tournament.endDate ? new Date(tournament.endDate) : null;
+          if (endDateTime && now >= endDateTime && now >= startDateTime) {
+            tournament.status = 'Completed';
+            await tournament.save();
+            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Completed.`);
+            return tournament;
+          }
+        } catch (e) {
+          console.error(`[Error] Could not parse dates for tournament ${tournament._id}: ${e.message}`);
+        }
+
+        return tournament;
+      }));
 
       // Get user's registrations
       const userRegistrations = await TournamentRegistration.find({
@@ -38,7 +89,7 @@ const tournamentPlayerController = {
       );
 
       // Transform tournaments with additional debug logging
-      const transformedTournaments = tournaments.map(tournament => {
+      const transformedTournaments = updatedTournaments.map(tournament => {
         const transformed = {
           ...tournament.toObject(),
           isRegistered: registeredTournamentIds.includes(tournament._id.toString())
@@ -52,11 +103,12 @@ const tournamentPlayerController = {
       console.error('Error fetching tournaments:', error);
       res.status(500).json({ message: error.message });
     }
-},
+  },
 
   getTournamentDetails: async (req, res) => {
     try {
       const tournament = await Tournament.findById(req.params.id)
+      .select('+bracket')
       .populate({
         path: 'futsalId',
         select: 'name location coordinates'
@@ -175,6 +227,7 @@ const tournamentPlayerController = {
   
       // Update tournament registered teams count
       tournament.registeredTeams += 1;
+
       await tournament.save();
       console.log(`Updated tournament ${tournament._id} registeredTeams to ${tournament.registeredTeams}`);
   
@@ -182,6 +235,30 @@ const tournamentPlayerController = {
     } catch (error) {
       console.error('Error registering for tournament:', error);
       res.status(500).json({ message: error.message });
+    }
+  },
+
+  getTournamentBracket: async (req, res) => {
+    try {
+      const tournament = await Tournament.findById(req.params.id, 'bracket status'); // Only select necessary fields
+
+      if (!tournament) {
+        return res.status(404).json({ message: 'Tournament not found' });
+      }
+
+      // Consider adding a status check if brackets should only be visible when Ongoing/Completed
+      // if (tournament.status !== 'Ongoing' && tournament.status !== 'Completed') {
+      //    return res.status(400).json({ message: 'Bracket is not available yet.' });
+      // }
+
+      if (!tournament.bracket || !tournament.bracket.generated) {
+        return res.status(404).json({ message: 'Bracket not generated for this tournament yet.' });
+      }
+
+      res.json(tournament.bracket);
+    } catch (error) {
+      console.error(`Error fetching bracket for tournament ${req.params.id}:`, error);
+      res.status(500).json({ message: 'Failed to fetch tournament bracket' });
     }
   }
 };

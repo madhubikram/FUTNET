@@ -116,14 +116,56 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import PageLayout from '@/components/layout/PageLayout.vue'
 import { 
   CalendarDaysIcon, DollarSignIcon, LayoutIcon, StarIcon,
   MoreVerticalIcon, CheckCircleIcon, ClockIcon
 } from 'lucide-vue-next'
 
-const futsalName = ref('Downtown Futsal Arena')
+const futsalName = ref('Futsal Dashboard') // Placeholder
+
+// Function to fetch admin details (including futsal name)
+const fetchAdminDetails = async () => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    console.log('No token found, cannot fetch admin details.');
+    return; // Keep placeholder
+  }
+
+  try {
+    const response = await fetch('http://localhost:5000/api/profile', { 
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch admin profile:', response.status, response.statusText);
+      return; // Keep placeholder on error
+    }
+
+    const userData = await response.json();
+    
+    // Access nested user, then futsal, then name
+    if (userData && userData.user && userData.user.futsal && userData.user.futsal.name) {
+       futsalName.value = userData.user.futsal.name;
+    } else {
+       console.log('Futsal name not found in API response.');
+       // Keep placeholder or set a different default if needed
+    }
+    
+  } catch (err) {
+    console.error('Error fetching admin profile:', err);
+    // Keep placeholder on error
+  }
+};
+
+onMounted(() => {
+  // Fetch admin details on mount
+  fetchAdminDetails();
+});
 
 // Mock data for today's bookings
 const todayBookings = ref([

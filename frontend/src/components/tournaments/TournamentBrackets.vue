@@ -2,6 +2,15 @@
   <div class="tournament-master flex flex-col h-full w-full bg-gray-900 text-gray-100 p-4 gap-4 font-sans">
     <!-- Header with Gradient and Logo -->
     <div class="flex items-center justify-between mb-2">
+      <!-- Back Button -->
+      <button 
+        @click="goBack"
+        class="flex items-center gap-2 px-3 py-1.5 bg-gray-700/50 hover:bg-gray-700 text-sm text-gray-300 hover:text-white rounded-lg transition-colors"
+      >
+        <ArrowLeftIcon class="w-4 h-4" />
+        Back
+      </button>
+      
       <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-green-400 via-emerald-500 to-teal-600 bg-clip-text text-transparent flex items-center">
         <Trophy class="h-6 w-6 mr-2 text-emerald-400" />
         {{ tournamentName || 'Tournament Master Pro' }}
@@ -25,14 +34,6 @@
             <ZoomIn size="16" />
           </button>
         </div>
-        
-        <button 
-          @click="resetBracket"
-          :disabled="!!route.params.id"
-          class="px-3 py-1.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-md transition-all shadow-md hover:shadow-lg text-sm font-medium flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Reset Bracket
-        </button>
       </div>
     </div>
     
@@ -314,7 +315,6 @@
             class="flex flex-col"
             :style="{
               minWidth: '280px',
-              height: `${round.matches.length * 170 + (round.matches.length - 1) * 20}px`,
               justifyContent: round.matches.length === 1 ? 'center' : 'space-around'
             }"
           >
@@ -528,18 +528,19 @@
 
 <script>
 import { ref, computed, reactive, onMounted, watch } from 'vue';
-import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon } from 'lucide-vue-next';
-import { useRoute } from 'vue-router';
+import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon } from 'lucide-vue-next';
+import { useRoute, useRouter } from 'vue-router';
 
 const API_URL = 'http://localhost:5000/api';
 
 export default {
   name: 'TournamentBrackets',
   components: {
-    Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon
+    Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon
   },
   setup() {
     const route = useRoute();
+    const router = useRouter();
     // Refs for DOM elements
     const teamInputRef = ref(null);
     const bracketContainerRef = ref(null);
@@ -734,14 +735,12 @@ export default {
           const nextRoundIndex = 1;
           const nextMatchIndex = Math.floor(matchIndex / 2);
           
-          if (nextRoundIndex < updatedRounds.length) {
+          if (nextRoundIndex < updatedRounds.length && updatedRounds[nextRoundIndex].matches[nextMatchIndex]) {
             const nextMatch = updatedRounds[nextRoundIndex].matches[nextMatchIndex];
             
             if (matchIndex % 2 === 0) {
-              // Even index goes to team1 slot
               nextMatch.team1 = match.winner;
             } else {
-              // Odd index goes to team2 slot
               nextMatch.team2 = match.winner;
             }
           }
@@ -945,39 +944,45 @@ export default {
 
         tournamentName.value = data.name;
         
-        // Assuming the API returns registered teams in 'registeredTeamsDetails' or similar
-        // and bracket structure in 'bracket' (which should match the 'rounds' structure)
+        // Use the new registeredTeamsDetails field from the backend
         if (data.registeredTeamsDetails && data.registeredTeamsDetails.length > 0) {
-            // Map fetched team details to the format expected by the bracket generation/display
              teams.value = data.registeredTeamsDetails.map(teamDetail => ({
-                id: teamDetail._id, // Use actual team ID
+                id: teamDetail._id, // Use Registration _id as the unique ID for matching in the bracket
                 name: teamDetail.teamName 
             }));
         } else {
             teams.value = []; // Set teams to empty if none registered
         }
 
-
         if (data.bracket && data.bracket.rounds && data.bracket.rounds.length > 0) {
-          // Ensure team objects within the bracket data have id and name
-          const processedRounds = data.bracket.rounds.map(round => ({
-              ...round,
-              matches: round.matches.map(match => ({
-                  ...match,
-                  // Ensure team objects are correctly structured or look them up in teams.value
-                  team1: match.team1 ? teams.value.find(t => t.id === match.team1) || { id: match.team1, name: 'Unknown Team' } : null,
-                  team2: match.team2 ? teams.value.find(t => t.id === match.team2) || { id: match.team2, name: 'Unknown Team' } : null,
-                  winner: match.winner ? teams.value.find(t => t.id === match.winner) || { id: match.winner, name: 'Unknown Team' } : null,
-                  // Ensure topScorer has default values if missing
-                  topScorer: match.topScorer || { name: '', goals: 0 },
-                  // Set default date/time if missing
-                  date: match.date || '',
-                  time: match.time || '',
-                  score1: match.score1 ?? 0,
-                  score2: match.score2 ?? 0,
-                  pk1: match.pk1 ?? null,
-                  pk2: match.pk2 ?? null,
-              }))
+          // Process the backend's array-of-arrays structure
+          const processedRounds = data.bracket.rounds.map((roundMatches, roundIndex) => ({
+              round: roundIndex + 1, // Add the round number for display logic
+              matches: roundMatches.map(match => {
+                  // Lookup team names using the populated teams.value array
+                  const team1Details = match.team1?._id ? teams.value.find(t => t.id === match.team1._id) : null;
+                  const team2Details = match.team2?._id ? teams.value.find(t => t.id === match.team2._id) : null;
+                  const winnerDetails = match.winner ? teams.value.find(t => t.id === match.winner) : null;
+                  
+                  return {
+                      ...match, // Spread existing match data (like match number, score, etc.)
+                      id: `R${roundIndex + 1}-M${match.match}`, // Ensure a unique ID for Vue key
+                      matchName: `R${roundIndex + 1} - M${match.match}${match.team2?._id === 'BYE' ? ' (Bye)' : ''}`, // Generate a display name
+                      team1: team1Details || (match.team1?._id ? { id: match.team1._id, name: 'Unknown' } : null), // Fallback if team not found
+                      team2: team2Details || (match.team2?._id ? (match.team2._id === 'BYE' ? { id: 'BYE', name: 'BYE' } : { id: match.team2._id, name: 'Unknown' }) : null),
+                      winner: winnerDetails || (match.winner ? { id: match.winner, name: 'Unknown' } : null),
+                      hasBye: match.team2?._id === 'BYE', // Determine if it was a bye match
+                      // Ensure defaults for potentially missing editable fields
+                      topScorer: match.topScorer || { name: '', goals: 0 },
+                      date: match.date || '',
+                      time: match.time || '',
+                      score1: match.score1 ?? 0,
+                      score2: match.score2 ?? 0,
+                      pk1: match.pk1 ?? null,
+                      pk2: match.pk2 ?? null,
+                      hasPK: match.hasPK ?? false
+                  };
+              })
           }));
 
           rounds.value = processedRounds;
@@ -1000,7 +1005,6 @@ export default {
              });
           }
 
-
         } else if (teams.value.length >= 2) {
            console.log('No existing bracket found in data, generating new one based on registered teams.');
            // If no bracket exists but teams are registered, generate a fresh bracket
@@ -1019,6 +1023,11 @@ export default {
       } finally {
         loading.value = false;
       }
+    };
+
+    // Method to navigate back
+    const goBack = () => {
+      router.back(); // Or router.go(-1)
     };
 
     // Lifecycle hooks
@@ -1080,7 +1089,8 @@ export default {
       
       // Computed
       getTotalMatches,
-      getByeCount
+      getByeCount,
+      goBack
     };
   }
 };

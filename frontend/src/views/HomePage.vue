@@ -10,7 +10,7 @@
               Hello,
             </h1>
             <p class="text-sm text-gray-400 group-hover:text-emerald-400 transition-colors duration-300">
-              {{ username }}
+              {{ displayName }}
             </p>
           </div>
 
@@ -210,7 +210,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted  } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/layout/PageLayout.vue'
 import FutsalCard from '@/components/features/FutsalCard.vue'
@@ -219,8 +219,54 @@ import LoyaltyPointsDisplay from '@/components/features/LoyaltyPointsDisplay.vue
 
 const error = ref(null);
 const router = useRouter();
-// User data (mocked)
-const username = ref('Madhu Bikram')
+
+const displayName = ref('Player')
+
+const fetchUserDetails = async () => {
+  const token = localStorage.getItem('token');
+  const storedUsername = localStorage.getItem('username');
+
+  if (!token) {
+    console.log('No token found, cannot fetch user details.');
+    displayName.value = storedUsername || 'Player';
+    return;
+  }
+
+  try {
+    // Corrected Endpoint
+    const response = await fetch('http://localhost:5000/api/profile', { 
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch user details:', response.status, response.statusText);
+      displayName.value = storedUsername || 'Player';
+      return;
+    }
+
+    const userData = await response.json();
+    
+    // Access nested user object and then firstName
+    if (userData && userData.user && userData.user.firstName) {
+       displayName.value = userData.user.firstName;
+    } else {
+       // Fallback if firstName is not in the response
+       displayName.value = storedUsername || 'Player'; 
+       console.log('firstName not found in API response, using fallback.');
+    }
+    
+  } catch (err) {
+    console.error('Error fetching user details:', err);
+    displayName.value = storedUsername || 'Player';
+  }
+};
+
+onMounted(() => {
+  fetchUserDetails();
+  fetchCourts();
+});
 
 // Search and Filtering
 const searchQuery = ref('')
@@ -567,7 +613,7 @@ const timeToMinutes = (time) => {
 
 
 // Call fetchCourts when component mounts
-onMounted(fetchCourts)
+// Removed onMounted(fetchCourts) call from the end if it exists
 
 const isTimeInRange = (currentTime, start, end) => {
   if (!start || !end) {

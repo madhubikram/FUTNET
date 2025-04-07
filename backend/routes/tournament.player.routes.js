@@ -14,6 +14,7 @@ router.use(playerMiddleware);
 router.get('/', tournamentPlayerController.getAllTournaments);
 router.get('/my-registrations', tournamentPlayerController.getMyRegistrations);
 router.get('/:id', tournamentPlayerController.getTournamentDetails);
+router.get('/:id/bracket', tournamentPlayerController.getTournamentBracket);
 router.post('/:id/register', tournamentPlayerController.registerForTournament);
 router.post('/validate-players', tournamentPlayerController.validatePlayers);
 
