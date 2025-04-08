@@ -308,6 +308,44 @@
           </tbody>
         </table>
       </div>
+
+      <!-- Add pagination controls -->
+      <div v-if="!isLoading && bookings.length > 0" class="mt-6 flex items-center justify-between px-1">
+        <div class="text-sm text-gray-400">
+          Showing {{ (currentPage - 1) * itemsPerPage + 1 }} to {{ Math.min(currentPage * itemsPerPage, totalItems) }} of {{ totalItems }} bookings
+        </div>
+        <div class="flex items-center space-x-2">
+          <button 
+            @click="prevPage" 
+            :disabled="currentPage === 1"
+            class="action-button secondary !px-3 !py-1.5"
+            :class="{ 'opacity-50 cursor-not-allowed': currentPage === 1 }"
+          >
+            <ChevronLeft class="w-4 h-4" />
+          </button>
+          
+          <div class="flex items-center space-x-1">
+            <button 
+              v-for="page in totalPages" 
+              :key="page"
+              @click="goToPage(page)"
+              class="action-button !px-3 !py-1.5"
+              :class="currentPage === page ? 'primary' : 'secondary'"
+            >
+              {{ page }}
+            </button>
+          </div>
+          
+          <button 
+            @click="nextPage" 
+            :disabled="currentPage === totalPages"
+            class="action-button secondary !px-3 !py-1.5"
+            :class="{ 'opacity-50 cursor-not-allowed': currentPage === totalPages }"
+          >
+            <ChevronRight class="w-4 h-4" />
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Modals (Enhanced Glassmorphism & Styling) -->
@@ -367,7 +405,7 @@ import axios from 'axios';
 import {
   RefreshCw, Filter, RotateCcw, CreditCard, ArrowLeftRight,
   MoreVertical, CheckCircle, XCircle, Trash2, Calendar,
-  Inbox, X, SlidersHorizontal
+  Inbox, X, SlidersHorizontal, ChevronLeft, ChevronRight
 } from 'lucide-vue-next';
 import PageLayout from '@/components/layout/PageLayout.vue';
 import BookingStatusBadge from '@/components/icons/BookingStatusBadge.vue';
@@ -391,6 +429,12 @@ const cancelReason = ref('');
 const rescheduleData = reactive({ date: '', startTime: '', endTime: '', });
 const selectedBookingIds = ref(new Set());
 const isProcessingBulkAction = ref(false);
+
+// Add pagination state
+const currentPage = ref(1);
+const totalPages = ref(1);
+const itemsPerPage = ref(10);
+const totalItems = ref(0);
 
 const todayDate = computed(() => new Date().toISOString().split('T')[0]);
 const activeFilterCount = computed(() => {
@@ -521,7 +565,9 @@ onBeforeUnmount(() => { document.removeEventListener('click', handleOutsideClick
 const fetchData = async () => {
   // Clear selection when data is fetched due to sort/filter change
   selectedBookingIds.value.clear(); 
-  if (isLoading.value) return; isLoading.value = true; activeActionMenu.value = null;
+  if (isLoading.value) return; 
+  isLoading.value = true; 
+  activeActionMenu.value = null;
   try {
       const queryParams = new URLSearchParams();
       if (filters.status !== 'all') queryParams.append('status', filters.status);
@@ -532,10 +578,36 @@ const fetchData = async () => {
       const { sortBy, sortOrder } = currentSort.value;
       queryParams.append('sortBy', sortBy);
       queryParams.append('sortOrder', sortOrder);
+      
+      // Add pagination parameters
+      queryParams.append('page', currentPage.value);
+      queryParams.append('limit', itemsPerPage.value);
+      
+      console.log('Fetching data with params:', queryParams.toString());
       const response = await axios.get(`/api/bookings/admin?${queryParams.toString()}`);
-      bookings.value = response.data;
-  } catch (error) { console.error('Fetch Error:', error); toast.error(error.response?.data?.message || 'Failed to load.'); }
-  finally { isLoading.value = false; }
+      console.log('API Response:', response.data);
+      
+      // Ensure bookings is always an array
+      bookings.value = response.data.bookings || [];
+      totalItems.value = response.data.total || 0;
+      totalPages.value = Math.ceil((response.data.total || 0) / itemsPerPage.value);
+      
+      console.log('Updated state:', {
+        bookingsCount: bookings.value.length,
+        totalItems: totalItems.value,
+        totalPages: totalPages.value
+      });
+  } catch (error) { 
+    console.error('Fetch Error:', error); 
+    toast.error(error.response?.data?.message || 'Failed to load.'); 
+    // Set empty array on error
+    bookings.value = [];
+    totalItems.value = 0;
+    totalPages.value = 1;
+  }
+  finally { 
+    isLoading.value = false; 
+  }
 };
 const refreshBookings = async () => { toast.info('Refreshing...'); await fetchData(); };
 const fetchCourts = async () => { try { const r = await axios.get('/api/courts'); courts.value = r.data; } catch (error) { console.error('Court Fetch Error:', error); toast.warning('Could not load courts.'); } };
@@ -660,6 +732,28 @@ watch(selectedSort, () => {
     console.log('Sort changed, fetching data...', selectedSort.value);
     fetchData();
 });
+
+// Add pagination methods
+const goToPage = (page) => {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page;
+    fetchData();
+  }
+};
+
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    currentPage.value++;
+    fetchData();
+  }
+};
+
+const prevPage = () => {
+  if (currentPage.value > 1) {
+    currentPage.value--;
+    fetchData();
+  }
+};
 </script>
 
 <style scoped>

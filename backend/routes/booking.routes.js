@@ -631,167 +631,126 @@ router.get('/', auth, async (req, res) => {
   // Admin Routes
   // Get all bookings with filters and sorting
   router.get('/admin', auth, async (req, res) => {
-    // Ensure user is admin (add role check if needed)
-      if (req.user.role !== 'futsalAdmin' && req.user.role !== 'superAdmin') {
-        return res.status(403).json({ message: 'Admin access required.' });
+    // Ensure user is admin
+    if (req.user.role !== 'futsalAdmin' && req.user.role !== 'superAdmin') {
+      return res.status(403).json({ message: 'Admin access required.' });
     }
 
     try {
-        const { status, paymentStatus, startDate, endDate, courtId, sortBy = 'date', sortOrder = 'desc' } = req.query;
+      const { 
+        status, 
+        paymentStatus, 
+        startDate, 
+        endDate, 
+        courtId, 
+        sortBy = 'date', 
+        sortOrder = 'desc',
+        page = 1,
+        limit = 10
+      } = req.query;
 
-        const filter = {};
+      console.log('Admin Bookings Request:', {
+        userRole: req.user.role,
+        futsalId: req.user.futsal?._id,
+        filters: { status, paymentStatus, startDate, endDate, courtId }
+      });
 
-        // Apply filters
-        if (status && status !== 'all') filter.status = status;
-        if (paymentStatus && paymentStatus !== 'all') filter.paymentStatus = paymentStatus;
-        if (courtId) filter.court = courtId;
+      const filter = {};
 
-        if (startDate || endDate) {
-            filter.date = {};
-            if (startDate) {
-                try {
-                    filter.date.$gte = startOfDay(new Date(startDate));
-                } catch { /* ignore invalid date */ }
-            }
-            if (endDate) {
-                try {
-                    filter.date.$lte = endOfDay(new Date(endDate));
-                } catch { /* ignore invalid date */ }
-            }
-            // If only one date was invalid or missing, remove the date filter part
-            if (Object.keys(filter.date).length === 0) delete filter.date;
+      // For futsal admins, only show bookings for their futsal facility
+      if (req.user.role === 'futsalAdmin') {
+        // First get all courts belonging to this futsal
+        const courts = await Court.find({ futsalId: req.user.futsal._id }).select('_id');
+        const courtIds = courts.map(court => court._id);
+        
+        console.log('Futsal Admin Courts:', {
+          futsalId: req.user.futsal._id,
+          courtCount: courts.length,
+          courtIds: courtIds
+        });
+        
+        // If a specific court is selected, ensure it belongs to the admin's futsal
+        if (courtId) {
+          if (!courtIds.includes(courtId)) {
+            return res.status(403).json({ message: 'Unauthorized: You can only view bookings for your futsal courts' });
+          }
+          filter.court = courtId;
+        } else {
+          // If no specific court selected, show all bookings for the futsal's courts
+          filter.court = { $in: courtIds };
         }
+      }
 
-        // --- Sorting Logic ---
-        const sortOptions = {};
-        const sortOrderValue = sortOrder === 'asc' ? 1 : -1;
-        const pendingSortOrderValue = sortOrder === 'pending' ? 1 : (sortOrder === 'asc' ? 1 : -1); // Treat 'pending' as primary ASC sort
+      // Apply filters
+      if (status && status !== 'all') filter.status = status;
+      if (paymentStatus && paymentStatus !== 'all') filter.paymentStatus = paymentStatus;
 
-        switch (sortBy) {
-            case 'date':
-                sortOptions.date = sortOrderValue;
-                sortOptions.startTime = sortOrderValue; // Secondary sort by time
-                break;
-            case 'userName':
-                sortOptions['userInfo.name'] = sortOrderValue; // Assuming name is stored here now
-                break;
-            case 'courtName':
-                sortOptions['courtDetails.name'] = sortOrderValue; // Sort based on populated name
-                break;
-            case 'status':
-                if (sortOrder === 'pending') {
-                    // Use a simpler approach for pending status sorting
-                    // We fetch unsorted first, then sort in memory
-                    const bookings = await Booking.find(filter)
-                        .populate('user', 'firstName lastName email contactNumber')
-                        .populate('court', 'name')
-                        .lean();
-                    
-                    // Sort the bookings array in memory
-                    bookings.sort((a, b) => {
-                        const isAPending = a.status === 'pending';
-                        const isBPending = b.status === 'pending';
-                        if (isAPending && !isBPending) return -1; // a (pending) comes first
-                        if (!isAPending && isBPending) return 1;  // b (pending) comes first
-                        // If both are pending or both are not pending, sort alphabetically
-                        return (a.status || '').localeCompare(b.status || '');
-                    });
-
-                    // Transform the sorted bookings
-                    const transformedBookings = bookings.map(booking => ({
-                        ...booking,
-                        userInfo: {
-                            name: [booking.user?.firstName, booking.user?.lastName].filter(Boolean).join(' ') || 'N/A',
-                            email: booking.user?.email || 'N/A',
-                            phone: booking.user?.contactNumber || 'N/A'
-                        },
-                        courtDetails: {
-                            name: booking.court?.name || 'N/A'
-                        }
-                    }));
-
-                    return res.json(transformedBookings);
-                } else {
-                    // Standard Asc/Desc MongoDB sort
-                    sortOptions.status = sortOrderValue;
-                    // Secondary sort follows the same direction
-                    sortOptions.date = sortOrderValue;
-                    sortOptions.startTime = sortOrderValue;
-                }
-                break;
-            case 'paymentStatus':
-                if (sortOrder === 'pending') {
-                    // Use a simpler approach for pending payment status sorting
-                    // We fetch unsorted first, then sort in memory
-                    const bookings = await Booking.find(filter)
-                        .populate('user', 'firstName lastName email contactNumber')
-                        .populate('court', 'name')
-                        .lean();
-                    
-                    // Sort the bookings array in memory
-                    bookings.sort((a, b) => {
-                        const isAPending = a.paymentStatus === 'pending';
-                        const isBPending = b.paymentStatus === 'pending';
-                        if (isAPending && !isBPending) return -1; // a (pending) comes first
-                        if (!isAPending && isBPending) return 1;  // b (pending) comes first
-                        // If both are pending or both are not pending, sort alphabetically
-                        return (a.paymentStatus || '').localeCompare(b.paymentStatus || '');
-                    });
-
-                    // Transform the sorted bookings
-                    const transformedBookings = bookings.map(booking => ({
-                        ...booking,
-                        userInfo: {
-                            name: [booking.user?.firstName, booking.user?.lastName].filter(Boolean).join(' ') || 'N/A',
-                            email: booking.user?.email || 'N/A',
-                            phone: booking.user?.contactNumber || 'N/A'
-                        },
-                        courtDetails: {
-                            name: booking.court?.name || 'N/A'
-                        }
-                    }));
-
-                    return res.json(transformedBookings);
-                } else {
-                     // Standard Asc/Desc MongoDB sort
-                    sortOptions.paymentStatus = sortOrderValue;
-                     // Secondary sort follows the same direction
-                    sortOptions.date = sortOrderValue;
-                    sortOptions.startTime = sortOrderValue;
-                }
-                break;
-            default:
-                sortOptions.date = -1; // Default sort
-                sortOptions.startTime = -1;
+      if (startDate || endDate) {
+        filter.date = {};
+        if (startDate) {
+          try {
+            filter.date.$gte = startOfDay(new Date(startDate));
+          } catch { /* ignore invalid date */ }
         }
-        // --- End Sorting Logic ---
+        if (endDate) {
+          try {
+            filter.date.$lte = endOfDay(new Date(endDate));
+          } catch { /* ignore invalid date */ }
+        }
+        // If only one date was invalid or missing, remove the date filter part
+        if (Object.keys(filter.date).length === 0) delete filter.date;
+      }
 
-        console.log('Admin Booking Fetch Filter:', filter);
-        console.log('Admin Booking Fetch Sort:', sortOptions);
+      console.log('Final Filter:', filter);
 
-        const bookings = await Booking.find(filter)
-            .populate('user', 'firstName lastName email contactNumber')
-            .populate('court', 'name')
-            .sort(sortOptions)
-            .lean();
+      // Get total count for pagination
+      const total = await Booking.countDocuments(filter);
+      console.log('Total Bookings Found:', total);
 
-        // Simplified transformation -userInfo and courtDetails added
-        const transformedBookings = bookings.map(booking => ({
-            ...booking,
-            userInfo: {
-                name: [booking.user?.firstName, booking.user?.lastName].filter(Boolean).join(' ') || 'N/A',
-                email: booking.user?.email || 'N/A',
-                phone: booking.user?.contactNumber || 'N/A'
-            },
-            courtDetails: {
-                name: booking.court?.name || 'N/A'
-            }
-        }));
+      // Get paginated bookings with proper population
+      const bookings = await Booking.find(filter)
+        .populate({
+          path: 'user',
+          select: 'firstName lastName email contactNumber'
+        })
+        .populate({
+          path: 'court',
+          select: 'name futsalId',
+          populate: {
+            path: 'futsalId',
+            select: 'name'
+          }
+        })
+        .sort({ date: -1, startTime: -1 })
+        .skip((page - 1) * limit)
+        .limit(parseInt(limit))
+        .lean();
 
-        res.json(transformedBookings);
+      console.log('Bookings Retrieved:', bookings.length);
+
+      // Transform the bookings
+      const transformedBookings = bookings.map(booking => ({
+        ...booking,
+        userInfo: {
+          name: [booking.user?.firstName, booking.user?.lastName].filter(Boolean).join(' ') || 'N/A',
+          email: booking.user?.email || 'N/A',
+          phone: booking.user?.contactNumber || 'N/A'
+        },
+        courtDetails: {
+          name: booking.court?.name || 'N/A',
+          futsalName: booking.court?.futsalId?.name || 'N/A'
+        }
+      }));
+
+      res.json({
+        bookings: transformedBookings,
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / limit)
+      });
     } catch (error) {
-        console.error('Error fetching admin bookings:', error);
-        res.status(500).json({ message: 'Failed to fetch bookings', error: error.message });
+      console.error('Error fetching admin bookings:', error);
+      res.status(500).json({ message: 'Failed to fetch bookings', error: error.message });
     }
   });
 
