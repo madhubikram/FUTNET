@@ -3,13 +3,22 @@
     <div class="px-4 md:px-8 py-4 md:py-6">
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
       <h1 class="text-2xl font-bold text-white">Tournament Management</h1>
-      <button
-        @click="openCreateTournamentModal()"
-        class="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg flex items-center gap-2 transition-colors duration-200"
-      >
-        <PlusIcon class="w-5 h-5" />
-        Create Tournament
-      </button>
+      <div class="flex gap-2">
+        <button
+          @click="refreshTournaments"
+          class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center gap-2 transition-colors duration-200"
+        >
+          <Loader2Icon class="w-5 h-5" />
+          Refresh
+        </button>
+        <button
+          @click="openCreateTournamentModal()"
+          class="px-6 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg flex items-center gap-2 transition-colors duration-200"
+        >
+          <PlusIcon class="w-5 h-5" />
+          Create Tournament
+        </button>
+      </div>
     </div>
 
     <div class="overflow-x-hidden">
@@ -582,6 +591,7 @@ const tournamentImages = ref([])
 const errors = ref({})
 const selectedTournament = ref(null)
 const editingTournamentId = ref(null)
+const statusRefreshInterval = ref(null) // Add this for the interval reference
 
 // Computed Properties
 const minDate = computed(() => {
@@ -721,6 +731,77 @@ const fetchTournaments = async () => {
     loading.value = false;
   }
 };
+
+// Add the status refresh function to periodically refresh tournament data
+const setupStatusRefresh = () => {
+  // Clear any existing interval
+  if (statusRefreshInterval.value) {
+    clearInterval(statusRefreshInterval.value);
+  }
+  
+  // Get fresh tournament data every minute to ensure status is correct
+  statusRefreshInterval.value = setInterval(() => {
+    console.log('Auto-refreshing tournament status data...');
+    fetchTournaments();
+  }, 60000); // Refresh every 60 seconds
+};
+
+// Add a manual refresh function that users can trigger
+const refreshTournaments = async () => {
+  try {
+    toast.info('Refreshing tournament data...');
+    
+    // First, force refresh all tournament statuses
+    if (tournaments.value && tournaments.value.length > 0) {
+      // Find tournaments that might need status updates (those not cancelled)
+      const activeTournaments = tournaments.value.filter(t => 
+        t.status !== 'Cancelled (Low Teams)'
+      );
+      
+      if (activeTournaments.length > 0) {
+        // Show more detailed message if we're refreshing status
+        toast.info(`Checking status updates for ${activeTournaments.length} active tournaments...`);
+        
+        // Process tournaments in parallel
+        const token = localStorage.getItem('token');
+        const refreshPromises = activeTournaments.map(tournament => 
+          fetch(`${API_URL}/tournaments/${tournament._id}/refresh-status`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          })
+          .then(response => response.json())
+          .then(result => {
+            console.log(`Status refresh for ${tournament.name}:`, result);
+            return result;
+          })
+          .catch(error => {
+            console.error(`Error refreshing status for ${tournament.name}:`, error);
+            return null;
+          })
+        );
+        
+        // Wait for all refresh operations to complete
+        const results = await Promise.all(refreshPromises);
+        const updatedCount = results.filter(r => r && r.statusChanged).length;
+        
+        if (updatedCount > 0) {
+          toast.success(`Updated status for ${updatedCount} tournaments`);
+        }
+      }
+    }
+    
+    // Then fetch all tournaments to get the latest data
+    await fetchTournaments();
+    toast.success('Tournament data updated');
+  } catch (error) {
+    console.error('Error refreshing tournaments:', error);
+    toast.error('Error refreshing tournament data');
+  }
+};
+
 // Form Validation
 const validateForm = () => {
   errors.value = {}
@@ -977,9 +1058,13 @@ const navigateToTeams = (tournament) => {
 
 onMounted(async () => {
   await fetchTournaments();
+  setupStatusRefresh(); // Start the automatic refresh
 });
 
 onUnmounted(() => {
-  // Clear any potential leftover intervals if needed in the future
+  // Clear the interval when component is unmounted
+  if (statusRefreshInterval.value) {
+    clearInterval(statusRefreshInterval.value);
+  }
 });
 </script>

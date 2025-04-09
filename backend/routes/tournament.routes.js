@@ -6,6 +6,8 @@ try {
     const tournamentController = require('../controllers/tournament.controller');
     const auth = require('../middleware/auth.middleware');
     const { tournamentUpload } = require('../config/multer');
+    const { updateSingleTournamentStatus } = require('../utils/tournamentStatus'); // Import the new function
+    const Tournament = require('../models/tournament.model');
 
     // Middleware to check if user is a futsal admin
     const isFutsalAdmin = (req, res, next) => {
@@ -53,6 +55,32 @@ try {
         tournamentController.updateTournament
     );
 
+    // Update tournament bracket specifically
+    router.post('/:id/update-bracket',
+        auth,
+        isFutsalAdmin,
+        tournamentController.updateTournamentBracket
+    );
+
+    // Refresh tournament status - new endpoint
+    router.post('/:id/refresh-status',
+        auth,
+        isFutsalAdmin,
+        async (req, res) => {
+            try {
+                const result = await updateSingleTournamentStatus(req.params.id);
+                if (result.success) {
+                    res.json(result);
+                } else {
+                    res.status(400).json(result);
+                }
+            } catch (error) {
+                console.error('Error refreshing tournament status:', error);
+                res.status(500).json({ success: false, message: 'Server error refreshing tournament status' });
+            }
+        }
+    );
+
     // Delete tournament
     router.delete('/:id',
         auth,
@@ -66,6 +94,19 @@ try {
       auth,
       tournamentController.getTournamentRegistrations
     );
+
+    // Force update tournament status
+    router.put("/update-status/:id", auth, isFutsalAdmin, async (req, res) => {
+      try {
+        const tournamentId = req.params.id;
+        const result = await updateSingleTournamentStatus(tournamentId);
+        
+        return res.status(200).json(result);
+      } catch (error) {
+        console.error("Error forcing tournament status update:", error);
+        return res.status(500).json({ success: false, message: error.message });
+      }
+    });
 
     console.log('Tournament routes loaded'); // <--- ADD THIS LOG AT THE VERY END of the file
     module.exports = router;

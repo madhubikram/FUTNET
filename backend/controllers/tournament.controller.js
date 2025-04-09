@@ -377,6 +377,44 @@ const tournamentController = {
             console.error('[ERROR] Error fetching tournament registrations:', error);
             res.status(500).json({ message: `Error fetching registrations: ${error.message}` });
         }
+    },
+
+    updateTournamentBracket: async (req, res) => {
+        try {
+            console.log('Updating tournament bracket with data:', {
+                tournamentId: req.params.id,
+                body: req.body,
+                user: req.user
+            });
+
+            // Only update bracket and stats fields
+            const bracketUpdateData = {
+                bracket: req.body.bracket,
+                stats: req.body.stats
+            };
+
+            // Add generated flag if not present
+            if (bracketUpdateData.bracket && !bracketUpdateData.bracket.generated) {
+                bracketUpdateData.bracket.generated = true;
+            }
+
+            // Find and update the tournament
+            const tournament = await Tournament.findOneAndUpdate(
+                { _id: req.params.id, futsalId: req.user.futsal },
+                bracketUpdateData,
+                { new: true, runValidators: true }
+            );
+
+            if (!tournament) {
+                return res.status(404).json({ message: 'Tournament not found' });
+            }
+
+            console.log('Tournament bracket updated successfully for tournament:', tournament._id);
+            res.json(tournament);
+        } catch (error) {
+            console.error('Error updating tournament bracket:', error);
+            res.status(500).json({ message: `Error updating tournament bracket: ${error.message}` });
+        }
     }
 };
 
