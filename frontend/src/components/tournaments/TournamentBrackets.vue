@@ -1,5 +1,32 @@
 <template>
   <div class="tournament-master flex flex-col min-h-screen w-full bg-gray-900 text-gray-100 p-4 gap-4 font-sans">
+    <!-- Toast Notifications -->
+    <div class="fixed top-4 right-4 z-50 flex flex-col gap-2">
+      <transition-group name="toast">
+        <div 
+          v-for="(toast, index) in toasts" 
+          :key="toast.id" 
+          :class="[
+            'px-4 py-3 rounded-lg shadow-lg backdrop-blur-sm transition-all transform max-w-md',
+            toast.type === 'success' ? 'bg-emerald-500/90 text-white' : 'bg-red-500/90 text-white'
+          ]"
+        >
+          <div class="flex items-center gap-2">
+            <div v-if="toast.type === 'success'" class="flex-shrink-0">
+              <CheckCircle class="h-5 w-5" />
+            </div>
+            <div v-else class="flex-shrink-0">
+              <AlertTriangle class="h-5 w-5" />
+            </div>
+            <div class="flex-1">{{ toast.message }}</div>
+            <button @click="removeToast(index)" class="flex-shrink-0 text-white/70 hover:text-white">
+              <X class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </transition-group>
+    </div>
+
     <!-- Header with Gradient and Logo -->
     <div class="flex items-center justify-between mb-2">
       <!-- Back Button -->
@@ -393,21 +420,19 @@
             :key="`round-${round.round}`"
             class="flex flex-col"
             :style="{
-              minWidth: '200px',
+              minWidth: '280px',
               maxWidth: '350px',
-              // Adjust justification based on whether it contains the 3rd place match
-              justifyContent: round.matches.length === 1 && !round.matches[0].isThirdPlace ? 'center' : 'space-around'
+              justifyContent: 'center'
             }"
           >
             <div class="mb-3 text-center">
               <h3 class="font-bold text-lg bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent">
-                <!-- Use round number for title unless it's the 3rd place match -->
-                {{ getRoundName(round.round, round.matches.length) }}
+                {{ getRoundName(round.round, round.matches.filter(m => !m.isThirdPlace).length) }}
               </h3>
             </div>
 
             <div class="flex flex-col justify-around h-full gap-5">
-              <!-- First display regular matches (not 3rd place match) -->
+              <!-- Display only regular matches (not 3rd place match) -->
               <div
                 v-for="(match, matchIndex) in round.matches.filter(m => !m.isThirdPlace)"
                 :key="match.id"
@@ -580,191 +605,196 @@
                   </div>
                 </div>
               </div>
-              
-              <!-- Then display 3rd place match separately with special styling -->
-              <div 
-                v-if="round.matches.some(m => m.isThirdPlace)" 
-                class="mt-8 pt-4 border-t-2 border-amber-700/30 relative"
+            </div>
+          </div>
+          
+          <!-- Display 3rd place match in a separate column if it exists -->
+          <div 
+            v-if="getThirdPlaceMatch()"
+            class="flex flex-col mt-12"
+            style="min-width: 280px; max-width: 350px;"
+          >
+            <div class="mb-3 text-center">
+              <h3 class="font-bold text-lg bg-gradient-to-r from-amber-400 to-amber-600 bg-clip-text text-transparent flex items-center justify-center">
+                <Trophy class="h-5 w-5 mr-2 text-amber-500" />
+                3rd Place Match
+              </h3>
+            </div>
+            
+            <div class="flex flex-col justify-center h-full">
+              <div
+                v-if="getThirdPlaceMatch()"
+                class="w-full rounded-xl overflow-hidden shadow-lg border border-amber-700/40 transition-all group hover:shadow-amber-900/20 bg-gradient-to-b from-amber-900/20 to-amber-950/20"
               >
-                <div class="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-gray-900 px-3 py-1 rounded-full">
-                  <span class="text-xs font-bold text-amber-700">Third Place Fixture</span>
+                <div class="bg-amber-900/30 backdrop-blur-sm px-3 py-2 flex justify-between items-center border-b border-amber-700/50">
+                  <span class="font-medium text-sm flex items-center">
+                    <Trophy class="h-4 w-4 text-amber-700 mr-2" />
+                    3rd Place Match
+                  </span>
                 </div>
                 
-                <div
-                  v-for="match in round.matches.filter(m => m.isThirdPlace)"
-                  :key="match.id"
-                  class="w-full rounded-xl overflow-hidden shadow-lg border border-amber-700/40 transition-all group hover:shadow-amber-900/20 bg-gradient-to-b from-amber-900/20 to-amber-950/20"
-                >
-                  <div class="bg-amber-900/30 backdrop-blur-sm px-3 py-2 flex justify-between items-center border-b border-amber-700/50">
-                    <span class="font-medium text-sm flex items-center">
-                      <Trophy class="h-4 w-4 text-amber-700 mr-2" />
-                      3rd Place Match
-                    </span>
-                  </div>
-
-                  <div class="p-3 flex flex-col gap-3">
-                    <!-- Team 1 row -->
-                    <div :class="['flex items-center gap-2', match.winner === match.team1 ? 'opacity-100' : 'opacity-90']">
-                      <div :class="[
-                        'flex-1 p-2 rounded-lg bg-gray-800/50 border transition-all',
-                        match.winner === match.team1 ? 'border-amber-600/50' : 'border-gray-700/30'
-                      ]">
-                        <div class="font-medium text-sm truncate flex items-center">
-                          <div v-if="match.winner === match.team1" class="w-5 h-5 rounded-full bg-amber-700/30 flex items-center justify-center mr-1.5 flex-shrink-0">
-                            <Trophy class="h-3 w-3 text-amber-500" />
-                          </div>
-                          <span class="truncate">{{ match.team1 ? match.team1.name : 'Semifinal Loser 1' }}</span>
+                <div class="p-3 flex flex-col gap-3">
+                  <!-- Team 1 row -->
+                  <div :class="['flex items-center gap-2', getThirdPlaceMatch().winner === getThirdPlaceMatch().team1 ? 'opacity-100' : 'opacity-90']">
+                    <div :class="[
+                      'flex-1 p-2 rounded-lg bg-gray-800/50 border transition-all',
+                      getThirdPlaceMatch().winner === getThirdPlaceMatch().team1 ? 'border-amber-600/50' : 'border-gray-700/30'
+                    ]">
+                      <div class="font-medium text-sm truncate flex items-center">
+                        <div v-if="getThirdPlaceMatch().winner === getThirdPlaceMatch().team1" class="w-5 h-5 rounded-full bg-amber-700/30 flex items-center justify-center mr-1.5 flex-shrink-0">
+                          <Trophy class="h-3 w-3 text-amber-500" />
                         </div>
-                      </div>
-
-                      <div class="flex items-center gap-1">
-                        <div class="flex flex-col items-center">
-                          <div class="text-xs text-gray-400 mb-1">Score</div>
-                          <input
-                            type="number"
-                            min="0"
-                            v-model.number="match.score1"
-                            @input="updateMatch(roundIndex, getThirdPlaceMatchIndex(round), 'score1')"
-                            :class="[
-                              'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
-                              match.winner === match.team1 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
-                              !match.team1 ? 'cursor-not-allowed opacity-50' : '' 
-                            ]"
-                            :disabled="!match.team1"
-                          />
-                        </div>
-                        <div v-if="match.score1 === match.score2 && match.score1 !== null && match.score2 !== null && match.team1 && match.team2" class="flex items-center">
-                          <span class="mx-1 text-xs text-gray-400"></span>
-                          <div class="flex flex-col items-center">
-                            <div class="text-xs text-gray-400 mb-1">PK</div>
-                            <input
-                              type="number"
-                              min="0"
-                              v-model.number="match.pk1"
-                              @input="updateMatch(roundIndex, getThirdPlaceMatchIndex(round), 'pk1')"
-                              :class="[
-                                'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
-                                match.winner === match.team1 && match.pk1 > match.pk2 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
-                              ]"
-                              :disabled="!match.team1 || !match.team2"
-                            />
-                          </div>
-                        </div>
+                        <span class="truncate">{{ getThirdPlaceMatch().team1 ? getThirdPlaceMatch().team1.name : 'Semifinal Loser 1' }}</span>
                       </div>
                     </div>
 
-                    <!-- Team 2 row -->
-                    <div :class="['flex items-center gap-2', match.winner === match.team2 ? 'opacity-100' : 'opacity-90']">
-                      <div :class="[
-                        'flex-1 p-2 rounded-lg bg-gray-800/50 border transition-all',
-                        match.winner === match.team2 ? 'border-amber-600/50' : 'border-gray-700/30'
-                      ]">
-                        <div class="font-medium text-sm truncate flex items-center">
-                          <div v-if="match.winner === match.team2" class="w-5 h-5 rounded-full bg-amber-700/30 flex items-center justify-center mr-1.5 flex-shrink-0">
-                            <Trophy class="h-3 w-3 text-amber-500" />
-                          </div>
-                          <span class="truncate">{{ match.team2 ? match.team2.name : 'Semifinal Loser 2' }}</span>
-                        </div>
-                      </div>
-
-                      <div class="flex items-center gap-1">
-                        <div class="flex flex-col items-center">
-                          <div class="text-xs text-gray-400 mb-1">Score</div>
-                          <input
-                            type="number"
-                            min="0"
-                            v-model.number="match.score2"
-                            @input="updateMatch(roundIndex, getThirdPlaceMatchIndex(round), 'score2')"
-                            :class="[
-                              'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
-                              match.winner === match.team2 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
-                              !match.team2 ? 'cursor-not-allowed opacity-50' : '' 
-                            ]"
-                            :disabled="!match.team2" 
-                          />
-                        </div>
-                        <div v-if="match.score1 === match.score2 && match.score1 !== null && match.score2 !== null && match.team1 && match.team2" class="flex items-center">
-                          <span class="mx-1 text-xs text-gray-400"></span>
-                          <div class="flex flex-col items-center">
-                            <div class="text-xs text-gray-400 mb-1">PK</div>
-                            <input
-                              type="number"
-                              min="0"
-                              v-model.number="match.pk2"
-                              @input="updateMatch(roundIndex, getThirdPlaceMatchIndex(round), 'pk2')"
-                              :class="[
-                                'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
-                                match.winner === match.team2 && match.pk2 > match.pk1 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
-                              ]"
-                              :disabled="!match.team1 || !match.team2"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <!-- Match top scorer -->
-                    <div v-if="match.team1 && match.team2" class="pt-2 border-t border-amber-700/30 grid grid-cols-12 gap-1 items-center">
-                      <div class="col-span-3 text-xs text-amber-700/80 flex items-center">
-                        <Star class="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span class="truncate">Top Scorer:</span>
-                      </div>
-                      <div class="col-span-6">
-                        <input
-                          type="text"
-                          v-model="match.topScorer.name"
-                          @input="updateMatchTopScorer(roundIndex, getThirdPlaceMatchIndex(round), 'name', $event.target.value)"
-                          class="w-full bg-gray-800/70 border border-amber-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
-                          placeholder="Player name"
-                        />
-                      </div>
-                      <div class="col-span-3 flex items-center gap-1">
+                    <div class="flex items-center gap-1">
+                      <div class="flex flex-col items-center">
+                        <div class="text-xs text-gray-400 mb-1">Score</div>
                         <input
                           type="number"
                           min="0"
-                          v-model.number="match.topScorer.goals"
-                          @input="updateMatchTopScorer(roundIndex, getThirdPlaceMatchIndex(round), 'goals', $event.target.value)"
-                          class="w-full text-center bg-gray-800/70 border border-amber-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
+                          v-model.number="getThirdPlaceMatch().score1"
+                          @input="updateThirdPlaceMatch('score1')"
+                          :class="[
+                            'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
+                            getThirdPlaceMatch().winner === getThirdPlaceMatch().team1 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
+                            !getThirdPlaceMatch().team1 ? 'cursor-not-allowed opacity-50' : '' 
+                          ]"
+                          :disabled="!getThirdPlaceMatch().team1"
                         />
-                        <span class="text-xs text-gray-400">g</span>
+                      </div>
+                      <div v-if="getThirdPlaceMatch().score1 === getThirdPlaceMatch().score2 && getThirdPlaceMatch().score1 !== null && getThirdPlaceMatch().score2 !== null && getThirdPlaceMatch().team1 && getThirdPlaceMatch().team2" class="flex items-center">
+                        <span class="mx-1 text-xs text-gray-400"></span>
+                        <div class="flex flex-col items-center">
+                          <div class="text-xs text-gray-400 mb-1">PK</div>
+                          <input
+                            type="number"
+                            min="0"
+                            v-model.number="getThirdPlaceMatch().pk1"
+                            @input="updateThirdPlaceMatch('pk1')"
+                            :class="[
+                              'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
+                              getThirdPlaceMatch().winner === getThirdPlaceMatch().team1 && getThirdPlaceMatch().pk1 > getThirdPlaceMatch().pk2 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
+                            ]"
+                            :disabled="!getThirdPlaceMatch().team1 || !getThirdPlaceMatch().team2"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Team 2 row -->
+                  <div :class="['flex items-center gap-2', getThirdPlaceMatch().winner === getThirdPlaceMatch().team2 ? 'opacity-100' : 'opacity-90']">
+                    <div :class="[
+                      'flex-1 p-2 rounded-lg bg-gray-800/50 border transition-all',
+                      getThirdPlaceMatch().winner === getThirdPlaceMatch().team2 ? 'border-amber-600/50' : 'border-gray-700/30'
+                    ]">
+                      <div class="font-medium text-sm truncate flex items-center">
+                        <div v-if="getThirdPlaceMatch().winner === getThirdPlaceMatch().team2" class="w-5 h-5 rounded-full bg-amber-700/30 flex items-center justify-center mr-1.5 flex-shrink-0">
+                          <Trophy class="h-3 w-3 text-amber-500" />
+                        </div>
+                        <span class="truncate">{{ getThirdPlaceMatch().team2 ? getThirdPlaceMatch().team2.name : 'Semifinal Loser 2' }}</span>
                       </div>
                     </div>
 
-                    <!-- Date and Time -->
-                    <div class="pt-2 border-t border-amber-700/30 grid grid-cols-12 gap-1 items-center">
-                      <div class="col-span-2 text-xs text-emerald-500/80 flex items-center justify-center">
-                        <Calendar class="h-3 w-3" />
-                      </div>
-                      <div class="col-span-4">
+                    <div class="flex items-center gap-1">
+                      <div class="flex flex-col items-center">
+                        <div class="text-xs text-gray-400 mb-1">Score</div>
                         <input
-                          type="date"
-                          v-model="match.date"
-                          @input="updateDateTime(roundIndex, matchIndex, 'date', $event.target.value)"
-                          class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
+                          type="number"
+                          min="0"
+                          v-model.number="getThirdPlaceMatch().score2"
+                          @input="updateThirdPlaceMatch('score2')"
+                          :class="[
+                            'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
+                            getThirdPlaceMatch().winner === getThirdPlaceMatch().team2 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
+                            !getThirdPlaceMatch().team2 ? 'cursor-not-allowed opacity-50' : '' 
+                          ]"
+                          :disabled="!getThirdPlaceMatch().team2" 
                         />
                       </div>
-                      <div class="col-span-2 text-xs text-emerald-500/80 flex items-center justify-center">
-                        <Clock class="h-3 w-3" />
-                      </div>
-                      <div class="col-span-4">
-                        <input
-                          type="time"
-                          v-model="match.time"
-                          @input="updateDateTime(roundIndex, matchIndex, 'time', $event.target.value)"
-                          class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
-                        />
+                      <div v-if="getThirdPlaceMatch().score1 === getThirdPlaceMatch().score2 && getThirdPlaceMatch().score1 !== null && getThirdPlaceMatch().score2 !== null && getThirdPlaceMatch().team1 && getThirdPlaceMatch().team2" class="flex items-center">
+                        <span class="mx-1 text-xs text-gray-400"></span>
+                        <div class="flex flex-col items-center">
+                          <div class="text-xs text-gray-400 mb-1">PK</div>
+                          <input
+                            type="number"
+                            min="0"
+                            v-model.number="getThirdPlaceMatch().pk2"
+                            @input="updateThirdPlaceMatch('pk2')"
+                            :class="[
+                              'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
+                              getThirdPlaceMatch().winner === getThirdPlaceMatch().team2 && getThirdPlaceMatch().pk2 > getThirdPlaceMatch().pk1 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
+                            ]"
+                            :disabled="!getThirdPlaceMatch().team1 || !getThirdPlaceMatch().team2"
+                          />
+                        </div>
                       </div>
                     </div>
+                  </div>
 
-                    <!-- 3rd Place placing -->
-                    <div
-                      v-if="match.winner"
-                      class="mt-1 pt-2 border-t border-amber-700/30"
-                    >
-                      <div class="flex items-center justify-between">
-                        <span class="text-xs font-medium text-amber-700">3rd Place Winner</span>
-                        <span class="text-sm font-semibold truncate">{{ match.winner.name }}</span>
-                      </div>
+                  <!-- Match top scorer -->
+                  <div v-if="getThirdPlaceMatch().team1 && getThirdPlaceMatch().team2" class="pt-2 border-t border-amber-700/30 grid grid-cols-12 gap-1 items-center">
+                    <div class="col-span-3 text-xs text-amber-700/80 flex items-center">
+                      <Star class="h-3 w-3 mr-1 flex-shrink-0" />
+                      <span class="truncate">Top Scorer:</span>
+                    </div>
+                    <div class="col-span-6">
+                      <input
+                        type="text"
+                        v-model="getThirdPlaceMatch().topScorer.name"
+                        @input="updateThirdPlaceTopScorer('name', $event.target.value)"
+                        class="w-full bg-gray-800/70 border border-amber-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
+                        placeholder="Player name"
+                      />
+                    </div>
+                    <div class="col-span-3 flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        v-model.number="getThirdPlaceMatch().topScorer.goals"
+                        @input="updateThirdPlaceTopScorer('goals', $event.target.value)"
+                        class="w-full text-center bg-gray-800/70 border border-amber-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
+                      />
+                      <span class="text-xs text-gray-400">g</span>
+                    </div>
+                  </div>
+
+                  <!-- Date and Time -->
+                  <div class="pt-2 border-t border-amber-700/30 grid grid-cols-12 gap-1 items-center">
+                    <div class="col-span-2 text-xs text-emerald-500/80 flex items-center justify-center">
+                      <Calendar class="h-3 w-3" />
+                    </div>
+                    <div class="col-span-4">
+                      <input
+                        type="date"
+                        v-model="getThirdPlaceMatch().date"
+                        @input="updateThirdPlaceDateTime('date', $event.target.value)"
+                        class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
+                      />
+                    </div>
+                    <div class="col-span-2 text-xs text-emerald-500/80 flex items-center justify-center">
+                      <Clock class="h-3 w-3" />
+                    </div>
+                    <div class="col-span-4">
+                      <input
+                        type="time"
+                        v-model="getThirdPlaceMatch().time"
+                        @input="updateThirdPlaceDateTime('time', $event.target.value)"
+                        class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
+                      />
+                    </div>
+                  </div>
+
+                  <!-- 3rd Place winner -->
+                  <div
+                    v-if="getThirdPlaceMatch().winner"
+                    class="mt-1 pt-2 border-t border-amber-700/30"
+                  >
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-medium text-amber-700">3rd Place Winner</span>
+                      <span class="text-sm font-semibold truncate">{{ getThirdPlaceMatch().winner.name }}</span>
                     </div>
                   </div>
                 </div>
@@ -841,7 +871,7 @@
 
 <script>
 import { ref, computed, reactive, onMounted, watch } from 'vue';
-import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send } from 'lucide-vue-next';
+import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send, CheckCircle, AlertTriangle, X } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 
 // --- Configuration ---
@@ -854,7 +884,7 @@ const BYE_TEAM = { id: 'BYE', name: 'Bye' }; // Define a constant for Bye
 export default {
   name: 'TournamentBrackets',
   components: {
-    Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send
+    Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send, CheckCircle, AlertTriangle, X
   },
   setup() {
     const route = useRoute();
@@ -900,18 +930,13 @@ export default {
         return totalSlots - numTeams;
     };
 
-    const getRoundName = (roundNumber, numMatchesInRound) => {
-      const totalRounds = rounds.value.length > 0 ? Math.max(...rounds.value.map(r => r.round)) : 0;
-      const roundData = rounds.value.find(r => r.round === roundNumber);
-      const isThirdPlaceMatchPresent = roundData?.matches.some(m => m.isThirdPlace);
-
-      if (isThirdPlaceMatchPresent && numMatchesInRound === 1 && roundData?.matches[0].isThirdPlace) {
-          return '3rd Place Match';
-      }
-
-      if (roundNumber === totalRounds && !isThirdPlaceMatchPresent) return 'Championship Final';
-      if (roundNumber === totalRounds - 1) return 'Semi-Finals';
-      if (roundNumber === totalRounds - 2) return 'Quarter-Finals';
+    const getRoundName = (roundNumber, matchCount) => {
+      // Handle special rounds
+      if (roundNumber === 1) return 'First Round';
+      if (roundNumber === 2 && matchCount === 2) return 'Semifinals';
+      if (roundNumber === 3 && matchCount === 1) return 'Final';
+      
+      // Default
       return `Round ${roundNumber}`;
     };
 
@@ -1720,12 +1745,11 @@ export default {
     const saveTournamentChanges = async () => {
       try {
         if (!route.params.id) {
-          error.value = "Cannot save changes: No tournament ID provided.";
+          showToast('Cannot save changes: No tournament ID provided.', 'error');
           return;
         }
         
         loading.value = true;
-        error.value = null;
         backendDataWarning.value = null;
         
         // Prepare data to send
@@ -1758,17 +1782,64 @@ export default {
         const data = await response.json();
         console.log('Tournament bracket updated successfully:', data);
         
-        // Show success message
-        error.value = "Tournament changes saved successfully!";
-        setTimeout(() => { error.value = null; }, 3000);
+        // Show success message as toast
+        showToast('Tournament changes saved successfully!', 'success');
       } catch (err) {
         console.error('Error saving tournament changes:', err);
-        error.value = err.message || 'An error occurred while saving changes';
+        showToast(err.message || 'An error occurred while saving changes', 'error');
       } finally {
         loading.value = false;
       }
     };
-    const publishTournament = () => { /* ... publish logic ... */ };
+    const publishTournament = async () => {
+      try {
+        if (!route.params.id) {
+          showToast('Cannot publish: No tournament ID provided.', 'error');
+          return;
+        }
+        
+        loading.value = true;
+        
+        // Prepare data to send
+        const bracketData = {
+          bracket: {
+            teams: teams.value,
+            rounds: rounds.value,
+            generated: true
+          },
+          stats: tournamentStats,
+          isPublished: true
+        };
+        
+        console.log(`Publishing tournament: ${route.params.id}`);
+        
+        // Make API call to publish tournament
+        const response = await fetch(`${API_URL}/tournaments/${route.params.id}/publish`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify(bracketData)
+        });
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || 'Failed to publish tournament');
+        }
+        
+        const data = await response.json();
+        console.log('Tournament published successfully:', data);
+        
+        // Show success message as toast
+        showToast('Tournament published successfully!', 'success');
+      } catch (err) {
+        console.error('Error publishing tournament:', err);
+        showToast(err.message || 'An error occurred while publishing the tournament', 'error');
+      } finally {
+        loading.value = false;
+      }
+    };
 
     // --- Computed Properties ---
     const getTotalMatches = computed(() => rounds.value.reduce((sum, round) => sum + round.matches.length, 0));
@@ -1859,6 +1930,69 @@ export default {
     watch(backendDataWarning, (newWarning) => { if (newWarning) { setTimeout(() => { backendDataWarning.value = null; }, 10000); } }); // Auto-hide warning
     watch(rounds, updateTournamentPositions, { deep: true });
 
+    // Add helper functions to get the 3rd place match
+    const getThirdPlaceMatch = () => {
+      return rounds.value.flatMap(r => r.matches).find(m => m.isThirdPlace);
+    };
+    
+    const getThirdPlaceMatchRound = () => {
+      const roundIndex = rounds.value.findIndex(r => r.matches.some(m => m.isThirdPlace));
+      if (roundIndex === -1) return { roundIndex: 0, round: null };
+      return { roundIndex, round: rounds.value[roundIndex] };
+    };
+    
+    const updateThirdPlaceMatch = (field) => {
+      const { roundIndex } = getThirdPlaceMatchRound();
+      const round = rounds.value[roundIndex];
+      if (!round) return;
+      
+      const matchIndex = round.matches.findIndex(m => m.isThirdPlace);
+      if (matchIndex === -1) return;
+      
+      updateMatch(roundIndex, matchIndex, field);
+    };
+    
+    const updateThirdPlaceTopScorer = (field, value) => {
+      const { roundIndex } = getThirdPlaceMatchRound();
+      const round = rounds.value[roundIndex];
+      if (!round) return;
+      
+      const matchIndex = round.matches.findIndex(m => m.isThirdPlace);
+      if (matchIndex === -1) return;
+      
+      updateMatchTopScorer(roundIndex, matchIndex, field, value);
+    };
+    
+    const updateThirdPlaceDateTime = (field, value) => {
+      const { roundIndex } = getThirdPlaceMatchRound();
+      const round = rounds.value[roundIndex];
+      if (!round) return;
+      
+      const matchIndex = round.matches.findIndex(m => m.isThirdPlace);
+      if (matchIndex === -1) return;
+      
+      updateDateTime(roundIndex, matchIndex, field, value);
+    };
+
+    // Toast notification system
+    const toasts = ref([]);
+    const showToast = (message, type = 'success') => {
+      const id = Date.now();
+      toasts.value.push({ id, message, type });
+      
+      // Auto-remove after 4 seconds
+      setTimeout(() => {
+        const index = toasts.value.findIndex(t => t.id === id);
+        if (index >= 0) {
+          toasts.value.splice(index, 1);
+        }
+      }, 4000);
+    };
+    
+    const removeToast = (index) => {
+      toasts.value.splice(index, 1);
+    };
+
     return {
       // ... returned properties and methods ...
       teams, rounds, teamName, bracketGenerated, error, loading, backendDataWarning, // Added warning ref
@@ -1871,7 +2005,10 @@ export default {
       calculateRounds, calculateByes, getRoundNamePreview,
       getTotalMatches, getByeCount,
       getMatchCardColor, getMatchCardBorder, getRoundName,
-      getThirdPlaceMatchIndex // Make available to template
+      getThirdPlaceMatchIndex, getThirdPlaceMatch, getThirdPlaceMatchRound, updateThirdPlaceMatch, updateThirdPlaceTopScorer, updateThirdPlaceDateTime, // Make available to template
+      toasts,
+      showToast,
+      removeToast
     };
   }
 };
@@ -1898,4 +2035,17 @@ button:not(:disabled):hover { transform: translateY(-1px); filter: brightness(1.
 button:not(:disabled):active { transform: translateY(0px); filter: brightness(0.95); }
 button:disabled { opacity: 0.6; }
 @media (max-width: 640px) { .tournament-master { padding: 0.75rem; } h1 { font-size: 1.125rem; } .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Toast animations */
+.toast-enter-active, .toast-leave-active {
+  transition: all 0.5s ease;
+}
+.toast-enter-from {
+  opacity: 0;
+  transform: translateY(-20px);
+}
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
 </style>

@@ -240,25 +240,29 @@ const tournamentPlayerController = {
 
   getTournamentBracket: async (req, res) => {
     try {
-      const tournament = await Tournament.findById(req.params.id, 'bracket status'); // Only select necessary fields
+      const tournament = await Tournament.findById(req.params.id, 'bracket status isPublished stats'); // Also get isPublished and stats
 
       if (!tournament) {
         return res.status(404).json({ message: 'Tournament not found' });
       }
 
-      // Consider adding a status check if brackets should only be visible when Ongoing/Completed
-      // if (tournament.status !== 'Ongoing' && tournament.status !== 'Completed') {
-      //    return res.status(400).json({ message: 'Bracket is not available yet.' });
-      // }
-
-      if (!tournament.bracket || !tournament.bracket.generated) {
-        return res.status(404).json({ message: 'Bracket not generated for this tournament yet.' });
+      // Check if bracket is published for player viewing
+      if (!tournament.isPublished) {
+        return res.status(403).json({ message: 'Tournament bracket has not been published yet' });
       }
 
-      res.json(tournament.bracket);
+      // Check if bracket exists
+      if (!tournament.bracket || !tournament.bracket.generated) {
+        return res.status(404).json({ message: 'Tournament bracket not generated yet' });
+      }
+
+      res.json({ 
+        bracket: tournament.bracket,
+        stats: tournament.stats || {}
+      });
     } catch (error) {
-      console.error(`Error fetching bracket for tournament ${req.params.id}:`, error);
-      res.status(500).json({ message: 'Failed to fetch tournament bracket' });
+      console.error('Error fetching tournament bracket:', error);
+      res.status(500).json({ message: error.message });
     }
   }
 };

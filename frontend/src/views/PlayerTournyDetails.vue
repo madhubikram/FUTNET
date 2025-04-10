@@ -254,11 +254,12 @@
               {{ bracketError }}
             </div>
 
-            <!-- Bracket Display (Raw JSON for now) -->
+            <!-- Bracket Display -->
             <div v-else-if="bracketData" class="text-gray-300">
-              <h3 class="text-lg font-medium mb-2">Bracket Data (Raw)</h3>
-              <pre class="bg-gray-900 p-4 rounded overflow-x-auto text-xs">{{ JSON.stringify(bracketData, null, 2) }}</pre>
-              <!-- TODO: Implement a visual bracket component here -->
+              <ViewerTournamentBracket 
+                :tournament-data="bracketData"
+                :tournament-name="tournament?.name"
+              />
             </div>
 
             <!-- Fallback if no data and no error -->
@@ -466,6 +467,7 @@ import {
   XIcon,    
   PlusIcon 
 } from 'lucide-vue-next'
+import ViewerTournamentBracket from '../components/tournaments/ViewerTournamentBracket.vue'
 
 const route = useRoute()
 

@@ -116,6 +116,10 @@ const tournamentSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    isPublished: {
+        type: Boolean,
+        default: false
+    },
     futsalId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Futsal',
@@ -141,6 +145,20 @@ const tournamentSchema = new mongoose.Schema({
                 // ...
             ],
             generated: false // Flag to check if it's been generated
+        }
+        */
+    },
+    stats: {
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
+        /* Example structure:
+        {
+            firstPlace: { id: 'teamId1', name: 'Team A' },
+            secondPlace: { id: 'teamId2', name: 'Team B' },
+            thirdPlace: { id: 'teamId3', name: 'Team C' },
+            topScorer: { name: 'Player Name', goals: 5 },
+            mvp: 'Player Name',
+            playerOfTournament: 'Player Name'
         }
         */
     }
