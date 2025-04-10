@@ -184,6 +184,41 @@ try {
       }
     });
 
+    // Refresh all tournaments status (for debugging)
+    router.post("/refresh-all-statuses", auth, isFutsalAdmin, async (req, res) => {
+      try {
+        console.log("[REFRESH] Manually refreshing all tournament statuses");
+        
+        // Get all tournaments for this futsal
+        const tournaments = await Tournament.find({ futsalId: req.user.futsal });
+        console.log(`[REFRESH] Found ${tournaments.length} tournaments to refresh`);
+        
+        const results = [];
+        
+        // Update each tournament status
+        for (const tournament of tournaments) {
+          console.log(`[REFRESH] Updating status for tournament: ${tournament.name} (${tournament._id})`);
+          const result = await updateSingleTournamentStatus(tournament._id);
+          results.push({
+            tournamentId: tournament._id,
+            name: tournament.name,
+            oldStatus: result.oldStatus || tournament.status,
+            newStatus: result.newStatus || tournament.status,
+            changed: result.statusChanged || false
+          });
+        }
+        
+        return res.status(200).json({ 
+          success: true, 
+          message: `Refreshed ${tournaments.length} tournaments`,
+          results
+        });
+      } catch (error) {
+        console.error("Error refreshing all tournament statuses:", error);
+        return res.status(500).json({ success: false, message: error.message });
+      }
+    });
+
     console.log('Tournament routes loaded'); // <--- ADD THIS LOG AT THE VERY END of the file
     module.exports = router;
 } catch (error) {

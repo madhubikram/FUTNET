@@ -97,24 +97,24 @@ const tournamentController = {
                 // Check for Ongoing transition
                 try {
                     const startDateTime = new Date(`${tournament.startDate.toISOString().split('T')[0]}T${tournament.startTime || '00:00'}`);
-                    if (now >= startDateTime) {
+                    const endDateTime = tournament.endDate ? 
+                        new Date(`${tournament.endDate.toISOString().split('T')[0]}T${tournament.endTime || '23:59'}`) : 
+                        null;
+                    
+                    // First check if tournament should be completed (end date passed)
+                    if (endDateTime && now >= endDateTime && now >= startDateTime) {
+                        if (tournament.status !== 'Completed') {
+                            tournament.status = 'Completed';
+                            await tournament.save();
+                            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Completed.`);
+                            return tournament;
+                        }
+                    }
+                    // Otherwise, if not yet completed but started, mark as ongoing
+                    else if (now >= startDateTime && tournament.status !== 'Ongoing') {
                         tournament.status = 'Ongoing';
                         await tournament.save();
                         console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Ongoing.`);
-                        return tournament;
-                    }
-                } catch (e) {
-                    console.error(`[Error] Could not parse start date for tournament ${tournament._id}: ${e.message}`);
-                }
-
-                // Check for Completed transition - only if tournament has started
-                try {
-                    const startDateTime = new Date(`${tournament.startDate.toISOString().split('T')[0]}T${tournament.startTime || '00:00'}`);
-                    const endDateTime = tournament.endDate ? new Date(tournament.endDate) : null;
-                    if (endDateTime && now >= endDateTime && now >= startDateTime) {
-                        tournament.status = 'Completed';
-                        await tournament.save();
-                        console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Completed.`);
                         return tournament;
                     }
                 } catch (e) {

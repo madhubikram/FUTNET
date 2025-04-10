@@ -5,10 +5,10 @@
       <AdminSidebarNav v-if="userRole === 'futsalAdmin'" />
       <SidebarNav v-else />
     </div>
-    
+
     <!-- Main Content -->
-    <div 
-      class="flex-1 min-h-screen w-full transition-all duration-500"
+    <div
+      class="flex-1 min-h-screen w-full overflow-x-hidden transition-all duration-500" 
       :class="{
         'md:ml-64': !isCollapsed,
         'md:ml-20': isCollapsed,
@@ -88,7 +88,7 @@ onUnmounted(() => {
 
 /* Mobile specific styles */
 @media (max-width: 768px) {
-  .pb-20 {
+  .pb-20 { /* Note: You had pb-16 in the class bindings, but pb-20 here. Adjust if needed */
     padding-bottom: 5rem; /* Increased padding to account for bottom navigation */
   }
 }

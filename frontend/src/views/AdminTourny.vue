@@ -574,7 +574,7 @@ import PageLayout from '@/components/layout/PageLayout.vue'
 import { useToast } from 'vue-toastification' // Import useToast
 import {
   PlusIcon, CalendarIcon, UsersIcon, TrophyIcon,
-  Loader2Icon,
+  Loader2Icon
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router';
 

@@ -41,7 +41,8 @@
             :class="{
               'bg-green-500/20 text-green-400 border border-green-500/20': tournament?.status === 'Upcoming',
               'bg-blue-500/20 text-blue-400 border border-blue-500/20': tournament?.status === 'Ongoing',
-              'bg-gray-500/20 text-gray-400 border border-gray-700/20': tournament?.status === 'Completed'
+              'bg-gray-500/20 text-gray-400 border border-gray-700/20': tournament?.status === 'Completed',
+              'bg-orange-500/20 text-orange-400 border border-orange-500/20': tournament?.status === 'Cancelled (Low Teams)'
             }"
           >
             {{ tournament?.status }}
@@ -79,6 +80,48 @@
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <!-- Left Column: Tournament Details -->
             <div class="lg:col-span-2 space-y-8">
+              <!-- Tournament schedule card with improved date/time display -->
+              <section class="bg-gray-800 rounded-xl overflow-hidden">
+                <div class="p-6 border-b border-gray-700">
+                  <h3 class="text-xl font-semibold text-white mb-4">Tournament Schedule</h3>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                      <div class="flex items-start gap-4">
+                        <div class="rounded-full bg-green-500/10 p-3">
+                          <CalendarIcon class="h-5 w-5 text-green-400" />
+                        </div>
+                        <div>
+                          <h4 class="text-sm font-medium text-green-400">Tournament Dates</h4>
+                          <p class="text-lg text-white mt-1">{{ formatDate(tournament?.startDate) }}</p>
+                          <p v-if="tournament?.startDate !== tournament?.endDate" class="text-lg text-white">
+                            to {{ formatDate(tournament?.endDate) }}
+                          </p>
+                          <p class="text-sm text-gray-400 mt-1">Starting at {{ formatTime(tournament?.startTime) }}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="space-y-4">
+                      <div class="flex items-start gap-4">
+                        <div class="rounded-full bg-amber-500/10 p-3">
+                          <ClockIcon class="h-5 w-5 text-amber-400" />
+                        </div>
+                        <div>
+                          <h4 class="text-sm font-medium text-amber-400">Registration Deadline</h4>
+                          <p class="text-lg text-white mt-1">{{ formatDate(tournament?.registrationDeadline) }}</p>
+                          <p class="text-sm text-gray-400 mt-1">Closes at {{ formatTime(tournament?.registrationDeadlineTime) }}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Team Registration Status -->
+                <div class="p-6" v-if="tournament">
+                  <!-- Existing team information content... -->
+                </div>
+              </section>
+
               <!-- Key Information -->
               <section class="bg-gray-800 rounded-xl p-6 space-y-4">
                 <h2 class="text-xl font-semibold text-white">Tournament Details</h2>
@@ -238,35 +281,19 @@
           </section>
         </div>
 
-        <div v-if="currentTab === 'bracket'" class="space-y-6">
-          <!-- Bracket Section -->
-          <section class="bg-gray-800 rounded-xl p-6">
-            <h2 class="text-xl font-semibold text-white mb-4">Tournament Bracket</h2>
-
-            <!-- Loading State -->
-            <div v-if="bracketLoading" class="flex justify-center items-center py-8">
-              <Loader2Icon class="w-6 h-6 text-green-400 animate-spin" />
-              <span class="ml-2 text-gray-400">Loading bracket...</span>
-            </div>
-
-            <!-- Error State -->
-            <div v-else-if="bracketError" class="text-center py-8 text-red-400">
-              {{ bracketError }}
-            </div>
-
-            <!-- Bracket Display -->
-            <div v-else-if="bracketData" class="text-gray-300">
-              <ViewerTournamentBracket 
-                :tournament-data="bracketData"
-                :tournament-name="tournament?.name"
-              />
-            </div>
-
-            <!-- Fallback if no data and no error -->
-            <div v-else class="text-center text-gray-400 py-8">
-              Bracket will be generated after the registration deadline passes, provided enough teams have registered.
-            </div>
-          </section>
+        <div v-if="currentTab === 'bracket'" class="w-full overflow-hidden">
+          <div v-if="bracketLoading" class="flex justify-center items-center p-16">
+            <Loader2Icon class="animate-spin h-10 w-10 text-emerald-500" />
+          </div>
+          <div v-else-if="bracketError" class="p-6 bg-red-500/10 border border-red-500/30 rounded-lg text-center">
+            <p class="text-red-400">{{ bracketError }}</p>
+          </div>
+          <div v-else-if="bracketData" class="w-full overflow-hidden bracket-tab">
+            <ViewerTournamentBracket :tournament-data="bracketData" :tournament-name="tournament?.name || 'Tournament'" />
+          </div>
+          <div v-else class="p-6 bg-gray-800/50 border border-gray-700 rounded-lg text-center">
+            <p class="text-gray-400">No bracket information available for this tournament.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -683,15 +710,22 @@ const handleRegistration = async () => {
   }
 };
 
-const formatDate = (date) => {
-  if (!date) return ''
-  return new Date(date).toLocaleDateString('en-US', {
+const formatDate = (dateString) => {
+  if (!dateString) return '-';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString;
+  return new Intl.DateTimeFormat('en-US', { 
     weekday: 'long',
-    year: 'numeric',
-    month: 'long',
+    year: 'numeric', 
+    month: 'long', 
     day: 'numeric'
-  })
-}
+  }).format(date);
+};
+
+const formatTime = (timeString) => {
+  if (!timeString) return '-';
+  return timeString;
+};
 
 // Function to update tabs based on tournament status or bracket availability
 const updateTabs = () => {
@@ -724,14 +758,11 @@ watch(tournament, (newTournament) => {
 
 // Fetch Bracket Data
 const fetchBracketData = async () => {
-  if (!tournament.value?._id) return;
-
-  bracketLoading.value = true;
-  bracketError.value = null;
-  bracketData.value = null; // Clear previous data
-
   try {
-    const response = await fetch(`http://localhost:5000/api/player/tournaments/${tournament.value._id}/bracket`, {
+    bracketLoading.value = true;
+    bracketError.value = null;
+    
+    const response = await fetch(`http://localhost:5000/api/player/tournaments/${route.params.id}/bracket`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
@@ -739,17 +770,21 @@ const fetchBracketData = async () => {
 
     if (!response.ok) {
       const errorData = await response.json();
-      // Handle specific case where bracket is not generated yet
-      if (response.status === 404 && errorData.message.includes('not generated')) {
-        throw new Error('Bracket not generated yet.');
-      } else {
-        throw new Error(errorData.message || 'Failed to fetch bracket data');
-      }
+      throw new Error(errorData.message || 'Failed to fetch bracket data');
     }
 
-    bracketData.value = await response.json();
-    console.log('Fetched bracket data:', bracketData.value);
-
+    const data = await response.json();
+    
+    // Make sure we have tournament data before setting bracket data
+    if (tournament.value && data) {
+      // Pass both bracket data and tournament status to the component
+      bracketData.value = {
+        ...data,
+        status: tournament.value.status
+      };
+    } else {
+      throw new Error('Tournament or bracket data is missing');
+    }
   } catch (err) {
     console.error('Error fetching bracket data:', err);
     bracketError.value = err.message;
@@ -780,3 +815,18 @@ onMounted(() => {
   fetchTournamentDetails()
 })
 </script>
+
+<style scoped>
+/* Ensure bracket tab has proper width */
+.bracket-tab {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+@media (max-width: 768px) {
+  .bracket-tab {
+    padding: 0;
+  }
+}
+</style>

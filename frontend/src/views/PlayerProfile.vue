@@ -88,7 +88,7 @@
                   
                   <div class="bg-gray-700/50 rounded-lg p-3 md:p-4 text-center">
                     <p class="text-xl md:text-2xl font-bold text-blue-400">{{ stats.tournamentsJoined }}</p>
-                    <p class="text-xs text-gray-400 mt-1">Tournaments</p>
+                    <p class="text-xs text-gray-400 mt-1">Tournaments Joined</p>
                   </div>
                 </div>
               </div>
@@ -422,8 +422,86 @@
         console.warn('Error fetching booking stats:', error);
       }
       
-      // Get tournaments count
-      stats.value.tournamentsJoined = 0; // Mock value for now
+      // Get tournaments count from tournament history
+      try {
+        const tournamentsResponse = await fetch('http://localhost:5000/api/tournaments/history', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (tournamentsResponse.ok) {
+          const tournamentsData = await tournamentsResponse.json();
+          stats.value.tournamentsJoined = tournamentsData.tournaments?.length || 0;
+        } else if (tournamentsResponse.status === 403) {
+          // If endpoint is not available or forbidden, try alternative endpoint
+          console.warn('Tournament history endpoint forbidden, trying alternative endpoint');
+          
+          try {
+            // Try to get registered tournaments from the user profile or another endpoint
+            const userTournamentsResponse = await fetch('http://localhost:5000/api/profile/tournaments', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (userTournamentsResponse.ok) {
+              const userData = await userTournamentsResponse.json();
+              stats.value.tournamentsJoined = userData.tournaments?.length || 0;
+            } else {
+              // If all else fails, estimate from user profile data
+              // This is just a fallback if API endpoints aren't available
+              stats.value.tournamentsJoined = profile.value.tournaments?.length || 0;
+            }
+          } catch (innerError) {
+            console.warn('Error fetching alternative tournament data:', innerError);
+            stats.value.tournamentsJoined = profile.value.tournaments?.length || 0;
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching tournament history:', error);
+        // Fallback to estimated value if we can't get the data
+        stats.value.tournamentsJoined = profile.value.tournaments?.length || 0;
+      }
+      
+      // Get tournaments count from player's registrations
+      try {
+        // Use the my-registrations endpoint from the tournament player routes that we found in the code
+        const tournamentsResponse = await fetch('http://localhost:5000/api/player/tournaments/my-registrations', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (tournamentsResponse.ok) {
+          const registrationsData = await tournamentsResponse.json();
+          // Count the registrations
+          stats.value.tournamentsJoined = Array.isArray(registrationsData) ? registrationsData.length : 0;
+        } else {
+          // Try alternative endpoints if first one fails
+          console.warn('My registrations endpoint returned status:', tournamentsResponse.status);
+          
+          try {
+            // Try to get all tournaments and filter registered ones
+            const allTournamentsResponse = await fetch('http://localhost:5000/api/player/tournaments', {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (allTournamentsResponse.ok) {
+              const allTournaments = await allTournamentsResponse.json();
+              // Filter for tournaments where isRegistered is true
+              const registeredTournaments = Array.isArray(allTournaments) 
+                ? allTournaments.filter(t => t.isRegistered) 
+                : [];
+              stats.value.tournamentsJoined = registeredTournaments.length;
+            } else {
+              // Default fallback
+              stats.value.tournamentsJoined = 0;
+            }
+          } catch (innerError) {
+            console.warn('Error fetching all tournaments data:', innerError);
+            stats.value.tournamentsJoined = 0;
+          }
+        }
+      } catch (error) {
+        console.warn('Error fetching tournament registrations:', error);
+        // Set a default value
+        stats.value.tournamentsJoined = 0;
+      }
       
     } catch (error) {
       console.error('Error fetching stats:', error);
