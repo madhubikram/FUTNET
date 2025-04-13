@@ -43,8 +43,21 @@ const bookingSchema = new mongoose.Schema({
     enum: ['pending', 'paid', 'refunded', 'failed', 'unpaid'],
     default: 'pending'
   },
+  purchaseOrderId: {
+    type: String,
+    index: true,
+    sparse: true
+  },
+  pidx: {
+    type: String,
+    index: true,
+    sparse: true
+  },
   paymentDetails: {
-    method: String,
+    method: {
+      type: String,
+      enum: ['offline', 'khalti', 'esewa', 'loyalty', 'free']
+    },
     transactionId: String,
     paidAmount: Number,
     paidAt: Date
@@ -66,6 +79,15 @@ const bookingSchema = new mongoose.Schema({
   isSlotFree: {
     type: Boolean,
     default: false
+  },
+  reminderSent: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  reservationExpiresAt: {
+    type: Date,
+    index: { expires: '1m' }
   }
 }, {
   timestamps: true

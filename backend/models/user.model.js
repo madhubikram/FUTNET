@@ -41,6 +41,18 @@ futsal: {
 loyalty: {
   type: mongoose.Schema.Types.ObjectId,
   ref: 'Loyalty'
+},
+// Field to store the Web Push subscription object
+pushSubscription: {
+  endpoint: { type: String },
+  keys: {
+    p256dh: { type: String },
+    auth: { type: String }
+  },
+  // Select: false ensures it's not returned by default unless explicitly requested
+  // select: false 
+  // Note: Keep select as true (default) or remove select:false for the notification service to retrieve it.
+  // If you make it select: false, ensure notification.service.js uses .select('+pushSubscription') when finding the user.
 }
 });
 

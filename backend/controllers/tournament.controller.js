@@ -3,6 +3,9 @@ const Tournament = require('../models/tournament.model');
 const fs = require('fs').promises;
 const path = require('path');
 const TournamentRegistration = require('../models/tournament.registration.model');
+const User = require('../models/user.model');
+const { createNotification } = require('../utils/notification.service');
+const moment = require('moment');
 const { generateSingleEliminationBracket } = require('../utils/bracketGenerator'); // Import generator
 
 // Helper function to delete file
@@ -45,6 +48,12 @@ const tournamentController = {
                 halfDuration: Number(req.body.halfDuration),
                 breakDuration: Number(req.body.breakDuration)
             };
+            
+            // Default endTime if endDate exists and endTime is missing
+            if (tournamentData.endDate && !tournamentData.endTime) {
+                console.log(`[Create Tournament] endTime missing for endDate ${tournamentData.endDate}. Defaulting endTime to 23:59.`);
+                tournamentData.endTime = '23:59';
+            }
 
             // Remove the flattened prize fields if they exist from spread
             delete tournamentData['prizes.first'];
@@ -76,49 +85,92 @@ const tournamentController = {
             // Update status before sending
             const now = new Date();
             const updatedTournaments = await Promise.all(tournaments.map(async tournament => {
+                let statusChanged = false; // Flag to track if status was changed in this check
+                const originalStatus = tournament.status;
+
                 // First check for cancellation due to low teams after deadline
                 try {
                     const deadlineDateTime = new Date(`${tournament.registrationDeadline.toISOString().split('T')[0]}T${tournament.registrationDeadlineTime || '23:59'}`);
-                    if (now > deadlineDateTime && tournament.registeredTeams < tournament.minTeams) {
+                    if (now > deadlineDateTime && tournament.registeredTeams < tournament.minTeams && tournament.status !== 'Cancelled (Low Teams)') {
+                        console.log(`[Status Update - Low Teams] Tournament ${tournament.name} (${tournament._id}) being cancelled.`);
                         tournament.status = 'Cancelled (Low Teams)';
                         await tournament.save();
-                        console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) cancelled due to low teams.`);
-                        return tournament;
+                        statusChanged = true; // Mark that status changed here
+                        console.log(`[Status Update - Low Teams] Saved status for ${tournament.name}.`);
+
+                        // --- Send Cancellation Notifications (Low Teams) --- 
+                        try {
+                            const reason = "due to low team registration";
+                            const registrations = await TournamentRegistration.find({ tournament: tournament._id }).populate('user', 'name');
+                            const participants = registrations.map(reg => reg.user).filter(Boolean);
+                            
+                            for (const participant of participants) {
+                                await createNotification(
+                                    participant._id,
+                                    `Tournament Cancelled: ${tournament.name}`,
+                                    `The tournament "${tournament.name}" has been cancelled ${reason}. Registration fees will be refunded.`,
+                                    'tournament_cancel', // Specific type
+                                    `/my-profile` // Link to profile or transactions page
+                                );
+                            }
+                            console.log(`[Notification - Low Teams] Sent cancellation notifications to ${participants.length} players for ${tournament._id}.`);
+
+                            if (tournament.futsalId) {
+                                const admin = await User.findOne({ futsal: tournament.futsalId, role: 'futsalAdmin' });
+                                if (admin) {
+                                    await createNotification(
+                                        admin._id,
+                                        `Tournament Auto-Cancelled: ${tournament.name}`,
+                                        `"${tournament.name}" was automatically cancelled ${reason} (${tournament.registeredTeams}/${tournament.minTeams} teams).`,
+                                        'tournament_cancel_admin',
+                                        `/admin/tournaments/${tournament._id}` 
+                                    );
+                                    console.log(`[Notification - Low Teams] Sent cancellation notification to admin ${admin._id} for ${tournament._id}.`);
+                                }
+                            }
+                        } catch (notifyError) {
+                            console.error(`[Notification - Low Teams] Error sending cancellation notifications for ${tournament._id}:`, notifyError);
+                        }
+                        // --- End Notifications ---
+
+                        return tournament; // Return the updated tournament
                     }
                 } catch (e) {
-                    console.error(`[Error] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
+                    console.error(`[Error - Low Teams Check] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
                 }
 
-                // Skip further status updates if already Cancelled
+                // Skip further status updates if already Cancelled (including the check above)
                 if (tournament.status === 'Cancelled (Low Teams)') {
                     return tournament;
                 }
 
-                // Check for Ongoing transition
+                // --- Other status checks (Ongoing, Completed) - only if not cancelled above --- 
                 try {
                     const startDateTime = new Date(`${tournament.startDate.toISOString().split('T')[0]}T${tournament.startTime || '00:00'}`);
                     const endDateTime = tournament.endDate ? 
                         new Date(`${tournament.endDate.toISOString().split('T')[0]}T${tournament.endTime || '23:59'}`) : 
                         null;
                     
-                    // First check if tournament should be completed (end date passed)
                     if (endDateTime && now >= endDateTime && now >= startDateTime) {
                         if (tournament.status !== 'Completed') {
-                            tournament.status = 'Completed';
-                            await tournament.save();
-                            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Completed.`);
-                            return tournament;
+                             if (originalStatus !== 'Completed') { // Avoid redundant logs/saves if already completed
+                                tournament.status = 'Completed';
+                                await tournament.save();
+                                console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Completed.`);
+                                // Note: Notifications for start/end are handled by the separate utility now
+                            }
                         }
                     }
-                    // Otherwise, if not yet completed but started, mark as ongoing
                     else if (now >= startDateTime && tournament.status !== 'Ongoing') {
-                        tournament.status = 'Ongoing';
-                        await tournament.save();
-                        console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Ongoing.`);
-                        return tournament;
+                        if (originalStatus !== 'Ongoing') { // Avoid redundant logs/saves
+                            tournament.status = 'Ongoing';
+                            await tournament.save();
+                            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Ongoing.`);
+                            // Note: Notifications for start/end are handled by the separate utility now
+                        }
                     }
                 } catch (e) {
-                    console.error(`[Error] Could not parse dates for tournament ${tournament._id}: ${e.message}`);
+                    console.error(`[Error - Status Check] Could not parse dates for tournament ${tournament._id}: ${e.message}`);
                 }
 
                 return tournament;
@@ -240,6 +292,12 @@ const tournamentController = {
                 breakDuration: Number(req.body.breakDuration)
             };
 
+            // Default endTime if endDate exists and endTime is missing
+            if (updateData.endDate && !updateData.endTime) {
+                 console.log(`[Update Tournament] endTime missing for endDate ${updateData.endDate}. Defaulting endTime to 23:59.`);
+                 updateData.endTime = '23:59';
+            }
+
             if (req.file) {
                 // Handle banner update - potentially delete old banner
                 const oldTournament = await Tournament.findById(req.params.id);
@@ -280,18 +338,57 @@ const tournamentController = {
 
     deleteTournament: async (req, res) => {
         try {
-            const tournament = await Tournament.findOneAndDelete({
+            // Step 1: Find the tournament first without deleting it
+            const tournamentToDelete = await Tournament.findOne({
                 _id: req.params.id,
                 futsalId: req.user.futsal
             });
 
-            if (!tournament) {
+            if (!tournamentToDelete) {
                 return res.status(404).json({ message: 'Tournament not found' });
             }
 
-            res.json({ message: 'Tournament deleted successfully' });
+            // Step 2: Find registered users
+            const registrations = await TournamentRegistration.find({ tournament: tournamentToDelete._id }).populate('user', '_id');
+            const participants = registrations.map(reg => reg.user).filter(Boolean); // Get user objects
+
+            // Step 3: Send notifications (best effort)
+            if (participants.length > 0) {
+                console.log(`[Delete Notify] Sending notifications to ${participants.length} users for deleted tournament ${tournamentToDelete._id}`);
+                for (const participant of participants) {
+                    try {
+                        await createNotification(
+                            participant._id,
+                            `Tournament Removed: ${tournamentToDelete.name}`,
+                            `The tournament "${tournamentToDelete.name}" you were registered for has been removed by the organizer. Please contact them regarding any applicable refunds.`,
+                            'tournament_cancel', // Using existing type, message clarifies context
+                            `/my-profile` // Link to user's profile/dashboard
+                        );
+                    } catch (notifyError) {
+                        // Log error but continue deletion even if notification fails
+                        console.error(`[Delete Notify] Failed to send notification to user ${participant._id} for tournament ${tournamentToDelete._id}:`, notifyError);
+                    }
+                }
+            } else {
+                console.log(`[Delete Notify] No registered users found to notify for deleted tournament ${tournamentToDelete._id}`);
+            }
+            
+            // Step 4: Delete the banner file if it exists
+            if (tournamentToDelete.banner) {
+                const bannerPath = path.join(__dirname, '..', tournamentToDelete.banner);
+                 await deleteFile(bannerPath).catch(err => console.error(`[Delete Notify] Failed to delete banner file ${bannerPath}:`, err));
+            }
+
+
+            // Step 5: Now delete the tournament document
+            await Tournament.findByIdAndDelete(tournamentToDelete._id);
+
+            console.log(`[Delete Notify] Successfully deleted tournament ${tournamentToDelete._id} after notifications.`);
+            res.json({ message: 'Tournament deleted successfully and registered users notified.' });
+
         } catch (error) {
-            res.status(500).json({ message: error.message });
+            console.error(`[Delete Notify] Error deleting tournament ${req.params.id}:`, error);
+            res.status(500).json({ message: `Error deleting tournament: ${error.message}` });
         }
     },
 

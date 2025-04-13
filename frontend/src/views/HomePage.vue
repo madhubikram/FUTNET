@@ -16,7 +16,7 @@
 
           <div class="flex items-center space-x-8">
             <LoyaltyPointsDisplay />
-            <BellIcon class="w-6 h-6 text-gray-200 cursor-pointer hover:text-green-400 transition-colors duration-300" />
+            <NotificationBell />
           </div>
         </div>
 
@@ -214,8 +214,9 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import PageLayout from '@/components/layout/PageLayout.vue'
 import FutsalCard from '@/components/features/FutsalCard.vue'
-import {BellIcon, FilterIcon, MapIcon, ArrowUpDownIcon, XIcon, SearchXIcon } from 'lucide-vue-next'
+import { FilterIcon, MapIcon, ArrowUpDownIcon, XIcon, SearchXIcon } from 'lucide-vue-next'
 import LoyaltyPointsDisplay from '@/components/features/LoyaltyPointsDisplay.vue'
+import NotificationBell from '@/components/features/NotificationBell.vue'
 
 const error = ref(null);
 const router = useRouter();

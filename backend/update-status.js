@@ -1,107 +1,103 @@
-// update-status.js - script to test and run tournament status updates
+// backend/update-status.js - Modified for Specific Tournament Testing
 require('dotenv').config();
 const mongoose = require('mongoose');
-const { updateTournamentStatuses, updateSingleTournamentStatus } = require('./utils/tournamentStatus');
+// Keep both imports just in case, though single update isn't called now
+const { updateTournamentStatuses, updateSingleTournamentStatus } = require('./utils/tournamentStatus'); 
 const Tournament = require('./models/tournament.model');
 
-// Connect to MongoDB
+// --- Configuration for Test ---
+const TARGET_TOURNAMENT_ID = '67fa2d4becbfeacb07bb5e2d'; 
+const TEST_SCENARIO = 'end'; // Should be 'end' for this test
+const SIMULATE_ENOUGH_TEAMS = true; 
+// --- End Configuration ---
+
+if (!TARGET_TOURNAMENT_ID || TARGET_TOURNAMENT_ID === 'YOUR_TEST_TOURNAMENT_ID') {
+    console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    console.error("!!! ERROR: Please paste your actual test tournament ID   !!!");
+    console.error("!!! into the TARGET_TOURNAMENT_ID variable in this script. !!!");
+    console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    process.exit(1);
+}
+
 mongoose.connect(process.env.MONGODB_URI)
   .then(async () => {
-    console.log('Connected to MongoDB.');
-    
+    console.log('Connected to MongoDB for testing status update.');
+
     try {
-      // Let's find all tournaments with "Test" in the name, regardless of status
-      const testTournaments = await Tournament.find({
-        name: /Test Tournament/i // Looking specifically for "Test Tournament"
-      });
-      
-      if (testTournaments.length > 0) {
-        console.log(`\n===== FOUND ${testTournaments.length} "Test Tournament" TOURNAMENTS =====`);
-        
-        // Fix each of them
-        for (const tournament of testTournaments) {
-          console.log(`\n==== CHECKING TOURNAMENT: ${tournament.name} (${tournament._id}) ====`);
-          console.log(`Current status: ${tournament.status}`);
-          console.log(`Registration deadline: ${tournament.registrationDeadline}`);
-          console.log(`Start date: ${tournament.startDate}`);
-          console.log(`End date: ${tournament.endDate}`);
-          
-          // All test tournaments should be "Upcoming" if their end date is in the future
-          // This is a forced override for the specific case mentioned
-          if (tournament.endDate > new Date() && tournament.status !== 'Upcoming') {
-            console.log(`\n*** FIXING: "${tournament.name}" has future end date but status is "${tournament.status}" ***`);
-            
-            // Force set to Upcoming
-            const oldStatus = tournament.status;
-            tournament.status = 'Upcoming';
-            await tournament.save();
-            
-            console.log(`*** FIXED: Status changed from "${oldStatus}" to "Upcoming" ***`);
-          } else {
-            console.log(`No fix needed for this tournament.`);
-          }
-        }
-      } else {
-        console.log('No "Test Tournament" found in the database.');
-        
-        // Let's find any tournaments with "test" in the name with any casing
-        const anyTestTournaments = await Tournament.find({
-          name: { $regex: 'test', $options: 'i' }
-        });
-        
-        if (anyTestTournaments.length > 0) {
-          console.log(`\nFound ${anyTestTournaments.length} tournaments with "test" in the name:`);
-          for (const t of anyTestTournaments) {
-            console.log(`- ${t.name} (${t._id})`);
-            console.log(`  Status: ${t.status}`);
-            console.log(`  End date: ${t.endDate}`);
-            
-            // Fix any that have future end dates but are marked completed
-            if (t.endDate > new Date() && t.status === 'Completed') {
-              t.status = 'Upcoming';
-              await t.save();
-              console.log(`  FIXED: Changed status from "Completed" to "Upcoming"`);
-            }
-          }
-        }
-        
-        // Let's also try fixing by date range - find tournaments created today with future end dates
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const recentTournaments = await Tournament.find({
-          createdAt: { $gte: today },
-          endDate: { $gt: new Date() },
-          status: 'Completed'
-        });
-        
-        if (recentTournaments.length > 0) {
-          console.log(`\nFound ${recentTournaments.length} tournaments created today with future end dates but marked as Completed:`);
-          for (const t of recentTournaments) {
-            console.log(`- ${t.name} (${t._id})`);
-            
-            // Force set to Upcoming
-            t.status = 'Upcoming';
-            await t.save();
-            console.log(`  FIXED: Changed status from "Completed" to "Upcoming"`);
-          }
-        }
+      let testTournament = await Tournament.findById(TARGET_TOURNAMENT_ID); 
+
+      if (!testTournament) { 
+          console.log(`Test tournament with ID ${TARGET_TOURNAMENT_ID} not found.`);
+          return; 
       }
-      
-      // Run the general status update function as well
-      console.log('\nRunning general status update...');
-      const result = await updateTournamentStatuses();
-      console.log('Status update complete:', result);
-      
-    } catch (error) {
-      console.error('Error running status update:', error);
-    } finally {
-      // Close the connection when done
-      await mongoose.connection.close();
-      console.log('Database connection closed.');
+
+      console.log(`\n--- Testing Scenario: '${TEST_SCENARIO.toUpperCase()}' for Tournament: ${testTournament.name} (${testTournament._id}) ---`);
+      console.log(`Original Status: ${testTournament.status}`);
+      console.log(`Original registeredTeams: ${testTournament.registeredTeams}, minTeams required: ${testTournament.minTeams}`);
+
+      const now = new Date();
+      const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+      const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000);
+      const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000); 
+
+      // --- Force Conditions Based on Scenario ---
+      if (TEST_SCENARIO === 'start') {
+          // Use UTC methods to get the correct HH:MM strings for UTC time
+          const startUTC_HH = String(fiveMinutesAgo.getUTCHours()).padStart(2, '0');
+          const startUTC_MM = String(fiveMinutesAgo.getUTCMinutes()).padStart(2, '0');
+          const endUTC_HH = String(oneHourFromNow.getUTCHours()).padStart(2, '0');
+          const endUTC_MM = String(oneHourFromNow.getUTCMinutes()).padStart(2, '0');
+          testTournament.startDate = fiveMinutesAgo; 
+          testTournament.startTime = `${startUTC_HH}:${startUTC_MM}`;
+          testTournament.endDate = oneHourFromNow;
+          testTournament.endTime = `${endUTC_HH}:${endUTC_MM}`;
+          testTournament.status = 'Upcoming'; 
+          console.log(`  Set startDate to past: ${testTournament.startDate.toISOString()}, startTime(UTC) to: ${testTournament.startTime}`);
+          console.log(`  Set endDate to future: ${testTournament.endDate.toISOString()}, endTime(UTC) to: ${testTournament.endTime}`);
+          console.log(`  Set status to: ${testTournament.status}`);
+
+      } else if (TEST_SCENARIO === 'end') {
+          // Use UTC methods to get the correct HH:MM strings for UTC time
+          const startUTC_HH = String(tenMinutesAgo.getUTCHours()).padStart(2, '0');
+          const startUTC_MM = String(tenMinutesAgo.getUTCMinutes()).padStart(2, '0');
+          const endUTC_HH = String(fiveMinutesAgo.getUTCHours()).padStart(2, '0');
+          const endUTC_MM = String(fiveMinutesAgo.getUTCMinutes()).padStart(2, '0');
+          testTournament.startDate = tenMinutesAgo;
+          testTournament.startTime = `${startUTC_HH}:${startUTC_MM}`; 
+          testTournament.endDate = fiveMinutesAgo;
+          testTournament.endTime = `${endUTC_HH}:${endUTC_MM}`; 
+          testTournament.status = 'Ongoing'; 
+          console.log(`  Set endDate to past: ${testTournament.endDate.toISOString()}, endTime(UTC) to: ${testTournament.endTime}`); 
+          console.log(`  Set status to: ${testTournament.status}`);
+      } else { 
+          console.error("Invalid TEST_SCENARIO. Use 'start' or 'end'.");
+          return; 
+      }
+
+      if (SIMULATE_ENOUGH_TEAMS && testTournament.registeredTeams < testTournament.minTeams) { 
+          testTournament.registeredTeams = testTournament.minTeams; 
+          console.log(`  SIMULATED registeredTeams to: ${testTournament.registeredTeams} (to bypass cancellation check)`);
+       }
+
+      await testTournament.save();
+      console.log(`Test tournament saved with forced conditions.`);
+
+      // --- Now call the MAIN function which should detect the change AND trigger notifications ---
+       console.log('\n>>> Calling updateTournamentStatuses() to check for changes and trigger notifications...');
+       const mainUpdateResult = await updateTournamentStatuses();
+       console.log('\n<<< updateTournamentStatuses() finished executing.');
+       console.log('Main Update Result:', mainUpdateResult);
+      // --- End Notification Trigger ---
+
+    } catch (error) { 
+        console.error('\n!!! Error during test script execution:', error);
+    } 
+    finally { 
+        await mongoose.connection.close();
+        console.log('\nDatabase connection closed.');
     }
   })
-  .catch(err => {
-    console.error('MongoDB connection error:', err);
-    process.exit(1);
-  }); 
+  .catch(err => { 
+      console.error('MongoDB connection error:', err);
+      process.exit(1);
+   }); 

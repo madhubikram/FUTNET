@@ -663,15 +663,17 @@ const confirmCancel = async () => {
   if (!selectedBooking.value) return; 
   isSubmitting.value = true;
   try { 
-    // Use the correct admin status update endpoint
+    // --- FIX: Use the bulk-status endpoint for single cancellation ---
     await axios.patch(
-      `/api/bookings/admin/${selectedBooking.value._id}/status`,
+      `/api/bookings/admin/bulk-status`, // Correct endpoint
       { 
-        status: 'cancelled', 
-        reason: cancelReason.value || 'Cancelled by Admin' // Send reason in body
+        ids: [selectedBooking.value._id], // Send ID in an array
+        status: 'cancelled' 
+        // Reason is handled by the bulk endpoint internally, so removed from here
       }, 
       { withCredentials: true }
     );
+    // --- End Fix ---
     toast.success('Booking cancelled successfully'); 
     await fetchData(); 
     closeModal(); 

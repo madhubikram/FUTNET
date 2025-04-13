@@ -52,16 +52,6 @@
           </div>
         </div>
 
-        <!-- Payment required message -->
-        <div v-if="!requiresPrepayment && bookingDetails.requiresPayment" class="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 mt-4">
-          <p class="text-yellow-400 text-sm mb-2">
-            <strong>Note:</strong> This is currently a demonstration. In the production version, payment would be required for bookings beyond your free slots.
-          </p>
-          <p class="text-gray-300">
-            For demonstration purposes, all bookings will be processed as free.
-          </p>
-        </div>
-
         <!-- Free Slots Usage Info -->
         <div v-if="!requiresPrepayment && !bookingDetails.requiresPayment" class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
           <p class="text-blue-400 text-sm">
@@ -109,30 +99,26 @@
           Cancel
         </button>
         
-        <!-- Different buttons based on prepayment requirement -->
+        <!-- Different buttons based on prepayment requirement and free slots -->
         <button
-          v-if="requiresPrepayment"
-          disabled
-          class="px-6 py-2 bg-gray-600 text-white rounded-lg opacity-50 cursor-not-allowed"
-        >
-          Payment Required (Coming Soon)
-        </button>
-        <button
-          v-else-if="bookingDetails.requiresPayment"
-          disabled
-          class="px-6 py-2 bg-gray-600 text-white rounded-lg opacity-50 cursor-not-allowed"
-        >
-          Please Select Payment Method
-        </button>
-        <button
-          v-else
-          @click="onConfirmBooking"
+          v-if="requiresPrepayment || bookingDetails.requiresPayment" 
+          @click="onConfirmBooking" 
           :disabled="isProcessing"
-          class="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 
-                disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 
+                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
-          Confirm Booking
+          Pay with Khalti
+        </button>
+        <button
+          v-else 
+          @click="onConfirmBooking" 
+          :disabled="isProcessing"
+          class="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 
+                 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+        >
+          <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
+          Confirm Booking (Free)
         </button>
       </div>
     </template>

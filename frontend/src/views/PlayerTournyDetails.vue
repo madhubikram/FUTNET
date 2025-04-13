@@ -495,8 +495,12 @@ import {
   PlusIcon 
 } from 'lucide-vue-next'
 import ViewerTournamentBracket from '../components/tournaments/ViewerTournamentBracket.vue'
+import { useToast } from 'vue-toastification'
+import { useApi } from '@/composables/useApi'
 
 const route = useRoute()
+const toast = useToast()
+const { fetchData, error: apiError } = useApi()
 
 const tabs = ref([
   { id: 'details', name: 'Details' },
@@ -612,27 +616,21 @@ const removeSubstitute = (index) => {
 };
 
 const fetchTournamentDetails = async () => {
+  const context = 'FETCH_TOURNEY_DETAILS';
   try {
     loading.value = true;
     error.value = null;
+    log('INFO', context, `Fetching details for tournament ${route.params.id}`);
     
-    const response = await fetch(`http://localhost:5000/api/player/tournaments/${route.params.id}`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to fetch tournament details');
-    }
-
-    tournament.value = await response.json();
+    tournament.value = await fetchData(`/player/tournaments/${route.params.id}`);
+    
+    log('INFO', context, `Successfully fetched tournament details for ${route.params.id}`);
     console.log('Fetched tournament:', tournament.value);
 
   } catch (err) {
-    console.error('Error fetching tournament:', err);
-    error.value = err.message;
+    const errorMsg = apiError.value || err.message || 'Failed to fetch tournament details';
+    log('ERROR', context, `Error fetching tournament ${route.params.id}`, { error: errorMsg });
+    error.value = errorMsg;
   } finally {
     loading.value = false;
   }
@@ -650,16 +648,18 @@ const openRegistrationModal = () => {
 };
 
 const handleRegistration = async () => {
+  const context = 'FRONTEND_TOURNAMENT_REGISTER';
   if (!isFormValid.value) {
+    log('WARN', context, 'Registration form invalid. Aborting.');
     return;
   }
 
   try {
     isSubmitting.value = true;
-    
+    log('INFO', context, `Initiating registration for Tournament: ${tournament.value._id}, Team: ${registrationForm.value.teamName}`);
+
     // Format the registration data to match what the backend expects
     const registrationData = {
-      tournamentId: tournament.value._id,
       teamName: registrationForm.value.teamName,
       players: [
         {
@@ -680,33 +680,47 @@ const handleRegistration = async () => {
         }))
       ]
     };
-    
-    const response = await fetch(`http://localhost:5000/api/player/tournaments/${tournament.value._id}/register`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(registrationData)
-    });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to register team');
+    log('INFO', context, 'Sending registration request to backend.', registrationData);
+
+    // --- Call Backend Registration Endpoint using fetchData --- 
+    try {
+      const responseData = await fetchData(`/player/tournaments/${tournament.value._id}/register`, {
+          method: 'POST',
+          body: JSON.stringify(registrationData)
+      });
+
+      log('INFO', context, 'Received response from backend /api/player/tournaments/:id/register.', responseData);
+
+      // --- Handle Backend Response --- 
+      if (responseData.paymentUrl) {
+          // --- Payment Required: Redirect to Khalti --- 
+          log('INFO', context, `Payment required. Redirecting to Khalti for RegistrationID: ${responseData.registrationId}, OrderID: ${responseData.purchaseOrderId}`);
+          toast.info('Redirecting to Khalti for payment...'); 
+          window.location.href = responseData.paymentUrl;
+      } else {
+          // --- Free Tournament Confirmed Directly --- 
+          log('INFO', context, `Free tournament registration confirmed directly by backend. RegistrationID: ${responseData.registration?._id}`);
+          toast.success('Registration Confirmed (Free Tournament)!');
+          showRegistrationModal.value = false;
+          fetchTournamentDetails(); // Refresh details
+      }
+    
+    } catch(error) {
+       // Error is caught by the outer try-catch, useApi sets apiError
+      const errorMsg = apiError.value || error.message || 'Failed to register team.';
+      log('ERROR', context, 'Registration error via backend API.', { error: errorMsg });
+      toast.error('Registration failed: ' + errorMsg);
     }
+    // --- End Backend Call ---
 
-    // Update UI after successful registration
-    tournament.value.isRegistered = true;
-    tournament.value.registeredTeams += 1;
-    showRegistrationModal.value = false;
-    
-    // Show success message or notification here
-    
   } catch (error) {
-    console.error('Registration error:', error);
-    // Show error notification
+    // Catch errors from form validation etc.
+    const errorMsg = error.message || 'An unexpected error occurred.';
+    log('ERROR', context, 'Error during registration process.', { error: errorMsg });
+    toast.error('Registration failed: ' + errorMsg);
   } finally {
-    isSubmitting.value = false;
+    isSubmitting.value = false; // Reset specific loading state
   }
 };
 
@@ -758,36 +772,28 @@ watch(tournament, (newTournament) => {
 
 // Fetch Bracket Data
 const fetchBracketData = async () => {
+  const context = 'FETCH_BRACKET';
   try {
     bracketLoading.value = true;
     bracketError.value = null;
+    log('INFO', context, `Fetching bracket for tournament ${route.params.id}`);
     
-    const response = await fetch(`http://localhost:5000/api/player/tournaments/${route.params.id}/bracket`, {
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to fetch bracket data');
-    }
-
-    const data = await response.json();
+    const data = await fetchData(`/player/tournaments/${route.params.id}/bracket`);
     
-    // Make sure we have tournament data before setting bracket data
     if (tournament.value && data) {
-      // Pass both bracket data and tournament status to the component
       bracketData.value = {
         ...data,
         status: tournament.value.status
       };
+      log('INFO', context, `Successfully fetched bracket for ${route.params.id}`);
     } else {
-      throw new Error('Tournament or bracket data is missing');
+      log('WARN', context, 'Tournament or bracket data missing after fetch.', { hasTournament: !!tournament.value, hasData: !!data });
+      throw new Error('Tournament or bracket data is missing after fetch');
     }
   } catch (err) {
-    console.error('Error fetching bracket data:', err);
-    bracketError.value = err.message;
+    const errorMsg = apiError.value || err.message || 'Failed to fetch bracket data';
+    log('ERROR', context, `Error fetching bracket for ${route.params.id}`, { error: errorMsg });
+    bracketError.value = errorMsg;
   } finally {
     bracketLoading.value = false;
   }
@@ -809,6 +815,12 @@ watch(() => tournament.value?._id, (newId) => {
     fetchBracketData();
   }
 });
+
+// Utility for logging (define within setup)
+const log = (level, context, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [${level}] [${context}] ${message}`, data ? JSON.stringify(data) : '');
+};
 
 // Lifecycle Hooks
 onMounted(() => {

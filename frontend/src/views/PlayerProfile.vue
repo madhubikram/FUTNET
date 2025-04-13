@@ -3,11 +3,15 @@
       <div class="p-4 md:p-8">
         <div class="max-w-4xl mx-auto">
           <!-- Profile Header -->
-          <div class="mb-6 md:mb-8">
-            <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-green-300 to-emerald-400 bg-clip-text text-transparent mb-2">
-              My Profile
-            </h1>
-            <p class="text-sm md:text-base text-gray-400">Manage your account settings and preferences</p>
+          <div class="mb-6 md:mb-8 flex justify-between items-start">
+            <div>
+                <h1 class="text-xl md:text-2xl font-bold bg-gradient-to-r from-green-300 to-emerald-400 bg-clip-text text-transparent mb-2">
+                  My Profile
+                </h1>
+                <p class="text-sm md:text-base text-gray-400">Manage your account settings and preferences</p>
+            </div>
+            <!-- Add NotificationBell here -->
+            <NotificationBell class="mt-1" />
           </div>
           
           <!-- Loading State -->
@@ -305,6 +309,7 @@
   import BaseModal from '@/components/base/BaseModal.vue';
   import { useTimeFormatting } from '@/composables/useTimeFormatting';
   import { useAuth } from '@/composables/useAuth';
+  import NotificationBell from '@/components/features/NotificationBell.vue';
   import { 
     UserIcon, MailIcon, PhoneIcon, CalendarIcon,
     PencilIcon, XIcon, LockIcon, LogOutIcon, Loader2Icon 

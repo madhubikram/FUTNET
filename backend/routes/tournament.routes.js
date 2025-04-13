@@ -8,6 +8,8 @@ try {
     const { tournamentUpload } = require('../config/multer');
     const { updateSingleTournamentStatus } = require('../utils/tournamentStatus'); // Import the new function
     const Tournament = require('../models/tournament.model');
+    const TournamentRegistration = require('../models/tournament.registration.model'); // <-- Import registration model
+    const { createNotification } = require('../utils/notification.service'); // <-- Import notification service
 
     // Middleware to check if user is a futsal admin
     const isFutsalAdmin = (req, res, next) => {
@@ -129,6 +131,35 @@ try {
                 // Save the changes
                 await tournament.save();
                 console.log(`[PUBLISH] Tournament successfully published: ${tournament._id}`);
+
+                // --- Send Notification to Registered Users --- 
+                try {
+                    const registrations = await TournamentRegistration.find({ tournament: tournament._id, status: 'active' }).select('user');
+                    if (registrations && registrations.length > 0) {
+                        const userIds = registrations.map(reg => reg.user);
+                        const notificationTitle = `Bracket Published: ${tournament.name}`;
+                        const notificationMessage = `The official bracket for ${tournament.name} has been published. Check the tournament details!`;
+                        const notificationLink = `/tournaments/${tournament._id}`; // Link to tournament details page
+                        
+                        console.log(`[PUBLISH Notification] Sending to ${userIds.length} registered users.`);
+
+                        // Send notification to each user (consider batching for large numbers)
+                        for (const userId of userIds) {
+                           await createNotification(
+                               userId,
+                               notificationTitle,
+                               notificationMessage,
+                               'tournament_bracket', 
+                               notificationLink
+                           );
+                        }
+                    } else {
+                        console.log('[PUBLISH Notification] No active registrations found for this tournament.');
+                    }
+                } catch (notificationError) {
+                    console.error('[PUBLISH] Failed to send bracket published notifications:', notificationError);
+                }
+                // --- End Notification --- 
                 
                 res.status(200).json({ message: 'Tournament published successfully', tournament });
             } catch (err) {

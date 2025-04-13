@@ -1,11 +1,30 @@
-require('./models/booking.model'); 
-require('./models/loyalty.model');
-
 const path = require('path');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const fs = require('fs');
+const cron = require('node-cron');
+
+// --- Load Environment Variables FIRST --- 
+require('dotenv').config();
+// --- End Environment Variable Loading ---
+
+// --- Check Essential Env Vars --- 
+if (!process.env.MONGODB_URI || !process.env.JWT_SECRET) {
+    console.error("FATAL ERROR: MONGODB_URI and JWT_SECRET must be defined in .env");
+    process.exit(1); // Exit if critical variables are missing
+}
+// Check Khalti variables (non-fatal, service will log error)
+if (!process.env.KHALTI_SECRET_KEY || !process.env.KHALTI_API_URL || !process.env.FRONTEND_URL || !process.env.FRONTEND_CALLBACK_PATH) {
+    console.warn("WARNING: Khalti environment variables are not fully set. Payment functionality will be affected.");
+}
+// Check VAPID variables (non-fatal, notification service handles it)
+if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
+    console.warn("WARNING: VAPID keys not set. Push notifications will be disabled.");
+}
+
+require('./models/booking.model'); 
+require('./models/loyalty.model');
 
 // Import routes
 const playerTournamentRoutes = require('./routes/tournament.player.routes');
@@ -19,11 +38,19 @@ const authMiddleware = require('./middleware/auth.middleware');
 const validateLoyaltyTransaction = require('./middleware/loyalty.middleware');
 const loyaltyRoutes = require('./routes/loyalty.routes');
 const bookingRoutes = require('./routes/booking.routes');
+const notificationRoutes = require('./routes/notification.routes.js');
 const { updateTournamentStatuses } = require('./utils/tournamentStatus');
+const paymentRoutes = require('./routes/payment.routes');
 
+// Import services and models needed for cron jobs
+const { createNotification } = require('./utils/notification.service');
+const Booking = require('./models/booking.model');
+const Tournament = require('./models/tournament.model');
+const User = require('./models/user.model');
+const Notification = require('./models/notification.model');
 
-
-require('dotenv').config();
+// Import the new booking service
+const { sendBookingReminderIfNotSent } = require('./utils/booking.service'); 
 
 console.log('Starting server...');
 
@@ -88,7 +115,9 @@ app.use('/api/loyalty', authMiddleware);
 app.use('/api/loyalty', validateLoyaltyTransaction);
 app.use('/api/loyalty', loyaltyRoutes);
 app.use('/api/bookings', bookingRoutes);
+app.use('/api/notifications', notificationRoutes);
 app.use('/api', protectedRoutes);
+app.use('/api/payments', paymentRoutes);
 
 
 // Test Routes (development only)
@@ -165,6 +194,31 @@ if (process.env.NODE_ENV !== 'production') {
             res.status(500).json({ error: err.message });
         }
     });
+
+    // --- Add Debug Endpoint for Booking Reminder ---
+    app.post('/api/debug/send-booking-reminder/:bookingId', async (req, res) => {
+        const { bookingId } = req.params;
+        console.log(`[Debug Endpoint] Received request to send reminder for booking: ${bookingId}`);
+        if (!bookingId) {
+            return res.status(400).json({ success: false, message: 'Missing bookingId parameter.' });
+        }
+        try {
+            const result = await sendBookingReminderIfNotSent(bookingId);
+            console.log(`[Debug Endpoint] Result from sendBookingReminderIfNotSent for ${bookingId}:`, result);
+            // Send appropriate status based on the service function's success
+            if (result.success) {
+                res.status(200).json(result);
+            } else {
+                 // Use 404 if booking not found, otherwise 500 for other errors
+                const statusCode = result.message === 'Booking not found.' ? 404 : 500;
+                res.status(statusCode).json(result);
+            }
+        } catch (error) {
+            console.error(`[Debug Endpoint] Unexpected error sending reminder for ${bookingId}:`, error);
+            res.status(500).json({ success: false, message: `Unexpected server error: ${error.message}`, notificationSent: false });
+        }
+    });
+    // --- End Debug Endpoint ---
 }
 
 // Error handling middleware
@@ -221,9 +275,122 @@ mongoose.connect(process.env.MONGODB_URI)
             }
         });
 
-        // Set up tournament status updates
-        setInterval(updateTournamentStatuses, 5 * 60 * 1000);
+        // --- Cron Jobs Setup --- 
+        console.log('[Cron] Setting up scheduled tasks...');
+
+        // Schedule 1: Check for booking reminders (e.g., every 15 minutes)
+        cron.schedule('*/15 * * * *', async () => {
+            console.log('[Cron - Booking Reminder] Running job...');
+            const now = new Date();
+            const reminderWindowStart = new Date(now.getTime() + 60 * 60 * 1000); // 60 mins from now
+            const reminderWindowEnd = new Date(now.getTime() + 75 * 60 * 1000); // 75 mins from now
+
+            try {
+                // Find confirmed bookings potentially needing reminders
+                const upcomingBookings = await Booking.find({
+                    status: 'confirmed',
+                    date: { $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) }, 
+                    reminderSent: { $ne: true }
+                    // Don't populate here, the service function will handle it if needed
+                }).select('_id date startTime'); // Only select necessary fields for time check
+
+                console.log(`[Cron - Booking Reminder] Found ${upcomingBookings.length} potential bookings to check.`);
+
+                for (const booking of upcomingBookings) {
+                    // Combine booking date (UTC midnight) with startTime string (HH:MM)
+                    const [hours, minutes] = booking.startTime.split(':').map(Number);
+                    const bookingStartDateTime = new Date(Date.UTC(
+                        booking.date.getUTCFullYear(),
+                        booking.date.getUTCMonth(),
+                        booking.date.getUTCDate(),
+                        hours,
+                        minutes
+                    ));
+
+                    // Check if the booking start time falls within the reminder window
+                    if (bookingStartDateTime >= reminderWindowStart && bookingStartDateTime < reminderWindowEnd) {
+                        console.log(`[Cron - Booking Reminder] Booking ${booking._id} is within window. Calling sendBookingReminderIfNotSent...`);
+                        // Call the refactored service function - no need to check user/status again here
+                        const result = await sendBookingReminderIfNotSent(booking._id);
+                        // Log the result from the service function
+                        console.log(`[Cron - Booking Reminder] Result for booking ${booking._id}: ${result.message}`); 
+                    } 
+                    // Optional: Log if a booking was found but outside the window for debugging
+                    // else {
+                    //     console.log(`[Cron - Booking Reminder] Booking ${booking._id} found but start time ${bookingStartDateTime.toISOString()} is outside window [${reminderWindowStart.toISOString()}, ${reminderWindowEnd.toISOString()}).`);
+                    // }
+                }
+            } catch (error) {
+                console.error('[Cron - Booking Reminder] Error processing booking reminders:', error);
+            }
+        });
+
+        // Schedule 2: Check for tournament fixture reminders (e.g., every hour)
+        cron.schedule('0 * * * *', async () => {
+            console.log('[Cron - Tournament Reminder] Running job...');
+            const now = new Date();
+            const reminderWindowStart = new Date(now.getTime() + 23 * 60 * 60 * 1000); // 23 hours from now
+            const reminderWindowEnd = new Date(now.getTime() + 25 * 60 * 60 * 1000);   // 25 hours from now
+            
+            try {
+                 const upcomingTournaments = await Tournament.find({
+                    status: 'Upcoming', // Only remind for upcoming tournaments
+                    // Combine startDate and startTime for comparison
+                 });
+
+                 for (const tournament of upcomingTournaments) {
+                     const startTimeParts = tournament.startTime.split(':');
+                     const tournamentStartDateTime = new Date(tournament.startDate);
+                     tournamentStartDateTime.setUTCHours(parseInt(startTimeParts[0], 10), parseInt(startTimeParts[1], 10), 0, 0);
+
+                     if (tournamentStartDateTime >= reminderWindowStart && tournamentStartDateTime < reminderWindowEnd) {
+                         console.log(`[Cron - Tournament Reminder] Found tournament ${tournament.name} starting soon at ${tournamentStartDateTime.toISOString()}`);
+                         
+                         // Find the admin for this tournament
+                         const futsalAdmin = await User.findOne({ futsal: tournament.futsalId, role: 'futsalAdmin' });
+                         if (futsalAdmin) {
+                             // Check if reminder already sent
+                             const existingReminder = await Notification.findOne({ 
+                                 user: futsalAdmin._id, 
+                                 type: 'tournament_fixture_reminder',
+                                 message: { $regex: `Tournament ${tournament.name} is starting soon` } 
+                             });
+
+                             if (!existingReminder) {
+                                 console.log(`[Cron - Tournament Reminder] Sending fixture reminder for ${tournament.name} to admin ${futsalAdmin._id}`);
+                                 const title = 'Tournament Reminder';
+                                 const message = `Tournament ${tournament.name} is starting soon. Please finalize and allocate time for fixtures.`;
+                                 await createNotification(
+                                     futsalAdmin._id,
+                                     title,
+                                     message,
+                                     'tournament_fixture_reminder',
+                                     `/admin-tournaments/${tournament._id}` // Link to specific tournament admin page
+                                 );
+                             } else {
+                                console.log(`[Cron - Tournament Reminder] Fixture reminder already sent for ${tournament.name}`);
+                             }
+                         } else {
+                             console.warn(`[Cron - Tournament Reminder] No admin found for futsal ${tournament.futsalId}`);
+                         }
+                     }
+                 }
+
+            } catch (error) {
+                 console.error('[Cron - Tournament Reminder] Error processing reminders:', error);
+            }
+        });
+
+        // Schedule 3: Update tournament statuses (e.g., every 5 minutes)
+        cron.schedule('*/5 * * * *', async () => {
+             console.log('[Cron - Status Update] Running automatic status update...');
+             await updateTournamentStatuses(); 
+        });
+
+        // Initial status update on server start
+        console.log('[Init] Performing initial tournament status update...');
         updateTournamentStatuses();
+
     })
     .catch((err) => console.error('MongoDB connection error:', err));
 

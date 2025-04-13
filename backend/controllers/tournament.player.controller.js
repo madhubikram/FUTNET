@@ -3,7 +3,11 @@
 const Tournament = require('../models/tournament.model');
 const TournamentRegistration = require('../models/tournament.registration.model');
 const User = require('../models/user.model');
+const { createNotification } = require('../utils/notification.service');
+const moment = require('moment');
 const { generateSingleEliminationBracket } = require('../utils/bracketGenerator');
+const { initiatePaymentFlow } = require('../controllers/payment.controller'); // <-- Import payment initiation
+const log = require('../utils/khalti.service').log; // <-- Use shared logger
 
 const tournamentPlayerController = {
   getAllTournaments: async (req, res) => {
@@ -26,20 +30,49 @@ const tournamentPlayerController = {
 
       console.log('Found tournaments:', tournaments);
 
-      // Update status before sending
       const now = new Date();
       const updatedTournaments = await Promise.all(tournaments.map(async tournament => {
+        let statusChanged = false;
+        const originalStatus = tournament.status;
+
         // First check for cancellation due to low teams after deadline
         try {
           const deadlineDateTime = new Date(`${tournament.registrationDeadline.toISOString().split('T')[0]}T${tournament.registrationDeadlineTime || '23:59'}`);
-          if (now > deadlineDateTime && tournament.registeredTeams < tournament.minTeams) {
+          if (now > deadlineDateTime && tournament.registeredTeams < tournament.minTeams && tournament.status !== 'Cancelled (Low Teams)') {
+            console.log(`[Status Update Player - Low Teams] Tournament ${tournament.name} (${tournament._id}) being cancelled.`);
             tournament.status = 'Cancelled (Low Teams)';
             await tournament.save();
-            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) cancelled due to low teams.`);
+            statusChanged = true;
+            console.log(`[Status Update Player - Low Teams] Saved status for ${tournament.name}.`);
+
+            // --- Send Cancellation Notifications (Low Teams) --- 
+            try {
+                const reason = "due to low team registration";
+                const registrations = await TournamentRegistration.find({ tournament: tournament._id }).populate('user', 'name');
+                const participants = registrations.map(reg => reg.user).filter(Boolean);
+                
+                for (const participant of participants) {
+                    await createNotification(
+                        participant._id,
+                        `Tournament Cancelled: ${tournament.name}`,
+                        `The tournament "${tournament.name}" has been cancelled ${reason}. Registration fees will be refunded.`,
+                        'tournament_cancel', 
+                        `/my-profile` 
+                    );
+                }
+                console.log(`[Notification Player - Low Teams] Sent cancellation notifications to ${participants.length} players for ${tournament._id}.`);
+
+                // No need to notify admin here, admin controller handles its own view
+
+            } catch (notifyError) {
+                console.error(`[Notification Player - Low Teams] Error sending cancellation notifications for ${tournament._id}:`, notifyError);
+            }
+            // --- End Notifications ---
+            
             return tournament;
           }
         } catch (e) {
-          console.error(`[Error] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
+          console.error(`[Error Player - Low Teams Check] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
         }
 
         // Skip further status updates if already Cancelled
@@ -53,25 +86,22 @@ const tournamentPlayerController = {
             new Date(`${tournament.endDate.toISOString().split('T')[0]}T${tournament.endTime || '23:59'}`) : 
             null;
           
-          // First check if tournament should be completed (end date passed)
           if (endDateTime && now >= endDateTime && now >= startDateTime) {
             if (tournament.status !== 'Completed') {
-              console.log(`[Status Update] Tournament ${tournament.name} should be completed`);
-              tournament.status = 'Completed';
-              await tournament.save();
-              console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Completed.`);
-              return tournament;
+               if (originalStatus !== 'Completed') {
+                  tournament.status = 'Completed';
+                  await tournament.save();
+              }
             }
           }
-          // Otherwise, if not yet completed but started, mark as ongoing
           else if (now >= startDateTime && tournament.status !== 'Ongoing') {
-            tournament.status = 'Ongoing';
-            await tournament.save();
-            console.log(`[Status Update] Tournament ${tournament.name} (${tournament._id}) status changed to Ongoing.`);
-            return tournament;
+            if (originalStatus !== 'Ongoing') {
+                tournament.status = 'Ongoing';
+                await tournament.save();
+            }
           }
         } catch (e) {
-          console.error(`[Error] Could not parse dates for tournament ${tournament._id}: ${e.message}`);
+          console.error(`[Error Player - Status Check] Could not parse dates for tournament ${tournament._id}: ${e.message}`);
         }
 
         return tournament;
@@ -168,73 +198,144 @@ const tournamentPlayerController = {
   },
 
   registerForTournament: async (req, res) => {
+    const context = 'TOURNAMENT_REGISTER';
     try {
       const tournament = await Tournament.findById(req.params.id);
       if (!tournament) {
+        log('WARN', context, `Tournament not found: ${req.params.id}, User: ${req.user._id}`);
         return res.status(404).json({ message: 'Tournament not found' });
       }
-  
+
+      log('INFO', context, `Registration attempt for Tournament: ${tournament.name} (${tournament._id}), User: ${req.user._id}`);
+
       // Check if tournament is full
       if (tournament.registeredTeams >= tournament.maxTeams) {
+        log('WARN', context, `Registration denied: Tournament ${tournament._id} is full (${tournament.registeredTeams}/${tournament.maxTeams}), User: ${req.user._id}`);
         return res.status(400).json({ message: 'Tournament is full' });
       }
-  
-      // Check if user is already registered
+
+      // Check if user is already registered (including pending payment)
       const existingRegistration = await TournamentRegistration.findOne({
         tournament: tournament._id,
         user: req.user._id
+        // No status check needed here, any existing record for this user/tournament is enough
       });
-  
+
       if (existingRegistration) {
-        return res.status(400).json({ message: 'Already registered for this tournament' });
+         log('WARN', context, `Registration denied: User ${req.user._id} already registered (or pending) for Tournament ${tournament._id}. Registration Status: ${existingRegistration.status}, Payment Status: ${existingRegistration.paymentStatus}`);
+        return res.status(400).json({ message: 'Already registered or payment pending for this tournament' });
       }
-      
-      console.log('Registration request body:', req.body);
-      
+
+      log('INFO', context, `Registration request body for User ${req.user._id}:`, req.body);
+
       // Validate players data format
       if (!req.body.players || !Array.isArray(req.body.players) || req.body.players.length < tournament.teamSize) {
-        return res.status(400).json({ 
+         log('WARN', context, `Validation failed: Incorrect player data format/count for User ${req.user._id}, Tournament ${tournament._id}. Required: ${tournament.teamSize}, Provided: ${req.body.players?.length}`);
+        return res.status(400).json({
           message: `This tournament requires at least ${tournament.teamSize} properly formatted player entries.`
         });
       }
 
-      // Generate a unique team ID 
-      // Format: TRN-{first 3 chars of tournament name}-{timestamp}-{random 3 digits}
-      const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+      // --- Create Registration in Pending State FIRST ---
+      const timestamp = Date.now().toString().slice(-6);
       const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
       const tournamentPrefix = tournament.name.replace(/[^a-zA-Z0-9]/g, '').substring(0, 3).toUpperCase();
       const teamId = `TRN-${tournamentPrefix}-${timestamp}-${randomNum}`;
-  
-      // Create registration with proper player format
+
       const registration = new TournamentRegistration({
         tournament: tournament._id,
         user: req.user._id,
         teamId: teamId,
         teamName: req.body.teamName,
-        players: req.body.players // Make sure frontend is sending the correct player object format
+        players: req.body.players,
+        status: 'pending_payment', // Start as pending payment
+        paymentStatus: 'pending'
+        // purchaseOrderId, pidx, reservationExpiresAt will be set by initiatePaymentFlow
       });
-      
-      console.log('Creating registration:', {
-        tournamentId: tournament._id,
-        userId: req.user._id,
+
+      log('INFO', context, `Creating pending registration for User ${req.user._id}, Tournament ${tournament._id}:`, {
         teamId: teamId,
         teamName: req.body.teamName,
         playerCount: req.body.players.length
       });
-  
-      const savedRegistration = await registration.save();
-      console.log('Registration saved with ID:', savedRegistration._id);
-  
-      // Update tournament registered teams count
-      tournament.registeredTeams += 1;
 
-      await tournament.save();
-      console.log(`Updated tournament ${tournament._id} registeredTeams to ${tournament.registeredTeams}`);
-  
-      res.status(201).json(savedRegistration);
+      const savedRegistration = await registration.save();
+      log('INFO', context, `Saved pending registration record: ${savedRegistration._id}`);
+
+       // --- Initiate Payment Flow --- 
+       // Check if registration fee exists and is > 0
+       if (tournament.registrationFee && tournament.registrationFee > 0) {
+            log('INFO', context, `Tournament ${tournament._id} requires payment (${tournament.registrationFee}). Initiating Khalti flow.`);
+            const initiationResult = await initiatePaymentFlow('tournament', savedRegistration._id, req.user._id);
+
+            if (initiationResult.success) {
+                log('INFO', context, `Payment initiation successful for registration ${savedRegistration._id}. Sending payment URL to frontend.`);
+
+                 // --- Send Initial Pending Notification --- (Optional)
+                try {
+                    await createNotification(
+                        savedRegistration.user,
+                        'Registration Pending Payment',
+                        `Your registration for "${tournament.name}" (Team: ${savedRegistration.teamName}) is pending payment. Please complete payment via Khalti.`,                        
+                        'tournament_pending', 
+                        `/my-tournaments` // Link to user's registrations/tournaments
+                    );
+                    log('INFO', context, `Sent pending payment notification for registration ${savedRegistration._id}`);
+                } catch (notifyError) {
+                    log('ERROR', context, `Error sending pending notification for registration ${savedRegistration._id}:`, notifyError);
+                }
+                // --- End Notification ---
+
+                // Respond with the payment URL
+                res.status(201).json({
+                    message: 'Registration pending. Please complete payment.',
+                    registrationId: savedRegistration._id,
+                    paymentUrl: initiationResult.payment_url,
+                    purchaseOrderId: initiationResult.purchase_order_id
+                });
+            } else {
+                log('ERROR', context, `Payment initiation failed for registration ${savedRegistration._id}. Deleting pending registration.`, { error: initiationResult.error });
+                // If initiation fails, delete the pending registration
+                await TournamentRegistration.findByIdAndDelete(savedRegistration._id);
+                res.status(500).json({ message: `Failed to initiate payment: ${initiationResult.error}` });
+            }
+       } else {
+           // --- Handle Free Registration --- 
+           log('INFO', context, `Tournament ${tournament._id} has no registration fee. Confirming registration directly.`);
+           savedRegistration.status = 'active';
+           savedRegistration.paymentStatus = 'paid'; // Mark as paid since it's free
+           savedRegistration.paymentDetails = { method: 'free', paidAmount: 0, paidAt: new Date() };
+           await savedRegistration.save();
+           
+           // Update tournament registered teams count
+           tournament.registeredTeams += 1;
+           await tournament.save();
+           log('INFO', context, `Incremented registered teams for free tournament ${tournament._id}. New count: ${tournament.registeredTeams}`);
+
+           // --- Send Free Registration Confirmation Notification --- 
+           try {
+                await createNotification(
+                    savedRegistration.user,
+                    'Registration Confirmed (Free)',
+                    `Your registration for the free tournament "${tournament.name}" (Team: ${savedRegistration.teamName}) is confirmed!`,                        
+                    'tournament_confirmation', 
+                    `/my-tournaments`
+                );
+                log('INFO', context, `Sent free registration confirmation notification for ${savedRegistration._id}`);
+           } catch (notifyError) {
+                log('ERROR', context, `Error sending free registration notification for ${savedRegistration._id}:`, notifyError);
+           }
+           // --- End Notification ---
+
+           res.status(201).json({
+               message: 'Registration successful (Free Tournament).',
+               registration: savedRegistration
+           });
+       }
+
     } catch (error) {
-      console.error('Error registering for tournament:', error);
-      res.status(500).json({ message: error.message });
+      log('ERROR', context, `Error registering for tournament ${req.params.id}, User ${req.user._id}:`, { message: error.message, stack: error.stack });
+      res.status(500).json({ message: `Error registering for tournament: ${error.message}` });
     }
   },
 

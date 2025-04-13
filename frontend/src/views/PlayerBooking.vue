@@ -96,7 +96,7 @@
                   getStatusColor(booking.status)
                 ]">
                   <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
-                  {{ booking.status }}
+                  {{ booking.status.charAt(0).toUpperCase() + booking.status.slice(1) }}
                 </span>
               </div>
             </div>
@@ -114,8 +114,8 @@
                 </div>
                 <div class="md:text-right">
                   <p class="text-lg md:text-xl font-semibold text-green-400">Rs. {{ booking.price }}</p>
-                  <p class="text-xs text-gray-400">
-                    {{ booking.paymentMethod === 'free' ? 'Free Booking' : booking.paymentStatus }}
+                  <p class="text-xs capitalize" :class="getPaymentStatusColor(booking.paymentStatus)">
+                    Payment: {{ booking.paymentStatus === 'unpaid' ? 'Not Required (Free)' : (booking.paymentStatus || 'Pending') }}
                   </p>
                 </div>
               </div>
@@ -416,7 +416,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { 
   CalendarCheckIcon, HistoryIcon, SearchIcon, 
   ClockIcon, XCircleIcon, ClipboardIcon,
@@ -428,8 +428,12 @@ import ReviewModal from '@/components/ReviewModal.vue';
 import { useTimeFormatting } from '@/composables/useTimeFormatting';
 import BaseModal from '@/components/base/BaseModal.vue';
 import { useRouter } from 'vue-router';
+import { useToast } from 'vue-toastification';
+import { log } from '@/utils/logger';
+import { useApi } from '@/composables/useApi';
 
 const router = useRouter();
+const { fetchData } = useApi();
 
 const { formatDate, formatTime } = useTimeFormatting();
 
@@ -442,6 +446,8 @@ const selectedBooking = ref(null);
 const showReviewModal = ref(false);
 const bookingToReview = ref(null);
 
+// Init toast
+const toast = useToast();
 
 // Computed properties
 const ongoingBookings = computed(() => {
@@ -518,28 +524,17 @@ const handleReviewSubmit = async (reviewData) => {
       throw new Error('No booking selected for review');
     }
     
-    const token = localStorage.getItem('token');
-    const response = await fetch(
-      `http://localhost:5000/api/player/courts/${bookingToReview.value.court}/reviews`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(reviewData)
-      }
-    );
-    
-    if (!response.ok) {
-      throw new Error('Failed to submit review');
-    }
+    await fetchData(`/player/courts/${bookingToReview.value.court}/reviews`, {
+      method: 'POST',
+      body: JSON.stringify(reviewData)
+    });
     
     // Show success message
-    alert('Review submitted successfully!');
+    toast.success('Review submitted successfully!');
+    showReviewModal.value = false;
   } catch (error) {
     console.error('Error submitting review:', error);
-    alert('Failed to submit review. Please try again.');
+    toast.error('Failed to submit review. Please try again.');
   }
 };
 
@@ -562,22 +557,11 @@ const cancelBooking = async (bookingId) => {
       return;
     }
     
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/cancel`, {
-      method: 'POST', 
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+    await fetchData(`/bookings/${bookingId}/cancel`, {
+      method: 'POST'
     });
     
-    if (!response.ok) {
-      throw new Error('Failed to cancel booking');
-    }
-    
-    // Update the local booking status
-    const updatedBooking = await response.json();
-    console.log('Booking cancelled successfully:', updatedBooking);
+    log('INFO', 'BOOKING', `Booking ${bookingId} cancelled successfully`);
     
     // Find and update the booking in our list
     const index = bookings.value.findIndex(b => b._id === bookingId);
@@ -590,11 +574,11 @@ const cancelBooking = async (bookingId) => {
     }
     
     // Show success message
-    alert('Booking cancelled successfully');
+    toast.success('Booking cancelled successfully');
     
   } catch (error) {
     console.error('Error cancelling booking:', error);
-    alert('Failed to cancel booking. Please try again.');
+    toast.error('Failed to cancel booking. Please try again.');
   }
 };
 
@@ -604,22 +588,11 @@ const deleteBookingHistory = async (bookingId) => {
       return;
     }
     
-    const token = localStorage.getItem('token');
-    const response = await fetch(`http://localhost:5000/api/bookings/${bookingId}/delete`, {
-      method: 'POST', 
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
+    await fetchData(`/bookings/${bookingId}/delete`, {
+      method: 'POST'
     });
     
-    if (!response.ok) {
-      throw new Error('Failed to delete booking');
-    }
-    
-    // Update the local booking status
-    const updatedBooking = await response.json();
-    console.log('Booking deleted successfully:', updatedBooking);
+    log('INFO', 'BOOKING', `Booking ${bookingId} deleted from history successfully`);
     
     // Find and update the booking in our list
     const index = bookings.value.findIndex(b => b._id === bookingId);
@@ -632,11 +605,11 @@ const deleteBookingHistory = async (bookingId) => {
     }
     
     // Show success message
-    alert('Booking deleted successfully');
+    toast.success('Booking deleted successfully');
     
   } catch (error) {
     console.error('Error deleting booking:', error);
-    alert('Failed to delete booking. Please try again.');
+    toast.error('Failed to delete booking. Please try again.');
   }
 };
 
@@ -672,6 +645,21 @@ const getStatusBgColor = (status) => {
   }
 };
 
+const getPaymentStatusColor = (status) => {
+  switch (status) {
+    case 'unpaid':
+      return 'text-yellow-400';
+    case 'pending':
+      return 'text-yellow-400';
+    case 'paid':
+      return 'text-green-400';
+    case 'completed':
+      return 'text-green-400';
+    default:
+      return 'text-gray-400';
+  }
+};
+
 const showBookingDetails = (booking) => {
   selectedBooking.value = booking;
   showModal.value = true;
@@ -681,63 +669,90 @@ const showBookingDetails = (booking) => {
 const fetchBookings = async () => {
   try {
     loading.value = true;
-    const token = localStorage.getItem('token');
+    log('INFO', 'BOOKINGS', 'Starting to fetch bookings...');
     
-    const response = await fetch('http://localhost:5000/api/bookings', {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
-    });
+    const data = await fetchData('/bookings');
+    log('INFO', 'BOOKINGS', `Fetched ${data?.length || 0} bookings from API`);
     
-    if (!response.ok) {
-      throw new Error('Failed to fetch bookings');
+    if (data && data.length > 0) {
+      // Log the most recent booking for debugging
+      const latestBooking = data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+      log('DEBUG', 'BOOKINGS', `Most recent booking: ID=${latestBooking._id}, Status=${latestBooking.status}, Payment=${latestBooking.paymentStatus}, Date=${latestBooking.date}, Created=${latestBooking.createdAt}`);
+      
+      // Log all bookings for today or tomorrow to debug visibility issues
+      const today = new Date().toISOString().split('T')[0];
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      const todayBookings = data.filter(b => b.date.startsWith(today) || b.date.startsWith(tomorrow));
+      log('DEBUG', 'BOOKINGS', `Found ${todayBookings.length} bookings for today/tomorrow: ${todayBookings.map(b => b._id).join(', ')}`);
     }
     
-    const data = await response.json();
-    
     bookings.value = data.map(booking => ({
-  ...booking,
-  courtName: booking.courtDetails?.name || 'Court 1',
-  futsalName: booking.courtDetails?.futsalName || 'Futsal',
-  surfaceType: booking.courtDetails?.surfaceType || 'Synthetic Turf',
-  courtType: booking.courtDetails?.courtType || 'Indoor',
-  // Fix image URL construction with proper checks
-  courtImage: (() => {
-  // Improved logging for debugging
-  console.log('Court details for booking:', booking.courtDetails);
-  
-  // Check if courtDetails and images exist
-  if (!booking.courtDetails?.images || !booking.courtDetails.images.length) {
-    return '/placeholder-court.jpg';
-  }
-  
-  // Get the first image
-  const img = booking.courtDetails.images[0];
-  
-  // Check if it's already a complete URL
-  if (img.startsWith('http')) {
-    return img;
-  }
-  
-  // Otherwise, prefix with the API base URL
-  return `http://localhost:5000${img}`;
-})(),
-  // Set payment method to 'free' if it was a free booking
-  paymentMethod: booking.paymentDetails?.method || (booking.price === 0 ? 'free' : 'standard')
-}));
+      ...booking,
+      courtName: booking.courtDetails?.name || 'Unknown Court',
+      futsalName: booking.courtDetails?.futsalName || 'Unknown Futsal',
+      surfaceType: booking.courtDetails?.surfaceType || 'Unknown',
+      courtType: booking.courtDetails?.courtType || 'Unknown',
+      // Fix image URL construction with proper checks
+      courtImage: (() => {
+        // Improved logging for debugging
+        console.log('Court details for booking:', booking.courtDetails);
+        
+        // Check if courtDetails and images exist
+        if (!booking.courtDetails?.images || !booking.courtDetails.images.length) {
+          return '/placeholder-court.jpg';
+        }
+        
+        // Get the first image
+        const img = booking.courtDetails.images[0];
+        
+        // Check if it's already a complete URL
+        if (img.startsWith('http')) {
+          return img;
+        }
+        
+        // Otherwise, prefix with the API base URL
+        return `http://localhost:5000${img}`;
+      })(),
+      // Set payment method to 'free' if it was a free booking
+      paymentMethod: booking.paymentDetails?.method || (booking.price === 0 ? 'free' : 'standard')
+    }));
+    
+    log('INFO', 'BOOKINGS', `Successfully processed ${bookings.value.length} bookings`);
     
   } catch (error) {
     console.error('Error fetching bookings:', error);
+    log('ERROR', 'BOOKINGS', `Failed to fetch bookings: ${error.message}`);
     bookings.value = [];
   } finally {
     loading.value = false;
   }
 };
 
-// Create some sample bookings for testing
+// Payment success check
+const checkPaymentStatus = () => {
+  const paymentSuccessful = localStorage.getItem('paymentSuccessful');
+  
+  if (paymentSuccessful === 'true') {
+    log('INFO', 'MY_BOOKINGS', 'Payment successful flag detected, refreshing bookings');
+    fetchBookings();
+    // Clear the flag after processing
+    localStorage.removeItem('paymentSuccessful');
+    localStorage.removeItem('lastPaymentTimestamp');
+    toast.success('Bookings updated with your recent payment');
+  }
+};
 
-// Lifecycle hooks
+// In the onMounted function, after any existing code
 onMounted(() => {
   fetchBookings();
+  checkPaymentStatus();
+  
+  // Check if user is coming from a payment flow by watching URL
+  window.addEventListener('storage', checkPaymentStatus);
+});
+
+// Add onBeforeUnmount to clean up event listener
+onBeforeUnmount(() => {
+  window.removeEventListener('storage', checkPaymentStatus);
 });
 </script>

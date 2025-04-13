@@ -27,6 +27,9 @@ export default defineConfig({
     vueDevTools(),
     VitePWA({
       registerType: 'autoUpdate',
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       manifest: {
         name: 'FUTNET',
         short_name: 'FUTNET',
@@ -75,36 +78,12 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
-        cleanupOutdatedCaches: true,
-        skipWaiting: true,
-        clientsClaim: true,
-        navigateFallback: 'index.html',
-        sourcemap: true,
-        runtimeCaching: [
-          {
-            urlPattern: new RegExp('^https?://[^/]+/api'),  // More flexible pattern
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              networkTimeoutSeconds: 5,
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif)$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'images',
-              expiration: {
-                maxEntries: 60,
-                maxAgeSeconds: 30 * 24 * 60 * 60
-              }
-            }
-          }
-        ]
+      injectManifest: {
+         injectionPoint: undefined
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module',
       }
     })
   ],

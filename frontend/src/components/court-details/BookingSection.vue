@@ -316,6 +316,7 @@ const handlePointsRedemption = ({ points, remainingAmount: remaining }) => {
 }
 
 const proceedToBooking = () => {
+  const context = 'PROCEED_BOOKING_EMIT'; // Context for logging
   if (selectedTimeSlots.value.length === 0) {
     alert('Please select at least one time slot');
     return;
@@ -327,9 +328,30 @@ const proceedToBooking = () => {
     return;
   }
 
-  // Determine if the booking requires payment
-  const requiresPayment = props.court.requirePrepayment || exceedsFreeSlots.value;
+  // --- Log values just before calculation --- 
+  const numberOfSelectedSlots = selectedTimeSlots.value.length;
+  const courtRequiresPrepayment = props.court?.requirePrepayment; // Safely access
+  const freeSlotsRemaining = freeBookingsRemaining.value;
   
+  console.log(`[${context}] Debug Values: `,
+    `Court Requires Prepayment: ${courtRequiresPrepayment}`,
+    `Selected Slots: ${numberOfSelectedSlots}`, 
+    `Free Slots Remaining: ${freeSlotsRemaining}`
+  );
+  // --- End Logging --- 
+
+  // --- Calculation --- 
+  const slotsExceedFreeLimit = numberOfSelectedSlots > freeSlotsRemaining;
+  const requiresPayment = courtRequiresPrepayment || (!courtRequiresPrepayment && slotsExceedFreeLimit);
+  const isFreeBooking = !courtRequiresPrepayment && !slotsExceedFreeLimit;
+  // --- End Calculation ---
+
+  console.log(`[${context}] Calculated Flags: `,
+    `Slots Exceed Free Limit: ${slotsExceedFreeLimit}`,
+    `Requires Payment: ${requiresPayment}`, 
+    `Is Free Booking: ${isFreeBooking}`
+  );
+
   // Construct the booking details object to emit
   const detailsToEmit = {
     bookingId: generateBookingId(),
@@ -339,29 +361,35 @@ const proceedToBooking = () => {
       rate: slot.rate
     })),
     totalAmount: totalAmount.value,
-    duration: `${selectedTimeSlots.value.length} hour(s)`,
-    redeemedPoints: redeemedPoints.value, // Include redeemed points
-    remainingAmount: totalAmount.value - redeemedPoints.value, // Calculate amount after points
-    pointsDiscount: redeemedPoints.value, // Same as redeemedPoints for clarity
-    requiresPayment: requiresPayment,
-    isFreeBooking: !requiresPayment && !props.court.requirePrepayment // Explicitly mark if it's free
+    duration: `${numberOfSelectedSlots} hour(s)`,
+    redeemedPoints: redeemedPoints.value, 
+    remainingAmount: totalAmount.value - redeemedPoints.value,
+    pointsDiscount: redeemedPoints.value,
+    requiresPayment: requiresPayment, // <-- Use corrected value
+    isFreeBooking: isFreeBooking // <-- Use corrected value
   };
 
-  console.log('Emitting proceed-booking with details:', JSON.stringify(detailsToEmit, null, 2));
+  console.log(`[${context}] Emitting proceed-booking with details:`, JSON.stringify(detailsToEmit, null, 2));
 
-  // Emit the event with the full details
   emit('proceed-booking', detailsToEmit);
 };
 
 const fetchFreeSlots = async () => {
   try {
     const token = localStorage.getItem('token');
-    const dateQueryParam = `?date=${selectedDate.value}`; // Add selected date as query param
+    // Add courtId to the query parameters
+    const courtIdParam = props.court?._id ? `&courtId=${props.court._id}` : ''; 
+    if (!courtIdParam) {
+        console.warn('[BookingSection] Court ID is missing, cannot fetch free slots for this specific futsal.');
+        freeBookingsRemaining.value = 0; // Default if no court ID
+        return;
+    }
+    const dateQueryParam = `?date=${selectedDate.value}${courtIdParam}`; // Combine query params
     
-    console.log(`[BookingSection] Fetching free slots for date: ${selectedDate.value}`); // Log the date being fetched
+    console.log(`[BookingSection] Fetching free slots for date: ${selectedDate.value} and court: ${props.court?._id}`); // Log the date and court being fetched
     
     const response = await fetch(
-      `http://localhost:5000/api/bookings/free-slots${dateQueryParam}`, // Append date query
+      `http://localhost:5000/api/bookings/free-slots${dateQueryParam}`, // Use combined query
       {
         headers: { 
           'Authorization': `Bearer ${token}`,

@@ -4,6 +4,7 @@ import RegisterPage from '@/views/RegisterPage.vue'
 import HomePage from '@/views/HomePage.vue'
 import SAdmin from '@/views/SAdmin.vue'
 import ProfileCompletion from '@/views/ProfileCompletion.vue'
+import PaymentCallback from '@/views/PaymentCallback.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -114,6 +115,15 @@ const router = createRouter({
       }
     },
     {
+      path: '/admin/bookings',
+      name: 'adminbookings',
+      component: () => import('../views/AdminBooking.vue'),
+      meta: {
+        requiresAuth: true,
+        roles: ['futsalAdmin']
+      }
+    },
+    {
       path: '/admin-profile',
       name: 'adminProfile',
       component: () => import('../views/AdminProfile.vue'),
@@ -170,6 +180,15 @@ const router = createRouter({
       }
     },
     {
+      path: '/my-bookings',
+      name: 'myBookings',
+      component: () => import('@/views/PlayerBooking.vue'),
+      meta: { 
+        requiresAuth: true,
+        roles: ['player']
+      }
+    },
+    {
       path: '/profile',
       name: 'profile',
       component: () => import('@/views/PlayerProfile.vue'),
@@ -186,8 +205,13 @@ const router = createRouter({
         requiresAuth: true,
         roles: ['player']
       }
-    }     
-    
+    },
+    {
+      path: '/payment/callback',
+      name: 'PaymentCallback',
+      component: PaymentCallback,
+      meta: { requiresAuth: true }
+    }
   ]
 })
 

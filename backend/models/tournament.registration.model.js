@@ -44,8 +44,36 @@ const tournamentRegistrationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'withdrawn'],
-    default: 'active'
+    enum: ['active', 'withdrawn', 'pending_payment'],
+    default: 'pending_payment'
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'paid', 'failed', 'refunded'],
+    default: 'pending'
+  },
+  purchaseOrderId: {
+    type: String,
+    index: true,
+    sparse: true
+  },
+  pidx: {
+    type: String,
+    index: true,
+    sparse: true
+  },
+  paymentDetails: {
+    method: {
+      type: String,
+      enum: ['khalti', 'esewa']
+    },
+    transactionId: String,
+    paidAmount: Number,
+    paidAt: Date
+  },
+  reservationExpiresAt: {
+    type: Date,
+    index: { expires: '1m' }
   }
 }, {
   timestamps: true

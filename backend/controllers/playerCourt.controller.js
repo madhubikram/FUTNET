@@ -2,8 +2,10 @@
 
 const Court = require('../models/court.model');
 const Booking = require('../models/booking.model'); // Import Booking model
+const User = require('../models/user.model'); // <-- Import User model
 const { isWithinOperatingHours, getTimeSlots } = require('../utils/timeUtils');
 const { startOfDay, endOfDay } = require('date-fns'); // Import date-fns helpers
+const { createNotification } = require('../utils/notification.service'); // <-- Import notification service
 
 const playerCourtController = {
 // Export each controller function individually for better error tracking
@@ -180,7 +182,8 @@ addReview: async (req, res) => {
         return res.status(400).json({ message: 'Rating is required and must be between 1-5' });
       }
       
-      const court = await Court.findById(req.params.id);
+      // Find the court and ensure futsalId is populated for finding the admin
+      const court = await Court.findById(req.params.id).populate('futsalId');
       if (!req.user?._id) {
         return res.status(401).json({ message: 'User not authenticated' })
       }
@@ -188,7 +191,12 @@ addReview: async (req, res) => {
       if (!court) {
         return res.status(404).json({ message: 'Court not found' });
       }
-  
+      // Add check for populated futsalId
+      if (!court.futsalId) {
+          console.error(`[Add Review] Court ${court._id} is missing futsalId reference.`);
+          return res.status(500).json({ message: 'Internal server error: Court data incomplete.' });
+      }
+
       // Check if user has already reviewed
       const existingReview = court.reviews.find(
         review => review.user.toString() === req.user._id.toString()
@@ -198,17 +206,45 @@ addReview: async (req, res) => {
         return res.status(400).json({ message: 'You have already reviewed this court' });
       }
   
-      // Add the review - comment can be empty string
-      court.reviews.push({
+      // Add the review
+      const newReview = {
         user: req.user._id,
         rating: Number(rating),
         comment,
         reactions: []
-      });
+      };
+      court.reviews.push(newReview);
   
       court.averageRating = court.calculateAverageRating();
       await court.save();
+
+      // --- Send Notification to Admin --- 
+      try {
+          const futsalAdmin = await User.findOne({ futsal: court.futsalId._id, role: 'futsalAdmin' });
+          if (futsalAdmin) {
+              const reviewUser = await User.findById(req.user._id);
+              const userName = reviewUser ? `${reviewUser.firstName} ${reviewUser.lastName}` : 'A user';
+              const ratingStars = '★'.repeat(newReview.rating) + '☆'.repeat(5 - newReview.rating);
+
+              const adminTitle = `New Review for ${court.name}`;
+              const adminMessage = `${userName} left a ${ratingStars} review: "${newReview.comment || '(No comment)'}"`;
+              
+              await createNotification(
+                  futsalAdmin._id,
+                  adminTitle,
+                  adminMessage,
+                  'new_review_admin',
+                  `/admin/courts` // Link to admin courts page (or specific court if possible)
+              );
+          } else {
+              console.warn(`[Notification] No futsalAdmin found for futsal ${court.futsalId._id} to notify about new review.`);
+          }
+      } catch (notificationError) {
+          console.error('[Add Review] Failed to send admin notification:', notificationError);
+      }
+      // --- End Notification --- 
   
+      // Repopulate after saving AND sending notification
       const populatedCourt = await Court.findById(court._id)
         .populate('reviews.user', 'username')
         .populate('reviews.reactions.user', 'username');

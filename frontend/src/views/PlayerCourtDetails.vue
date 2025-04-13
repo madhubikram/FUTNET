@@ -87,6 +87,7 @@
           <!-- Booking Section Component -->
           <BookingSection
             ref="bookingSectionRef"
+            v-if="court"
             :court="court"
             @proceed-booking="handleProceedBooking"
           />
@@ -107,8 +108,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter  } from 'vue-router'
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import PageLayout from '@/components/layout/PageLayout.vue'
 
 
@@ -119,9 +120,11 @@ import CourtInfo from '@/components/court-details/CourtInfo.vue'
 import ReviewSection from '@/components/court-details/ReviewSection.vue'
 import BookingSection from '@/components/court-details/BookingSection.vue'
 import BookingConfirmationModal from '@/components/court-details/BookingConfirmationModal.vue'
+import { useApi } from '@/composables/useApi'
 
 const route = useRoute()
 const router = useRouter()
+const { fetchData, error: apiError } = useApi()
 
 // State Management
 const court = ref(null)
@@ -172,27 +175,22 @@ const courtLocation = computed(() => {
   };
 });
 
+// Utility for logging (define within setup)
+const log = (level, context, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [${level}] [${context}] ${message}`, data ? JSON.stringify(data) : '');
+};
+
 // API Calls
 const fetchCourtDetails = async () => {
+  const context = 'FETCH_COURT_DETAILS';
   try {
-    loading.value = true
-    error.value = null
-    
-    const response = await fetch(
-      `http://localhost:5000/api/player/courts/${route.params.id}`,
-      {
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}` 
-        }
-      }
-    )
-    
-    if (!response.ok) {
-      throw new Error('Failed to fetch court details')
-    }
-    
-    const data = await response.json()
-    
+    loading.value = true;
+    error.value = null;
+    log('INFO', context, `Fetching details for court ${route.params.id}`);
+
+    const data = await fetchData(`/player/courts/${route.params.id}`);
+
     // Improve duplicate review filtering with more strict comparison
     const uniqueReviews = Array.from(new Map(
       data.reviews.map(review => [review._id, review])
@@ -204,15 +202,16 @@ const fetchCourtDetails = async () => {
       futsalName: data.futsalId?.name || 'Unknown Futsal',
       courtName: data.name,
       location: data.futsalId?.location || 'Location not available'
-    }
+    };
+    log('INFO', context, `Successfully fetched details for court ${route.params.id}`);
 
   } catch (err) {
-    console.error('Error fetching court:', err)
-    error.value = err.message
+    log('ERROR', context, `Error fetching court ${route.params.id}`, { error: apiError.value || err.message });
+    error.value = apiError.value || err.message;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
-}
+};
 
 // Event Handlers for Review Section
 const handleSubmitReview = async (reviewData) => {
@@ -337,144 +336,108 @@ const handleProceedBooking = (details) => {
 }
 
 const handleConfirmBooking = async () => {
+  const context = 'FRONTEND_BOOKING_SUBMIT';
   try {
     isProcessingBooking.value = true;
-    
-    if (!court.value.requirePrepayment) {
-      // Format the date to ISO format (YYYY-MM-DD)
-      let formattedDate;
-      try {
-        if (typeof bookingDetails.value.date === 'string') {
-          // Try to ensure it's a valid date string in YYYY-MM-DD format
-          const parts = bookingDetails.value.date.split('-');
-          if (parts.length === 3) {
-            formattedDate = bookingDetails.value.date;
-          } else {
-            const date = new Date(bookingDetails.value.date);
-            formattedDate = date.toISOString().split('T')[0];
-          }
-        } else if (bookingDetails.value.date instanceof Date) {
-          formattedDate = bookingDetails.value.date.toISOString().split('T')[0];
-        } else {
-          // Fallback to today's date if we can't determine the date
-          formattedDate = new Date().toISOString().split('T')[0];
-        }
-      } catch (dateError) {
-        console.error('Error formatting date:', dateError);
-        formattedDate = new Date().toISOString().split('T')[0]; // Use today as fallback
-      }
-      
-      // Debug info to see the full structure of bookingDetails
-      console.log('Full booking details:', JSON.stringify(bookingDetails.value, null, 2));
-      
-      // Check if at least one slot is selected
-      if (!bookingDetails.value.slots || bookingDetails.value.slots.length === 0) {
-        alert('No time slots selected. Please select at least one time slot.');
+    log('INFO', context, 'Starting booking confirmation process.', { bookingDetails: bookingDetails.value, courtRequiresPrepayment: court.value.requirePrepayment });
+
+    // Use the raw date string (YYYY-MM-DD) directly from bookingDetails
+    const dateToSend = bookingDetails.value.date;
+    if (!dateToSend || !/\d{4}-\d{2}-\d{2}/.test(dateToSend)) {
+        log('ERROR', context, 'Invalid or missing date in bookingDetails.', { date: dateToSend });
+        alert('Invalid date selected. Please try again.');
         isProcessingBooking.value = false;
         return;
+    }
+
+    // Check if slots are selected
+    if (!bookingDetails.value.slots || bookingDetails.value.slots.length === 0) {
+      log('WARN', context, 'No time slots selected.');
+      alert('No time slots selected. Please select at least one time slot.');
+      isProcessingBooking.value = false;
+      return;
+    }
+
+    // Determine start and end times from the selected slots
+    const sortedSlots = [...bookingDetails.value.slots].sort((a, b) => a.time.localeCompare(b.time));
+    const firstSlot = sortedSlots[0];
+    const lastSlot = sortedSlots[sortedSlots.length - 1];
+
+    const calculateEndTime = (startTime) => {
+      const [hours, minutes] = startTime.split(':').map(Number);
+      const endMinutes = (hours * 60 + minutes + 60) % (24 * 60); // Add 60 minutes, wrap around midnight if needed
+      return `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;    
+    };
+
+    const startTime = firstSlot?.time || null;
+    const endTime = lastSlot?.time ? calculateEndTime(lastSlot.time) : null;
+
+    if (!startTime || !endTime) {
+      log('ERROR', context, 'Could not determine valid start/end time from selected slots.', { slots: bookingDetails.value.slots });
+      alert('Could not determine booking time. Please try again or select different time slots.');
+      isProcessingBooking.value = false;
+      return;
+    }
+
+    const bookingData = {
+      courtId: route.params.id,
+      date: dateToSend,
+      startTime: startTime,
+      endTime: endTime,
+      selectedSlotsDetail: bookingDetails.value.slots.map(s => ({ time: s.time, rate: s.rate })), 
+      userDetails: {
+        name: localStorage.getItem('username') || '',
+        email: localStorage.getItem('email') || '',
+        phone: localStorage.getItem('phone') || ''
       }
+    };
+
+    log('INFO', context, 'Sending booking request to backend.', bookingData);
+
+    // --- Call Backend Booking Endpoint using fetchData --- 
+    try {
+      // Use fetchData for the POST request
+      const responseData = await fetchData('/bookings', {
+          method: 'POST',
+          body: JSON.stringify(bookingData)
+          // Headers handled by useApi
+      });
+
+      log('INFO', context, 'Received response from backend /api/bookings.', responseData);
+
+      // --- Handle Backend Response --- 
+      // Status check needs adjustment as fetchData throws on non-ok status
+      // If code reaches here, the request was successful (status 2xx)
       
-      // Get the first and last selected time slot
-      const firstSlot = bookingDetails.value.slots[0];
-      const lastSlot = bookingDetails.value.slots[bookingDetails.value.slots.length - 1];
-      
-      // Calculate end time (assuming 1-hour slots)
-      const calculateEndTime = (startTime) => {
-        const [hours, minutes] = startTime.split(':').map(Number);
-        const totalMinutes = hours * 60 + minutes + 60; // Add 1 hour (60 minutes)
-        const newHours = Math.floor(totalMinutes / 60);
-        const newMinutes = totalMinutes % 60;
-        return `${String(newHours).padStart(2, '0')}:${String(newMinutes).padStart(2, '0')}`;
-      };
-      
-      // If time slot doesn't have startTime/endTime properties, use the time property
-      const startTime = firstSlot.startTime || firstSlot.time || null;
-      let endTime;
-      
-      if (lastSlot.endTime) {
-        endTime = lastSlot.endTime;
-      } else if (lastSlot.time) {
-        endTime = calculateEndTime(lastSlot.time);
+      if (responseData.paymentUrl) {
+        // --- Payment Required: Redirect to Khalti --- 
+        log('INFO', context, `Payment required. Redirecting to Khalti for BookingID: ${responseData.bookingId}, OrderID: ${responseData.purchaseOrderId}`);
+        alert('Redirecting to Khalti for payment...'); // Use toast in production
+        window.location.href = responseData.paymentUrl;
       } else {
-        endTime = null;
-      }
-      
-      // Check if we have valid times
-      if (!startTime || !endTime) {
-        console.error('Invalid time slots:', bookingDetails.value.slots);
-        alert('Could not determine booking time. Please try again or select different time slots.');
-        isProcessingBooking.value = false;
-        return;
-      }
-      
-      const bookingData = {
-        courtId: route.params.id,
-        date: formattedDate,
-        // Just send time strings as HH:MM - the backend will handle the conversion
-        startTime: startTime,
-        endTime: endTime,
-        totalAmount: bookingDetails.value.totalAmount,
-        requiresPayment: bookingDetails.value.requiresPayment,
-        isSlotFree: !bookingDetails.value.requiresPayment,
-        userDetails: {
-          name: localStorage.getItem('username') || '',
-          email: localStorage.getItem('email') || '',
-          phone: localStorage.getItem('phone') || ''
-        }
-      };
-
-      console.log('Sending booking data:', bookingData);
-
-      try {
-        const response = await fetch(
-          'http://localhost:5000/api/bookings',
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(bookingData)
-          }
-        );
-
-        const responseText = await response.text();
-        console.log('Response from booking API:', response.status, responseText);
-        
-        if (!response.ok) {
-          let errorData = { message: 'Failed to create booking' };
-          try {
-            errorData = JSON.parse(responseText);
-          } catch {
-            // If not JSON, use the text as is
-          }
-          throw new Error(errorData.message || 'Failed to create booking');
-        }
-        
-        const data = JSON.parse(responseText);
-        console.log('Booking created successfully:', data);
-        
+        // --- Free Booking Confirmed Directly --- 
+        log('INFO', context, `Free booking confirmed directly by backend. BookingID: ${responseData.bookingId || responseData._id}`);
+        alert('Booking confirmed successfully (Free Slot)!'); // Use toast
         showBookingModal.value = false;
         bookingDetails.value = null;
-        
-        bookingSectionRef.value?.refreshBookingData();
-        
-        alert('Booking confirmed successfully! You can view your bookings in the Bookings section.');
-        router.push('/bookings');
-      } catch (error) {
-        console.error('Error creating booking:', error);
-        alert('Unable to complete booking: ' + error.message);
+        bookingSectionRef.value?.refreshBookingData(); // Refresh slots
+        router.push('/my-bookings'); // Navigate to bookings page
       }
-    } else {
-      console.log('Prepayment required - implementation pending');
-      alert('For demo purposes: Prepayment will be required in the production version.');
-    }
-    
+
+    } catch (error) {
+      // Error is caught by the outer try-catch, useApi sets apiError
+      const errorMsg = apiError.value || error.message || 'Failed to create booking.';
+      log('ERROR', context, 'Error creating booking via backend API.', { error: errorMsg });
+      alert('Unable to complete booking: ' + errorMsg);
+    } 
+    // --- End Backend Call --- 
+
   } catch (error) {
-    console.error('Error in booking process:', error);
+    // Catch errors from date formatting, slot checking etc.
+    log('ERROR', context, 'Error during booking confirmation process.', { message: error.message, stack: error.stack });
     alert('An error occurred during the booking process. Please try again.');
   } finally {
-    isProcessingBooking.value = false;
+    isProcessingBooking.value = false; // Reset specific loading state
   }
 }
 
@@ -483,6 +446,25 @@ const closeBookingModal = () => {
   bookingDetails.value = null
 }
 
+// Watch for payment success query parameter
+watch(
+  () => route.query.paymentSuccess,
+  (newVal) => {
+    if (newVal === 'true') {
+      console.log('[PlayerCourtDetails] Detected paymentSuccess query param. Refreshing booking data...');
+      // Call the refresh method on the child component
+      bookingSectionRef.value?.refreshBookingData();
+      
+      // Remove the query parameter from the URL without reloading the page
+      router.replace({ query: { ...route.query, paymentSuccess: undefined } });
+      console.log('Booking confirmed! (Toast removed)'); // Add a console log instead
+    }
+  },
+  { immediate: true } // Check immediately when component loads
+)
+
 // Initialize component
-onMounted(fetchCourtDetails)
+onMounted(() => {
+  fetchCourtDetails()
+})
 </script>

@@ -2,13 +2,16 @@
   <PageLayout class="bg-gradient-to-br from-gray-900 to-gray-950 min-h-screen">
     <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <!-- Header -->
-      <div class="mb-10">
-        <h1 class="text-4xl font-bold tracking-tight mb-1">
-          <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-            Profile & Futsal Management
-          </span>
-        </h1>
-        <p class="text-lg text-gray-400">Update your personal and futsal details.</p>
+      <div class="mb-10 flex justify-between items-start">
+        <div>
+          <h1 class="text-4xl font-bold tracking-tight mb-1">
+            <span class="bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
+              Profile & Futsal Management
+            </span>
+          </h1>
+          <p class="text-lg text-gray-400">Update your personal and futsal details.</p>
+        </div>
+        <NotificationBell class="mt-2" />
       </div>
 
       <!-- Loading State -->
@@ -153,6 +156,7 @@ import { ref, onMounted, computed } from 'vue';
 import { useToast } from 'vue-toastification';
 import PageLayout from '@/components/layout/PageLayout.vue';
 import AdminProfileMap from '@/components/AdminProfileMap.vue';
+import NotificationBell from '@/components/features/NotificationBell.vue';
 import { Loader2, Save, Lock, User, Mail, Phone, Building2, Info, MapPin, KeyRound /* Removed ImagePlus, Trash2 */ } from 'lucide-vue-next';
 import axios from 'axios';
 import _ from 'lodash';
@@ -308,10 +312,12 @@ const saveChanges = async () => {
       const futsalUpdatePayload = {
           name: futsalData.value.name,
           description: futsalData.value.description,
-          location: futsalData.value.locationString,
-          coordinates: futsalData.value.coordinates,
-          operatingHours: futsalData.value.operatingHours, // Send simple object
-          // Send existing image paths if you want to allow removal
+          location: {
+              address: futsalData.value.locationString,
+              lat: futsalData.value.coordinates.lat,
+              lng: futsalData.value.coordinates.lng
+          },
+          operatingHours: futsalData.value.operatingHours,
           images: futsalData.value.images.filter(img => typeof img === 'string' && !img.startsWith('blob:'))
       };
 

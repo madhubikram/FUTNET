@@ -470,6 +470,7 @@
                         <input
                           type="number"
                           min="0"
+                          max="9"
                           v-model.number="match.score1"
                           @input="updateMatch(roundIndex, matchIndex, 'score1')"
                           :class="[

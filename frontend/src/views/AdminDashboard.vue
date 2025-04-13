@@ -6,6 +6,7 @@
         <h1 class="text-2xl font-bold text-white">Dashboard</h1>
         <p class="text-gray-400">{{ futsalName }}</p>
       </div>
+      <NotificationBell />
     </div>
 
     <!-- Stats Grid -->
@@ -118,6 +119,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import PageLayout from '@/components/layout/PageLayout.vue'
+import NotificationBell from '@/components/features/NotificationBell.vue'
 import { 
   CalendarDaysIcon, DollarSignIcon, LayoutIcon, StarIcon,
   MoreVerticalIcon, CheckCircleIcon, ClockIcon
