@@ -13,7 +13,23 @@ getCourtDetails: async (req, res) => {
     try {
         const court = await Court.findById(req.params.id)
             .populate('futsalId', 'name location coordinates operatingHours')
-            .populate('reviews.user', 'username');
+            .populate({
+                path: 'reviews',
+                populate: [
+                    { 
+                        path: 'user',
+                        select: 'username firstName lastName'
+                    },
+                    { 
+                        path: 'replies.adminUser',
+                        select: 'username firstName lastName futsal',
+                        populate: {
+                            path: 'futsal',
+                            select: 'name'
+                        }
+                    } 
+                ]
+            });
 
         if (!court) {
             return res.status(404).json({ message: 'Court not found' });
@@ -27,6 +43,9 @@ getCourtDetails: async (req, res) => {
         // Convert court document to a plain object to add the calculated rating
         const courtData = court.toObject();
         courtData.averageRating = calculatedAverageRating; 
+        
+        // Log the reviews array just before sending response
+        console.log('[getCourtDetails] Reviews being sent:', JSON.stringify(courtData.reviews, null, 2));
 
         // Return the fetched data + calculated rating
         res.json(courtData); 
@@ -374,6 +393,213 @@ addReview: async (req, res) => {
       res.json(populatedCourt);
     } catch (error) {
       res.status(500).json({ message: error.message });
+    }
+  },
+
+  addReplyToReview: async (req, res) => {
+    const context = 'ADD_REPLY'; 
+    console.log(`[${context}] Received request for review ${req.params.reviewId} on court ${req.params.id}`);
+    try {
+      const { text } = req.body;
+      const court = await Court.findById(req.params.id);
+
+      console.log(`[${context}] Text received: ${text ? 'Yes' : 'No'}`);
+      console.log(`[${context}] Court found: ${court ? 'Yes' : 'No'}`);
+
+      if (!text) {
+        return res.status(400).json({ message: 'Reply text is required' });
+      }
+      if (!court) {
+        return res.status(404).json({ message: 'Court not found' });
+      }
+
+      const review = court.reviews.id(req.params.reviewId);
+      console.log(`[${context}] Review found: ${review ? 'Yes' : 'No'}`);
+      if (!review) {
+        return res.status(404).json({ message: 'Review not found' });
+      }
+
+      // Check if user is an admin
+      console.log(`[${context}] Checking admin role for user: ${req.user?._id}, role: ${req.user?.role}`);
+      if (!req.user || (req.user.role !== 'futsalAdmin' && req.user.role !== 'superAdmin')) {
+          return res.status(403).json({ message: 'Unauthorized: Only admins can reply.' });
+      }
+
+      // --- Check if this admin already replied --- 
+      const existingReply = review.replies.find(
+        (reply) => reply.adminUser.toString() === req.user._id.toString()
+      );
+      if (existingReply) {
+          console.warn(`[${context}] Admin ${req.user._id} has already replied to review ${review._id}.`);
+          return res.status(409).json({ message: 'You have already replied to this review.' });
+      }
+      // --- End Check --- 
+
+      const newReply = {
+        adminUser: req.user._id,
+        text,
+        createdAt: new Date()
+      };
+      console.log(`[${context}] Created new reply object:`, newReply);
+
+      review.replies.push(newReply);
+      console.log(`[${context}] Pushed reply to review. Attempting save...`);
+      await court.save();
+      console.log(`[${context}] Court saved successfully after adding reply.`);
+
+      console.log(`[${context}] review.user value before notification:`, review.user, typeof review.user); // <-- ADD LOG
+      // --- Notify original reviewer --- 
+      try {
+        const reviewAuthorId = review.user; // Get the ID of the user who wrote the review
+        const adminName = req.user.futsal?.name || req.user.username || 'Admin'; // Get admin/futsal name
+        const courtName = court.name;
+        
+        console.log(`[${context}] Attempting to notify original reviewer: ${reviewAuthorId}`);
+
+        // Check if reviewer exists and is not the admin replying
+        const isSelfReply = reviewAuthorId ? reviewAuthorId.toString() === req.user._id.toString() : true; // Treat missing ID as self-reply case
+        console.log(`[${context}] Is reviewer ID present? ${!!reviewAuthorId}. Is it a self-reply? ${isSelfReply}`); // <-- ADD LOG
+        if (reviewAuthorId && !isSelfReply) { 
+            console.log(`[${context}] Sending notification to review author ${reviewAuthorId}...`);
+            await createNotification(
+                reviewAuthorId, // Target user ID (1st arg)
+                `New Reply on Your Review for ${courtName}`, // Title (2nd arg)
+                `${adminName} replied: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`, // Message (3rd arg)
+                'review_reply', // Type (4th arg)
+                `/courts/${court._id}` // Link (5th arg)
+            );
+            console.log(`[${context}] Notification sent successfully to ${reviewAuthorId}.`);
+        } else if (!reviewAuthorId) {
+             console.warn(`[${context}] Could not find original reviewer ID (ID: ${review.user}) to notify.`);
+        } else {
+             console.log(`[${context}] Skipping notification because admin is replying to their own review (or reviewer ID missing).`);
+        }
+      } catch (notifyError) {
+        console.error(`[${context}] Error sending notification to reviewer:`, notifyError);
+        // Decide if you want to fail the request or just log the notification error
+      }
+      // --- End Notification ---
+
+      // Repopulate to send back the updated review/court
+      console.log(`[${context}] Repopulating court data after reply...`);
+      const updatedCourt = await Court.findById(court._id)
+        .populate({
+           path: 'reviews',
+           populate: [
+               { path: 'user', select: 'username firstName lastName' },
+               { path: 'replies.adminUser', select: 'username firstName lastName' } // Populate admin user in replies
+           ]
+        });
+      console.log(`[${context}] Repopulation successful. Sending response.`);
+
+      res.status(201).json(updatedCourt); // Send back updated court data
+
+    } catch (error) {
+      console.error(`[${context}] Error adding reply to review:`, error);
+      res.status(500).json({ message: `Error processing reply: ${error.message}` }); // Send error message
+    }
+  },
+
+  updateReply: async (req, res) => {
+    const context = 'UPDATE_REPLY';
+    try {
+      const { text } = req.body;
+      const { id: courtId, reviewId, replyId } = req.params;
+
+      if (!text) {
+        return res.status(400).json({ message: 'Reply text is required' });
+      }
+
+      const court = await Court.findById(courtId);
+      if (!court) return res.status(404).json({ message: 'Court not found' });
+
+      const review = court.reviews.id(reviewId);
+      if (!review) return res.status(404).json({ message: 'Review not found' });
+
+      const reply = review.replies.id(replyId);
+      if (!reply) return res.status(404).json({ message: 'Reply not found' });
+
+      // Authorization: Check if the current user is the admin who wrote the reply
+      if (!req.user || reply.adminUser.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Unauthorized: You can only edit your own reply.' });
+      }
+
+      reply.text = text;
+      // Optionally update a timestamp: reply.updatedAt = new Date(); (if added to schema)
+      await court.save();
+
+      // Repopulate and send back
+      const updatedCourt = await Court.findById(court._id).populate(/* ... same as addReply ... */);
+      res.json(updatedCourt);
+
+    } catch (error) {
+      console.error(`[${context}] Error updating reply:`, error);
+      res.status(500).json({ message: `Error updating reply: ${error.message}` });
+    }
+  },
+
+  deleteReply: async (req, res) => {
+    console.log('[Backend deleteReply] Handler started'); // <-- ADD LOG
+    try {
+      const { id: courtId, reviewId, replyId } = req.params;
+
+      // Find the court
+      console.log(`[Backend deleteReply] Finding court with ID: ${courtId}`); // <-- ADD LOG
+      const court = await Court.findById(courtId);
+      
+      if (!court) {
+        console.log('[Backend deleteReply] Court not found'); // <-- ADD LOG
+        return res.status(404).json({ message: 'Court not found' });
+      }
+
+      console.log('[Backend deleteReply] Finding review with ID within court:', reviewId); // <-- ADD LOG
+      const review = court.reviews.id(reviewId); // Mongoose subdocument .id() helper
+
+      if (!review) {
+        console.log('[Backend deleteReply] Review not found within court'); // <-- ADD LOG
+        return res.status(404).json({ message: 'Review not found' });
+      }
+
+      // Authorization: Check if the current user is the admin who wrote the reply
+      if (!req.user || review.replies.id(replyId).adminUser.toString() !== req.user._id.toString()) {
+        return res.status(403).json({ message: 'Unauthorized: You can only delete your own reply.' });
+      }
+      console.log('[Backend deleteReply] Authorization successful'); // <-- ADD LOG
+
+      // Remove the reply using pull
+      console.log(`[Backend deleteReply] Attempting to remove reply ${replyId} from review ${reviewId}`); // <-- ADD LOG
+      review.replies.pull(replyId); 
+
+      // Save the parent court document
+      console.log('[Backend deleteReply] Attempting to save the court document...'); // <-- ADD LOG
+      await court.save();
+      console.log('[Backend deleteReply] Court document saved successfully.'); // <-- ADD LOG
+
+      // Fetch the updated court object again to ensure population works
+      console.log('[Backend deleteReply] Refetching updated court data for response...'); // <-- ADD LOG
+      const finalCourtData = await Court.findById(court._id) // <-- Use new variable name
+        .populate('futsalId', 'name location coordinates operatingHours')
+        .populate({
+            path: 'reviews',
+            populate: [
+                { path: 'user', select: 'username firstName lastName' },
+                { 
+                    path: 'replies.adminUser',
+                    select: 'username firstName lastName futsal',
+                    populate: {
+                        path: 'futsal',
+                        select: 'name'
+                    }
+                } 
+            ]
+        });
+      
+      console.log('[Backend deleteReply] Sending updated court data in response.'); // <-- ADD LOG
+      res.json(finalCourtData); // <-- Send the newly fetched data
+
+    } catch (error) {
+      console.error(`[${context}] Error deleting reply:`, error);
+      res.status(500).json({ message: `Error deleting reply: ${error.message}` });
     }
   }
 };

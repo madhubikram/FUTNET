@@ -13,30 +13,40 @@
       <div class="absolute inset-0 bg-gradient-to-t from-gray-900 via-gray-900/10 to-transparent"></div>
 
       <!-- RATING & DISTANCE BADGES -->
-      <div
-        class="absolute top-2 right-2 flex gap-1 transform group-hover:translate-y-1 transition-all duration-300"
-      >
-        <!-- Star / Rating -->
-        <div class="relative">
-          <span
-            class="absolute inset-0 bg-yellow-500/40 rounded-full blur-md group-hover:blur-lg transition-all duration-300"
-          ></span>
-          <span
-            class="relative px-1 py-0.5 bg-yellow-500/90 rounded-full text-[0.6rem] font-semibold shadow-sm backdrop-blur-sm flex items-center gap-0.5 group-hover:bg-yellow-400/90 transition-colors duration-300"
-          >
-            <StarIcon class="w-2 h-2" />
-            <span>{{ futsal.rating }}</span>
-          </span>
-        </div>
+ <!-- Minimal Yet Elegant Badges Section -->
+<div
+  class="absolute top-2.5 right-2.5 flex gap-1.5 transform group-hover:translate-y-0 transition-all duration-200"
+>
+  <!-- Star / Rating Badge - Minimal -->
+  <div class="relative">
+    <!-- Subtle glow effect -->
+    <span
+      class="absolute inset-0 bg-amber-400/20 rounded-full blur-sm group-hover:blur-md group-hover:bg-amber-400/30 transition-all duration-200"
+    ></span>
+    <!-- Badge content -->
+    <span
+      class="relative px-1.5 py-0.5 bg-black/70 rounded-full text-xs font-medium shadow-sm backdrop-blur-sm flex items-center gap-0.5 border border-amber-300/20 group-hover:bg-black/80 transition-all duration-200"
+    >
+      <StarIcon class="w-3 h-3 text-amber-400" />
+      <span class="text-amber-100">{{ futsal.rating }}</span>
+    </span>
+  </div>
 
-        <!-- Distance -->
-        <span
-          class="px-1 py-0.5 bg-gray-900/50 rounded-full text-[0.6rem] font-medium backdrop-blur-sm flex items-center gap-0.5 group-hover:bg-gray-800/70 transition-colors duration-300"
-        >
-          <MapPinIcon class="w-2 h-2 text-gray-300" />
-          <span class="text-gray-200">{{ futsal.distance }} km</span>
-        </span>
-      </div>
+  <!-- Distance Badge - Minimal -->
+  <div class="relative">
+    <!-- Subtle glow effect -->
+    <span
+      class="absolute inset-0 bg-sky-400/20 rounded-full blur-sm group-hover:blur-md transition-all duration-200"
+    ></span>
+    <!-- Badge content -->
+    <span
+      class="relative px-1.5 py-0.5 bg-black/70 rounded-full text-xs font-medium shadow-sm backdrop-blur-sm flex items-center gap-0.5 border border-sky-300/20 group-hover:bg-black/80 transition-all duration-200"
+    >
+      <MapPinIcon class="w-3 h-3 text-emerald-400" />
+      <span class="text-gray-100">{{ futsal.distance }} km</span>
+    </span>
+  </div>
+</div>
 
       <!-- TITLE & FAVORITE ICON -->
       <div class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-gray-900 to-transparent">

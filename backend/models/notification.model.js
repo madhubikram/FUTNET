@@ -34,7 +34,7 @@ const notificationSchema = new Schema({
       'loyalty_points', 'loyalty_points_received', 
       'system_alert',
       'new_booking_admin', 'booking_cancel_admin', 'payment_received_admin',
-      'new_review_admin', 
+      'new_review_admin', 'review_reply',
       'tournament_fixture_reminder', 'tournament_start_admin', 'tournament_end_admin', 'tournament_cancel_admin'
     ],
     required: true

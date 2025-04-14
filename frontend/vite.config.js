@@ -13,7 +13,7 @@ export default defineConfig({
     host: true, 
     proxy: {
       '^/api/.*': {
-        target: 'http://192.168.1.70:5000',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false, // Bypass certificate check in development
         host: true

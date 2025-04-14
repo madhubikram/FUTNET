@@ -278,6 +278,28 @@
             <span>{{ getReactionCount(review._id, 'dislike') }}</span>
           </button>
         </div>
+
+        <!-- Admin Replies Section -->
+        <div v-if="review.replies?.length > 0" class="mt-4 pl-8 space-y-3">
+          <div 
+            v-for="reply in review.replies" 
+            :key="reply._id" 
+            class="bg-gray-600/30 p-3 rounded-lg border-l-2 border-blue-400/50"
+          >
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-sm font-medium text-blue-300">
+                <!-- Prefer Futsal name if available, fallback to username -->
+                {{ reply.adminUser?.futsal?.name || reply.adminUser?.username || 'Admin' }} replied:
+              </span>
+              <span class="text-xs text-gray-400">
+                {{ formatReviewDate(reply.createdAt) }}
+              </span>
+            </div>
+            <p class="text-sm text-gray-300">{{ reply.text }}</p>
+          </div>
+        </div>
+        <!-- End Admin Replies Section -->
+
       </div>
     </div>
   </section>

@@ -222,6 +222,8 @@ const error = ref(null);
 const router = useRouter();
 
 const displayName = ref('Player')
+const userLocation = ref(null); // Added: State for user location { lat, lng }
+const locationError = ref(null); // Added: State for location errors
 
 const fetchUserDetails = async () => {
   const token = localStorage.getItem('token');
@@ -264,9 +266,69 @@ const fetchUserDetails = async () => {
   }
 };
 
-onMounted(() => {
+// Helper function to calculate distance using Haversine formula
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) {
+    return null; // Cannot calculate if any coordinate is missing
+  }
+
+  const R = 6371; // Radius of the Earth in kilometers
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const distance = R * c; // Distance in km
+  return distance.toFixed(1); // Return distance rounded to one decimal place
+};
+
+// Function to get user's current location
+const getUserLocation = () => {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      locationError.value = 'Geolocation is not supported by your browser.';
+      console.warn(locationError.value);
+      reject(locationError.value);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        userLocation.value = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude
+        };
+        locationError.value = null; // Clear any previous error
+        console.log('User location obtained:', userLocation.value);
+        resolve(userLocation.value);
+      },
+      (error) => {
+        locationError.value = `Error getting location: ${error.message}`;
+        console.error(locationError.value);
+        userLocation.value = null; // Ensure location is null on error
+        reject(locationError.value);
+      },
+      {
+        enableHighAccuracy: true, // Request more accurate position if available
+        timeout: 10000,          // Maximum time (in ms) to wait for location
+        maximumAge: 0            // Don't use a cached position
+      }
+    );
+  });
+};
+
+onMounted(async () => {
   fetchUserDetails();
-  fetchCourts();
+  try {
+    await getUserLocation(); // Wait for location first
+  } catch (err) {
+    console.log("Proceeding without user location due to error:", err)
+    // Location might not be available, fetch courts anyway
+  } finally {
+     fetchCourts(); // Fetch courts after attempting to get location
+  }
 });
 
 // Search and Filtering
@@ -444,7 +506,8 @@ const fetchCourts = async () => {
       console.log(`Court ${court.name} (${court._id}):`, {
         futsalId: court.futsalId,
         operatingHours: court.futsalId?.operatingHours,
-        hasOperatingHours: !!court.futsalId?.operatingHours
+        hasOperatingHours: !!court.futsalId?.operatingHours,
+        coordinates: court.futsalId?.coordinates // Added log for coordinates
       });
     });
     
@@ -479,6 +542,31 @@ const fetchCourts = async () => {
       // Get available slots for today
       let availableSlots = [];
       
+      // Calculate distance if user location and futsal coordinates are available
+      let distance = '?'; // Default distance display
+      const futsalLat = court.futsalId?.coordinates?.lat;
+      const futsalLng = court.futsalId?.coordinates?.lng;
+
+      if (userLocation.value && futsalLat != null && futsalLng != null) {
+        const calculatedDist = calculateDistance(
+          userLocation.value.lat,
+          userLocation.value.lng,
+          Number(futsalLat), // Ensure coordinates are numbers
+          Number(futsalLng)
+        );
+        if (calculatedDist !== null) {
+          distance = calculatedDist;
+        } else {
+           console.warn(`Could not calculate distance for ${court.futsalId?.name}, invalid coordinates?`, {futsalLat, futsalLng});
+        }
+      } else if (!userLocation.value) {
+          console.log(`Cannot calculate distance for ${court.futsalId?.name}: User location not available.`);
+          // Keep distance as '?'
+      } else {
+         console.log(`Cannot calculate distance for ${court.futsalId?.name}: Futsal coordinates missing or invalid.`, {futsalLat, futsalLng});
+         // Keep distance as '?'
+      }
+
       // Use court operating hours to generate potential slots
       if (court.futsalId?.operatingHours) {
         const { opening, closing } = court.futsalId.operatingHours;
@@ -512,7 +600,7 @@ const fetchCourts = async () => {
         courtName: court.name,
         location: formattedLocation,
         rating: court.averageRating || 0,
-        distance: '2.5',
+        distance: distance, // Use calculated distance
         courtSide: court.courtSide,
         regularPrice: court.priceHourly,
         currentRate: currentRate,

@@ -146,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useTournamentStore } from '@/stores/useTournamentStore'
 import PageLayout from '@/components/layout/PageLayout.vue'
@@ -330,14 +330,47 @@ onMounted(async () => {
     return
   }
   
+  // Initial fetch - might not have the latest registration yet
   await tournamentStore.fetchTournaments();
-  console.log('Tournaments fetched:', {
+  console.log('Initial Tournaments fetched on mount:', {
     all: tournamentStore.tournaments,
     upcoming: tournamentStore.upcomingTournaments,
     ongoing: tournamentStore.ongoingTournaments,
     past: tournamentStore.pastTournaments
   });
+
+  // Set initial tab based on query AFTER initial fetch. Watcher will handle re-fetch if needed.
+  if (route.query.tab && tabs.value.some(t => t.id === route.query.tab)) {
+    console.log(`Setting initial tab to ${route.query.tab} based on query parameter`);
+    currentTab.value = route.query.tab;
+  }
 });
+
+// Watch for route query changes specifically for the tab parameter
+watch(
+  () => route.query,
+  async (newQuery, oldQuery) => {
+    // Check if we navigated specifically to the 'my-tournaments' tab via query
+    if (newQuery.tab === 'my-tournaments' && oldQuery?.tab !== 'my-tournaments') {
+      console.log('Detected navigation/update to my-tournaments tab via query param.');
+      // Ensure the tab is visually selected
+      currentTab.value = 'my-tournaments';
+      
+      // Force a refresh of the tournament data after a short delay
+      console.log('Forcing tournament data refresh due to tab navigation.');
+      await new Promise(resolve => setTimeout(resolve, 300)); // Small delay
+      await tournamentStore.fetchTournaments(); // Re-fetch data
+      console.log('Tournament data re-fetched.');
+    } 
+    // Handle setting tab if query changes for other reasons (e.g., browser back/forward)
+    else if (newQuery.tab && newQuery.tab !== oldQuery?.tab && tabs.value.some(t => t.id === newQuery.tab)) {
+         console.log(`Setting tab to ${newQuery.tab} based on query parameter change.`);
+         currentTab.value = newQuery.tab;
+         // Optionally re-fetch here too if needed for other tabs
+    }
+  },
+  { deep: true } // Watch nested changes in query object if any
+);
 
 const viewTournamentDetails = (tournament) => {
   console.log('Attempting navigation:', {

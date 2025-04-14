@@ -8,9 +8,41 @@ const User = require('../models/user.model');
 const khaltiService = require('../utils/khalti.service');
 const { createNotification } = require('../utils/notification.service'); // For success/failure notifications
 const moment = require('moment');
+const Loyalty = require('../models/loyalty.model'); // <-- Import Loyalty model
+const LoyaltyTransaction = require('../models/loyaltyTransaction.model'); // <-- Import LoyaltyTransaction model
 
 const log = khaltiService.log; // Use the logger from the service
 const PAYMENT_TIMEOUT_MINUTES = 15; // Configurable payment window
+const PREPAID_POINTS_PER_HOUR = 15; // <-- Define points for prepaid
+
+// Helper function to calculate duration in hours (copied from booking.routes.js)
+// TODO: Move this to a shared utility file (e.g., utils/timeUtils.js)
+const calculateDurationHours = (startTime, endTime) => {
+    try {
+      // Assuming startTime and endTime are in HH:mm format
+      const start = moment(startTime, 'HH:mm');
+      const end = moment(endTime, 'HH:mm');
+
+      // Handle cases where endTime is on the next day (e.g., 23:00 to 01:00)
+      if (end.isBefore(start)) {
+          end.add(1, 'day');
+      }
+
+      const duration = moment.duration(end.diff(start));
+      const hours = duration.asHours();
+
+      // Basic validation for calculated hours
+      if (isNaN(hours) || hours <= 0) {
+        console.error(`[calculateDurationHours] Invalid duration calculated: ${hours} hours for ${startTime} - ${endTime}`);
+        return 0; // Return 0 or throw error based on desired handling
+      }
+
+      return hours;
+    } catch (error) {
+        console.error('[calculateDurationHours] Error calculating duration:', error);
+        return 0; // Return 0 on error
+    }
+};
 
 /**
  * INTERNAL FUNCTION
@@ -47,6 +79,14 @@ const initiatePaymentFlow = async (itemType, itemId, userId) => {
                  if (!item.court) throw new Error('Booking court data not available for price calculation.');
                  expectedDbAmount = item.court.priceHourly; // Simplified fallback
              }
+            
+            // Debug log the amount being calculated
+            log('DEBUG', context, `Calculated amount for Khalti payment for booking ${itemId}:`, {
+                expectedDbAmount,
+                priceSource: typeof item.price === 'number' ? 'booking.price' : 'court.priceHourly',
+                courtId: item.court?._id
+            });
+            
             amount = Math.round(expectedDbAmount * 100); // Convert to Paisa
             purchase_order_name = `Court Booking: ${item.court?.name || 'Court'} on ${moment(item.date).format('YYYY-MM-DD')}`;
 
@@ -103,6 +143,15 @@ const initiatePaymentFlow = async (itemType, itemId, userId) => {
 
         // 5. Call Khalti Service
         const khaltiResult = await khaltiService.initiateKhaltiPayment(initiationData);
+        
+        // Enhanced logging for Khalti result
+        log('DEBUG', context, `Received Khalti initiation result for ${itemType} ${itemId}:`, {
+            success: khaltiResult.success,
+            hasPaymentUrl: !!khaltiResult.payment_url,
+            paymentUrl: khaltiResult.payment_url,
+            pidx: khaltiResult.pidx,
+            error: khaltiResult.error || 'none'
+        });
 
         // 6. Handle Khalti Response
         if (khaltiResult.success) {
@@ -112,11 +161,20 @@ const initiatePaymentFlow = async (itemType, itemId, userId) => {
                 method: 'khalti'
             };
             await item.save();
-            return {
+            
+            const successResult = {
                 success: true,
                 payment_url: khaltiResult.payment_url,
                 purchase_order_id: purchase_order_id
             };
+            
+            // Final validation check before returning
+            if (!successResult.payment_url) {
+                log('ERROR', context, `Payment URL missing in successful Khalti result for ${itemType} ${itemId}. This will break redirection!`);
+            }
+            
+            log('DEBUG', context, `Returning success result from initiatePaymentFlow for ${itemType} ${itemId}:`, successResult);
+            return successResult;
         } else {
             log('ERROR', context, `Khalti initiation failed for OrderID: ${purchase_order_id}. Reverting status.`, { error: khaltiResult.error });
             // Revert status or mark as failed immediately
@@ -204,7 +262,8 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
         let expectedDbAmount = 0;
         let userToNotify = null;
         let notificationTitle = '';
-        let notificationMessage = '';
+        // Use a different variable name to avoid redeclaration issues
+        let notificationText = '';
         let notificationType = '';
         let finalStatus = ''; // Booking/Registration status
         let paymentStatus = 'failed'; // Default payment status
@@ -266,7 +325,7 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
                 item.status = finalStatus; 
                 paymentStatus = 'failed';
                 notificationTitle = 'Payment Verification Issue';
-                notificationMessage = `There was an issue verifying your payment for ${internalPurchaseOrderId} (amount mismatch). Please contact support.`;
+                notificationText = `There was an issue verifying your payment for ${internalPurchaseOrderId} (amount mismatch). Please contact support.`;
                 notificationType = 'payment_failed';
             } else {
                 // --- SUCCESS CASE --- 
@@ -295,7 +354,7 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
                     }
                 }
                 // TODO: Add similar logic for tournament user notifications if needed
-                notificationMessage = detailedUserNotificationMessage; // Use the detailed message
+                notificationText = detailedUserNotificationMessage; // Use the detailed message
                 // --- End User Notification Message Construction ---
                 
                 notificationType = 'payment_confirmation';
@@ -311,83 +370,64 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
                 }
                 // Award loyalty points for paid bookings (if applicable)
                 if (itemType === 'booking') {
-                   // Add loyalty point logic here or call a separate service
+                   // --- START: Award Loyalty Points for PREPAID Booking ---
+                   try {
+                       const durationHours = calculateDurationHours(item.startTime, item.endTime);
+                       if (durationHours > 0) {
+                           // Fetch court to check if this was an optional prepayment (for courts that don't require prepayment)
+                           const court = await Court.findById(item.court).select('requirePrepayment name');
+                           const isOptionalPrepayment = court && !court.requirePrepayment;
+                           
+                           if (isOptionalPrepayment) {
+                               log('INFO', context, `This is an optional prepayment for court ${court.name} (doesn't require prepayment). Awarding bonus points.`);
+                           }
+                       }
+                   } catch (detailError) {
+                       log('ERROR', context, `Failed to fetch court details for user notification for booking ${item._id}`, detailError);
+                       // Keep default message if details fail
+                   }
                 }
-
-                // --- Notify Admin START --- 
-                if (itemType === 'booking') {
-                    const court = await Court.findById(item.court).populate('futsalId', 'name').select('futsalId name');
-                     if (court?.futsalId) { 
-                         const futsalAdmin = await User.findOne({ role: 'futsalAdmin', futsal: court.futsalId._id });
-                         if (futsalAdmin) {
-                             await createNotification(
-                                 futsalAdmin._id,
-                                 'Booking Payment Confirmed', // Title for admin
-                                 // Adjust message for admin with detailed court/futsal info
-                                 `Payment of Rs. ${khaltiAmount/100} confirmed for booking by ${item.userName || 'user'} at ${court.futsalId.name} - ${court.name} on ${moment(item.date).format('YYYY-MM-DD')} at ${item.startTime}. Booking is now confirmed.`,
-                                 'payment_received_admin', // Specific type for admin payment notification
-                                 `/admin/bookings?bookingId=${item._id}` // Link for admin
-                             );
-                             log('INFO', context, `Admin notification sent to ${futsalAdmin._id} for confirmed booking payment ${item._id}`);
-                         } else {
-                             log('WARN', context, `Futsal admin not found for futsal ID ${court.futsalId._id} to notify about confirmed payment ${item._id}`);
-                         }
-                     } else {
-                         log('WARN', context, `Court ${item.court} or its futsalId not found/populated. Cannot notify admin about payment.`);
-                     }
-                } else if (itemType === 'tournament') {
-                     // TODO: Add admin notification logic for tournament registration payment confirmation
-                     // Similar to booking: find tournament owner/admin, create notification
-                     log('INFO', context, 'Admin notification for tournament payment confirmation is not yet implemented.');
-                }
-                 // --- Notify Admin END --- 
             }
         } else {
-            // --- Khalti Status is NOT Completed --- 
-            log('WARN', context, `Khalti status is not 'Completed' (${khaltiStatus}) for PIDX: ${pidx}. Marking internal record as FAILED.`);
+            // --- FAILURE CASE --- 
+            log('ERROR', context, `Khalti status is ${khaltiStatus}. Marking as FAILED.`, { khaltiStatus });
             item.paymentStatus = 'failed';
-            item.paymentDetails = { ...(item.paymentDetails || {}), method: 'khalti', transactionId, paidAmount: khaltiAmount !== null ? khaltiAmount / 100 : undefined, failureReason: failureReason || `Khalti status: ${khaltiStatus}` };
+            item.paymentDetails = { ...(item.paymentDetails || {}), method: 'khalti', transactionId, paidAmount: khaltiAmount !== null ? khaltiAmount / 100 : undefined, paidAt: new Date(), failureReason: failureReason || 'Khalti status indicates failure' };
             finalStatus = itemType === 'booking' ? 'cancelled' : 'withdrawn'; // Decide policy
             item.status = finalStatus;
             paymentStatus = 'failed';
-            notificationTitle = 'Payment Failed';
-            notificationMessage = `Your payment for ${internalPurchaseOrderId} could not be completed (Status: ${khaltiStatus}). Please try again or contact support.`;
+            notificationTitle = 'Payment Verification Issue';
+            notificationText = `There was an issue verifying your payment for ${internalPurchaseOrderId}. Please contact support.`;
             notificationType = 'payment_failed';
         }
 
-        // Clear reservation expiry regardless of outcome once verified/attempted
-        item.reservationExpiresAt = undefined;
-
-        // Save the updated record
+        // Update DB with final status and payment details
+        item.paymentStatus = paymentStatus;
+        item.paymentDetails = item.paymentDetails || {};
+        item.paymentDetails.method = item.paymentDetails.method || 'khalti';
+        item.paymentDetails.transactionId = transactionId;
+        item.paymentDetails.paidAmount = item.paymentDetails.paidAmount || (khaltiAmount !== null ? khaltiAmount / 100 : undefined);
+        item.paymentDetails.paidAt = item.paymentDetails.paidAt || new Date();
+        item.paymentDetails.failureReason = item.paymentDetails.failureReason || failureReason;
+        item.status = finalStatus;
         await item.save();
-        log('INFO', context, `Saved final status for ItemID: ${item._id}. PaymentStatus: ${item.paymentStatus}, Status: ${item.status}`);
 
-        // Send notification
-        if (userToNotify && notificationTitle) {
-            try {
-                await createNotification(
-                    userToNotify,
-                    notificationTitle,
-                    notificationMessage, // This now uses the potentially detailed message
-                    notificationType,
-                    notificationLink
-                );
-                 log('INFO', context, `Sent notification to user ${userToNotify} regarding payment status for PIDX: ${pidx}.`);
-            } catch (notifyError) {
-                 log('ERROR', context, `Failed to send payment status notification to user ${userToNotify} for PIDX: ${pidx}.`, notifyError);
-            }
+        // Final notification message with reason if needed
+        if (failureReason) {
+            notificationText += ` Reason: ${failureReason}`;
         }
 
-        return { success: paymentStatus === 'paid', finalStatus: item.status }; // Return success based on whether payment was marked as 'paid'
+        // Send notification to user
+        await createNotification(userToNotify, notificationTitle, notificationText, notificationType, notificationLink);
 
+        return { success: true, finalStatus, message: notificationText };
     } catch (error) {
-        log('ERROR', context, `Error updating record status for PIDX: ${pidx}.`, { message: error.message, stack: error.stack });
-        // Don't use received_purchase_order_id here as it might be unreliable
-        return { success: false, error: `Internal DB error during verification update: ${error.message}`, statusCode: 500 };
+        log('ERROR', context, `Internal error during verification for PIDX: ${pidx}.`, { message: error.message, stack: error.stack });
+        return { success: false, error: `Internal server error during verification: ${error.message}` };
     }
 };
 
 module.exports = {
-    initiatePaymentFlow, // Export for internal use
-    verifyPayment // Export for route
-}; 
+    initiatePaymentFlow, // Export for internal use by other controllers
+    verifyPayment       // Export for the payment route
+};

@@ -15,6 +15,7 @@ const moment = require('moment'); // Import moment for duration calculation
 const { createNotification } = require('../utils/notification.service');
 const { initiatePaymentFlow } = require('../controllers/payment.controller'); // <-- Import payment initiation
 const log = require('../utils/khalti.service').log; // <-- Use shared logger
+const { FreeSlots, FREE_SLOT_LIMIT_PER_DAY } = require('../models/freeSlots.model'); // <-- Import FreeSlots model
 
 const POINTS_PER_HOUR = 10; // Define the points constant
 
@@ -29,10 +30,13 @@ router.post('/', auth, async (req, res) => {
             endTime, 
             userDetails,
             bookedFor = 'self', // default to self booking
-            isSlotFree = false // whether this is a free slot or not
+            isSlotFree = false, // whether this is a free slot or not
+            paymentMethod = 'khalti', // Default to khalti if not specified
+            totalAmount = 0, // The total amount in Rupees
+            totalPointsCost = 0 // The total cost in loyalty points
         } = req.body;
 
-        log('INFO', context, `Creating booking for court ${courtId}, date: ${date}, time: ${startTime}-${endTime}, User: ${req.user._id}`);
+        log('INFO', context, `Creating booking for court ${courtId}, date: ${date}, time: ${startTime}-${endTime}, User: ${req.user._id}, Payment Method: ${paymentMethod}`);
         
         // Check if court exists
         const court = await Court.findById(courtId);
@@ -113,45 +117,173 @@ router.post('/', auth, async (req, res) => {
             
             log('INFO', context, `Timeslot is available: ${timeslot._id}, isBooked: ${timeslot.isBooked}`);
             
-            // ---- Start: Price/Type Logic including Free Slot Check ----
-            let price = court.priceHourly; 
-            let determinedPriceType = 'regular'; 
-            const FREE_SLOT_LIMIT_PER_DAY = 2; // Define limit
-
-            // Determine base price and type based on time (Peak/Off-Peak)
-            if (court.hasPeakHours && isTimeInRange(startTime, court.peakHours.start, court.peakHours.end)) {
-                price = court.pricePeakHours;
-                determinedPriceType = 'peak';
-            } else if (court.hasOffPeakHours && isTimeInRange(startTime, court.offPeakHours.start, court.offPeakHours.end)) {
-                price = court.priceOffPeakHours;
-                determinedPriceType = 'offPeak';
-            }
-            
-            let finalPrice = price; // Initialize final price
-            let finalPriceType = determinedPriceType; // Initialize final type
+            // --- Check for Free Slots Availability ---
             let isBookingActuallyFree = false; // Flag to track if this booking qualifies as free
+            let freeBookingsRemaining = 0;
+            
+            // Initialize pricing variables
+            let price = 0;
+            let determinedPriceType = 'regular';
+            let finalPrice = 0;
+            let finalPriceType = 'regular';
+            
+            // Determine base price based on time of day
+            try {
+                // Check if the time falls within peak or off-peak hours
+                if (court.hasPeakHours && isTimeInRange(startTime, court.peakHours?.start, court.peakHours?.end)) {
+                    price = court.pricePeakHours || court.priceHourly;
+                    determinedPriceType = 'peak';
+                } else if (court.hasOffPeakHours && isTimeInRange(startTime, court.offPeakHours?.start, court.offPeakHours?.end)) {
+                    price = court.priceOffPeakHours || court.priceHourly;
+                    determinedPriceType = 'offPeak';
+                } else {
+                    price = court.priceHourly;
+                    determinedPriceType = 'regular';
+                }
+                log('INFO', context, `Base price determined: ${price} (${determinedPriceType})`);
+            } catch (priceError) {
+                log('ERROR', context, `Error determining price: ${priceError.message}. Using regular hourly rate.`);
+                price = court.priceHourly;
+                determinedPriceType = 'regular';
+            }
 
             // --- Perform Free Slot Check (if court allows it) --- 
             if (!court.requirePrepayment) {
-                log('INFO', context, `Court ${courtId} does not require prepayment. User will be able to use the court before payment.`);
+                log('INFO', context, `Court ${courtId} does not require prepayment. Checking for free slot eligibility.`);
                 
-                // IMPORTANT: No-prepayment doesn't mean free!
+                try {
+                    // Custom function to get start of day in UTC to ensure date matching
+                    const startOfDay = (date) => {
+                        return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+                    };
+                    
+                    // Check if user has free slots for today
+                    const userFreeSlotsRecord = await FreeSlots.findOne({ 
+                        user: req.user._id, 
+                        date: startOfDay(bookingDateUTC) 
+                    });
+                    
+                    if (userFreeSlotsRecord) {
+                        freeBookingsRemaining = userFreeSlotsRecord.slotsRemaining || 0;
+                    } else {
+                        // Create a new record if none exists (initialize with max free slots)
+                        const newFreeSlotsRecord = new FreeSlots({
+                            user: req.user._id,
+                            date: startOfDay(bookingDateUTC),
+                            slotsRemaining: FREE_SLOT_LIMIT_PER_DAY // Initialize with max slots
+                        });
+                        await newFreeSlotsRecord.save();
+                        freeBookingsRemaining = FREE_SLOT_LIMIT_PER_DAY;
+                    }
+                    
+                    log('INFO', context, `User has ${freeBookingsRemaining} free slots remaining for ${bookingDateUTC.toISOString().split('T')[0]}`);
+                    
+                    // Check if this booking qualifies for a free slot
+                    const hasFreeSlotAvailable = freeBookingsRemaining > 0;
+                    
+                    // If booking is eligible for a free slot but user wants to prepay for loyalty points
+                    // Respect their choice and process payment
+                    if (hasFreeSlotAvailable && (paymentMethod === 'khalti' || paymentMethod === 'points')) {
+                        log('INFO', context, `User ${req.user._id} chose to prepay for a booking eligible for a free slot. Processing payment.`);
+                        isBookingActuallyFree = false; // Not using the free slot
+                    } 
+                    // If booking is eligible for a free slot and user wants to use it
+                    else if (hasFreeSlotAvailable && paymentMethod === 'free') {
+                        log('INFO', context, `User ${req.user._id} is using a free booking slot.`);
+                        isBookingActuallyFree = true;
+                        finalPrice = 0; // It's a free booking
+                        finalPriceType = 'free';
+                    }
+                    
+                    // --- Update Free Slots Counter if Using Free Slot ---
+                    if (isBookingActuallyFree) {
+                        log('INFO', context, `Decrementing free slots for User ${req.user._id}`);
+                        // Update free slots availability in database
+                        if (userFreeSlotsRecord) {
+                            userFreeSlotsRecord.slotsRemaining -= 1;
+                            await userFreeSlotsRecord.save();
+                            log('INFO', context, `Updated free slots remaining to ${userFreeSlotsRecord.slotsRemaining}`);
+                        }
+                    }
+
+                    // If user has free slots remaining, mark booking as free
+                    if (freeBookingsRemaining > 0 && !paymentMethod) {
+                        // Mark this booking as free (no payment required)
+                        log('INFO', context, `Court ${courtId} is being booked using a free slot. Setting price to 0.`);
+                        // Override price with 0 for free slots
+                        finalPrice = 0;
+                        finalPriceType = 'free';
+                        isBookingActuallyFree = true;
+                        
+                        // Decrement user's free slots counter
+                        userFreeSlotsRecord.slotsRemaining -= 1;
+                        await userFreeSlotsRecord.save();
+                        log('INFO', context, `Updated free slots remaining to ${userFreeSlotsRecord.slotsRemaining}`);
+                    }
+                    else {
+                        // User doesn't have free slots, set normal price with deferred payment
+                        log('INFO', context, `No free slots available. Setting price to ${price} (${determinedPriceType}) with deferred payment.`);
+                        finalPrice = price;
+                        finalPriceType = determinedPriceType;
+                        isBookingActuallyFree = false;
+                    }
+                } catch (freeSlotError) {
+                    log('ERROR', context, `Error checking free slots: ${freeSlotError.message}. Defaulting to regular pricing.`);
+                    finalPrice = price;
+                    finalPriceType = determinedPriceType;
+                    isBookingActuallyFree = false;
+                }
+                
+                // IMPORTANT: No-prepayment with no free slots doesn't mean free!
                 // It just means the user can book without paying upfront
-                // The price remains the same, it's just the payment timing that's different
-                
-                // Set a flag we can use to determine the booking status later
-                const requiresPrePayment = court.requirePrepayment;
-                
-                // Keep the price as determined by hour of day (regular/peak/offPeak)
-                finalPrice = price; // Keep the actual price (NOT 0)
-                finalPriceType = determinedPriceType; // Keep as regular/peak/offPeak
-                isBookingActuallyFree = false; // It's NOT free, just deferred payment
-                
-                log('INFO', context, `Setting booking price to ${finalPrice} (${finalPriceType}) with deferred payment.`);
+                // The user will still need to pay at the venue
             } else {
                  log('INFO', context, `Court ${courtId} requires prepayment. Payment will be required immediately.`);
+                // Keep the price as determined by hour of day logic
+                finalPrice = price;
+                finalPriceType = determinedPriceType;
+                isBookingActuallyFree = false;
             }
-            // --- End No-Prepayment Check --- 
+            // --- End Free Slot Check ---
+            
+            // --- Update Free Slots Counter if Using Free Slot ---
+            if (isBookingActuallyFree) {
+                log('INFO', context, `Decrementing free slots for User ${req.user._id}`);
+                // Update free slots availability in database
+                if (userFreeSlotsRecord) {
+                    userFreeSlotsRecord.slotsRemaining -= 1;
+                    await userFreeSlotsRecord.save();
+                    log('INFO', context, `Updated free slots remaining to ${userFreeSlotsRecord.slotsRemaining}`);
+                }
+            }
+            
+            // --- Check if using points for payment ---
+            let processingPointPayment = false;
+            if (paymentMethod === 'points') {
+                log('INFO', context, `User ${req.user._id} wants to pay with loyalty points: ${totalPointsCost} points`);
+                
+                // Validate if points payment is supported
+                if (totalPointsCost <= 0) {
+                    log('ERROR', context, `Invalid points cost: ${totalPointsCost} for booking attempt by User ${req.user._id}`);
+                    return res.status(400).json({ message: 'Invalid points cost specified' });
+                }
+                
+                // Check if user has enough loyalty points
+                const userLoyalty = await Loyalty.findOne({ user: req.user._id });
+                
+                if (!userLoyalty || userLoyalty.points < totalPointsCost) {
+                    const availablePoints = userLoyalty ? userLoyalty.points : 0;
+                    log('ERROR', context, `Insufficient points for User ${req.user._id}. Has: ${availablePoints}, Needs: ${totalPointsCost}`);
+                    return res.status(400).json({ 
+                        message: 'Insufficient loyalty points', 
+                        availablePoints, 
+                        requiredPoints: totalPointsCost 
+                    });
+                }
+                
+                processingPointPayment = true;
+                log('INFO', context, `User ${req.user._id} has enough points (${userLoyalty.points}), proceeding with point payment.`);
+            }
             
             // ---- End: Price/Type Logic ----
             
@@ -169,18 +301,189 @@ router.post('/', auth, async (req, res) => {
                 email: userDetails?.email || req.user.email,
                 status: 'pending', 
                 paymentStatus: 'pending', 
+                paymentMethod, // Store the chosen payment method
                 bookedFor,
                 isSlotFree: isBookingActuallyFree // Should be false for normal bookings
             });
 
             const savedBooking = await newBooking.save();
-            log('INFO', context, `Created booking record: ${savedBooking._id} with Price: ${savedBooking.price}, PriceType: ${savedBooking.priceType}`);
+            log('INFO', context, `Created booking record: ${savedBooking._id} with Price: ${savedBooking.price}, PriceType: ${savedBooking.priceType}, PaymentMethod: ${paymentMethod}`);
+
+            // --- Handle Points Payment ---
+            if (processingPointPayment) {
+                log('INFO', context, `Processing points payment for Booking ${savedBooking._id}`);
+                
+                try {
+                    // 1. Get the user's loyalty record
+                    const userLoyalty = await Loyalty.findOne({ user: req.user._id });
+                    
+                    // 2. Deduct the points
+                    userLoyalty.points -= totalPointsCost;
+                    
+                    // 3. Add a transaction record
+                    userLoyalty.transactions.push({
+                        type: 'redeem',
+                        points: -totalPointsCost, // Negative to indicate points spent
+                        booking: savedBooking._id,
+                        description: `Redeemed for booking at ${court.name}`
+                    });
+                    
+                    // 4. Create loyalty transaction record
+                    await LoyaltyTransaction.create({
+                        user: req.user._id,
+                        type: 'debit',
+                        points: totalPointsCost,
+                        reason: `Booking payment - Booking ID: ${savedBooking._id}`,
+                        relatedBooking: savedBooking._id
+                    });
+                    
+                    // 5. Save the loyalty record
+                    await userLoyalty.save();
+                    
+                    // 6. Update booking status
+                    savedBooking.status = 'confirmed';
+                    savedBooking.paymentStatus = 'paid';
+                    savedBooking.paymentDetails = {
+                        method: 'loyalty',
+                        paidAt: new Date()
+                    };
+                    // Ensure loyalty redemption data is properly set
+                    savedBooking.isLoyaltyRedemption = true;
+                    savedBooking.pointsUsed = totalPointsCost;
+                    const confirmedBooking = await savedBooking.save();
+                    
+                    // 7. Update timeslot as booked
+                    timeslot.isBooked = true;
+                    timeslot.bookedBy = confirmedBooking.user;
+                    timeslot.booking = confirmedBooking._id;
+                    await timeslot.save();
+                    
+                    // 8. Send notifications
+                    try {
+                        // Notification to user
+                        await createNotification(
+                            req.user._id,
+                            'Booking Confirmed with Points',
+                            `Your booking for ${court.name} on ${moment(confirmedBooking.date).format('YYYY-MM-DD')} at ${confirmedBooking.startTime} is confirmed! You used ${totalPointsCost} points.`,
+                            'booking_confirmation',
+                            `/my-bookings/${confirmedBooking._id}`
+                        );
+                        
+                        // Notification to futsal admin
+                        const courtWithFutsal = await Court.findById(courtId).populate('futsalId', 'name');
+                        if (courtWithFutsal?.futsalId) {
+                            const futsalAdmin = await User.findOne({ role: 'futsalAdmin', futsal: courtWithFutsal.futsalId._id });
+                            if (futsalAdmin) {
+                                await createNotification(
+                                    futsalAdmin._id,
+                                    'New Booking Paid with Points',
+                                    `${userDetails?.name || req.user.name} has made a booking for ${court.name} on ${moment(confirmedBooking.date).format('YYYY-MM-DD')} at ${confirmedBooking.startTime} using loyalty points.`,
+                                    'new_booking',
+                                    `/admin/bookings/${confirmedBooking._id}`
+                                );
+                            }
+                        }
+                    } catch (notifyError) {
+                        log('ERROR', context, `Error sending point payment confirmation notifications:`, notifyError);
+                    }
+                    
+                    // 9. Return success response
+                    return res.status(201).json({
+                        message: 'Booking confirmed and paid with points',
+                        booking: confirmedBooking,
+                        pointsUsed: totalPointsCost,
+                        pointsRemaining: userLoyalty.points
+                    });
+                    
+                } catch (pointsError) {
+                    log('ERROR', context, `Error processing points payment for booking ${savedBooking._id}:`, pointsError);
+                    // If points processing fails, delete the booking and return error
+                    await Booking.findByIdAndDelete(savedBooking._id);
+                    return res.status(500).json({ message: 'Failed to process points payment', error: pointsError.message });
+                }
+            }
 
             // --- Handle No Prepayment vs Prepayment --- 
             if (!court.requirePrepayment) {
-                // --- Handle No-Prepayment Booking --- 
-                // For courts that don't require prepayment, confirm immediately
-                // but still keep payment status as pending
+                // --- Handle No-Prepayment Required Court --- 
+                // Check if user still wants to prepay (via khalti or points) even though not required
+                if (paymentMethod === 'khalti') {
+                    // User wants to prepay with Khalti even though it's not required
+                    log('INFO', context, `User chose to prepay with Khalti for booking ${savedBooking._id} even though court doesn't require prepayment. Initiating payment flow.`);
+                    const initiationResult = await initiatePaymentFlow('booking', savedBooking._id, req.user._id);
+
+                    // Add detailed debugging for Khalti initiation result
+                    log('DEBUG', context, `Khalti initiation result for optional prepayment (booking ${savedBooking._id}):`, {
+                        success: initiationResult.success,
+                        hasPaymentUrl: !!initiationResult.payment_url,
+                        paymentUrl: initiationResult.payment_url,
+                        purchaseOrderId: initiationResult.purchase_order_id,
+                        error: initiationResult.error || 'none'
+                    });
+
+                    if (initiationResult.success) {
+                        log('INFO', context, `Optional prepayment initiation successful for booking ${savedBooking._id}. Sending payment URL to frontend.`);
+                        // Mark TimeSlot as booked (provisionally)
+                        timeslot.isBooked = true;
+                        timeslot.bookedBy = savedBooking.user;
+                        timeslot.booking = savedBooking._id;
+                        await timeslot.save();
+                        log('INFO', context, `Timeslot ${timeslot._id} marked as provisionally booked for optional prepayment.`);
+
+                        // --- Send Pending Payment Notification --- 
+                        try {
+                            // Populate court details with futsal information to include in notification
+                            const populatedCourt = await Court.findById(court._id).populate('futsalId', 'name');
+                            const courtName = populatedCourt.name || 'Court';
+                            const futsalName = populatedCourt.futsalId?.name || 'Futsal';
+                            
+                            await createNotification(
+                                savedBooking.user,
+                                'Optional Prepayment Pending',
+                                `Your booking for ${courtName} at ${futsalName} on ${moment(savedBooking.date).format('YYYY-MM-DD')} at ${savedBooking.startTime} is pending optional prepayment. Complete payment via Khalti to earn bonus loyalty points. If payment isn't completed, your booking will still be valid with payment due at the venue.`,
+                                'booking_pending',
+                                `/my-bookings/${savedBooking._id}`
+                            );
+                            log('INFO', context, `Sent optional prepayment notification for booking ${savedBooking._id}`);
+                        } catch (notifyError) {
+                            log('ERROR', context, `Error sending optional prepayment notification for booking ${savedBooking._id}:`, notifyError);
+                        }
+                        // --- End Notification ---
+
+                        // Respond with the payment URL
+                        const khaltiResponse = {
+                            message: 'Booking confirmed with optional prepayment. Complete prepayment for bonus loyalty points.',
+                            bookingId: savedBooking._id,
+                            paymentUrl: initiationResult.payment_url,
+                            purchaseOrderId: initiationResult.purchase_order_id,
+                            isOptionalPayment: true
+                        };
+                        
+                        // Debug log the response being sent to frontend
+                        log('DEBUG', context, `Sending Khalti payment response to frontend for booking ${savedBooking._id}:`, khaltiResponse);
+                        
+                        res.status(201).json(khaltiResponse);
+                        
+                        // Add an explicit return to ensure we don't continue to other code paths
+                        return;
+                    } else {
+                        // Fall back to no-prepayment if Khalti initiation fails
+                        log('WARN', context, `Optional prepayment initiation failed for booking ${savedBooking._id}. Falling back to regular no-prepayment booking.`, {
+                            error: initiationResult.error || 'Unknown error'
+                        });
+                        return handleNoPrepaymentBooking();
+                    }
+                } else if (paymentMethod === 'points') {
+                    // User is already using points, so this case is handled above in the processingPointPayment block
+                    // Points payment would have been processed and booking confirmed already
+                    log('INFO', context, `Points payment already processed for booking ${savedBooking._id}`);
+                } else {
+                    // Regular no-prepayment flow (payment at venue)
+                    return handleNoPrepaymentBooking();
+                }
+                
+                // Helper function to handle regular no-prepayment flow
+                async function handleNoPrepaymentBooking() {
                 log('INFO', context, `Booking ${savedBooking._id} doesn't require prepayment. Confirming access but payment still needed.`);
                 savedBooking.status = 'confirmed'; // Confirm access to the court
                 savedBooking.paymentStatus = 'pending'; // But payment is still due
@@ -211,11 +514,11 @@ router.post('/', auth, async (req, res) => {
                 // --- End Notification ---
 
                 // Respond with confirmation (no payment URL)
-                res.status(201).json({
+                    return res.status(201).json({
                     message: 'Booking confirmed successfully. Payment due at venue.',
                     booking: confirmedBooking // Send back the confirmed booking
                 });
-
+                }
             } else {
                 // --- Initiate Payment Flow (Prepayment Required) --- 
                 log('INFO', context, `Booking ${savedBooking._id} requires prepayment. Initiating payment flow.`);
@@ -392,7 +695,7 @@ router.get('/', auth, async (req, res) => {
     try {
       const userId = req.user._id;
       const { date, courtId } = req.query; // <-- Get courtId from query
-      const freeSlotLimit = 2; // Limit is per hour-slot
+      const freeSlotLimit = FREE_SLOT_LIMIT_PER_DAY; // Use the imported constant
 
       if (!date) {
           return res.status(400).json({ message: 'Date query parameter is required.' });
@@ -494,6 +797,7 @@ router.get('/', auth, async (req, res) => {
       }
       
       // --- Cancellation Logging START ---
+      const context = 'BOOKING_CANCEL';
       console.log(`[Cancel Debug] Booking ID: ${booking._id}, Current Status: ${booking.status}`);
       // --- Cancellation Logging END ---
       
@@ -504,12 +808,23 @@ router.get('/', auth, async (req, res) => {
       
       // *** Update the corresponding TimeSlot document ***
       try {
-          // Use the booking details to find the timeslot
-          const timeslot = await TimeSlot.findOne({ 
-              court: booking.court, 
-              startTimeUTC: booking.startTimeUTC, // Assuming startTimeUTC is stored on booking
-              endTimeUTC: booking.endTimeUTC, // Assuming endTimeUTC is stored on booking
-              // If UTC times aren't stored, might need to requery using date/startTime/endTime
+          // === Correctly construct the UTC Date objects for the query ===
+          const bookingDate = booking.date; // Already a Date object at UTC midnight
+          const year = bookingDate.getUTCFullYear();
+          const month = bookingDate.getUTCMonth();
+          const day = bookingDate.getUTCDate();
+          const [startHour, startMinute] = booking.startTime.split(':').map(Number);
+          const [endHour, endMinute] = booking.endTime.split(':').map(Number);
+
+          const startDateTimeUTC = new Date(Date.UTC(year, month, day, startHour, startMinute));
+          const endDateTimeUTC = new Date(Date.UTC(year, month, day, endHour, endMinute));
+          // === End constructing UTC Date objects ===
+
+          // Use the booking details to find the timeslot using the constructed Date objects
+          const timeslot = await TimeSlot.findOne({
+              court: booking.court,
+              startTime: startDateTimeUTC, // Use the correct Date object
+              // endTime: endDateTimeUTC // Matching startTime is usually sufficient
           });
 
           if (timeslot) {
@@ -519,7 +834,8 @@ router.get('/', auth, async (req, res) => {
               await timeslot.save();
               log('INFO', context, `Associated TimeSlot ${timeslot._id} successfully marked as available.`);
           } else {
-              log('WARN', context, `Could not find associated TimeSlot for booking ${booking._id} to mark as available. Court: ${booking.court}, StartUTC: ${booking.startTimeUTC}`);
+               // Use the correct date/time in the warning log
+              log('WARN', context, `Could not find associated TimeSlot for booking ${booking._id} to mark as available. Court: ${booking.court}, StartTime: ${startDateTimeUTC.toISOString()}`);
               // Maybe create a job to fix this later? Or log for manual review.
           }
       } catch (timeslotError) {
@@ -590,6 +906,7 @@ router.get('/', auth, async (req, res) => {
       }
       
       // --- Cancellation Logging START ---
+      const context = 'BOOKING_CANCEL';
       console.log(`[Cancel Debug] Booking ID: ${booking._id}, Current Status: ${booking.status}`);
       // --- Cancellation Logging END ---
       
@@ -600,12 +917,23 @@ router.get('/', auth, async (req, res) => {
       
       // *** Update the corresponding TimeSlot document ***
       try {
-          // Use the booking details to find the timeslot
-          const timeslot = await TimeSlot.findOne({ 
-              court: booking.court, 
-              startTimeUTC: booking.startTimeUTC, // Assuming startTimeUTC is stored on booking
-              endTimeUTC: booking.endTimeUTC, // Assuming endTimeUTC is stored on booking
-              // If UTC times aren't stored, might need to requery using date/startTime/endTime
+          // === Correctly construct the UTC Date objects for the query ===
+          const bookingDate = booking.date; // Already a Date object at UTC midnight
+          const year = bookingDate.getUTCFullYear();
+          const month = bookingDate.getUTCMonth();
+          const day = bookingDate.getUTCDate();
+          const [startHour, startMinute] = booking.startTime.split(':').map(Number);
+          const [endHour, endMinute] = booking.endTime.split(':').map(Number);
+
+          const startDateTimeUTC = new Date(Date.UTC(year, month, day, startHour, startMinute));
+          const endDateTimeUTC = new Date(Date.UTC(year, month, day, endHour, endMinute));
+          // === End constructing UTC Date objects ===
+
+          // Use the booking details to find the timeslot using the constructed Date objects
+          const timeslot = await TimeSlot.findOne({
+              court: booking.court,
+              startTime: startDateTimeUTC, // Use the correct Date object
+              // endTime: endDateTimeUTC // Matching startTime is usually sufficient
           });
 
           if (timeslot) {
@@ -615,7 +943,8 @@ router.get('/', auth, async (req, res) => {
               await timeslot.save();
               log('INFO', context, `Associated TimeSlot ${timeslot._id} successfully marked as available.`);
           } else {
-              log('WARN', context, `Could not find associated TimeSlot for booking ${booking._id} to mark as available. Court: ${booking.court}, StartUTC: ${booking.startTimeUTC}`);
+               // Use the correct date/time in the warning log
+              log('WARN', context, `Could not find associated TimeSlot for booking ${booking._id} to mark as available. Court: ${booking.court}, StartTime: ${startDateTimeUTC.toISOString()}`);
               // Maybe create a job to fix this later? Or log for manual review.
           }
       } catch (timeslotError) {

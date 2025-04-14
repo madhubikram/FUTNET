@@ -7,8 +7,7 @@ const path = require('path');
 const Booking = require('../models/booking.model');
 const mongoose = require('mongoose');
 const { startOfDay, endOfDay } = require('date-fns'); // Import date-fns helpers
-
-
+const playerCourtController = require('../controllers/playerCourt.controller');
 
 const verifyMongoose = (req, res, next) => {
     if (!mongoose.connection.readyState) {
@@ -209,6 +208,13 @@ router.get('/:id', auth, verifyMongoose, async (req, res) => {
             .populate({
                 path: 'futsalId',
                 select: 'name location coordinates'
+            })
+            .populate({
+                path: 'reviews',
+                populate: [
+                    { path: 'user', select: 'username firstName lastName' },
+                    { path: 'replies.adminUser', select: 'username firstName lastName' }
+                ]
             });
 
         if (!court) {
@@ -422,5 +428,30 @@ router.delete('/:id', auth, async (req, res) => {
         });
     }
 });
+
+// --- Review Routes (Mounted under /api/courts) ---
+
+// Add review (players)
+router.post('/:id/reviews', auth, playerCourtController.addReview);
+
+// Update review (players)
+router.put('/:id/reviews/:reviewId', auth, playerCourtController.updateReview);
+
+// Delete review (players)
+router.delete('/:id/reviews/:reviewId', auth, playerCourtController.deleteReview);
+
+// Add reaction (players)
+router.post('/:id/reviews/:reviewId/reactions', auth, playerCourtController.toggleReaction);
+
+// Add reply (admins)
+router.post('/:id/reviews/:reviewId/replies', auth, playerCourtController.addReplyToReview);
+
+// Update reply (admins)
+router.put('/:id/reviews/:reviewId/replies/:replyId', auth, playerCourtController.updateReply);
+
+// Delete reply (admins)
+router.delete('/:id/reviews/:reviewId/replies/:replyId', auth, playerCourtController.deleteReply);
+
+// --- End Review Routes ---
 
 module.exports = router;

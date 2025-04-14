@@ -115,7 +115,7 @@
                 <div class="md:text-right">
                   <p class="text-lg md:text-xl font-semibold text-green-400">Rs. {{ booking.price }}</p>
                   <p class="text-xs capitalize" :class="getPaymentStatusColor(booking.paymentStatus)">
-                    Payment: {{ booking.paymentStatus === 'unpaid' ? 'Not Required (Free)' : (booking.paymentStatus || 'Pending') }}
+                     Payment: {{ getPaymentStatusText(booking.paymentStatus) }}
                   </p>
                 </div>
               </div>
@@ -310,12 +310,12 @@
             <div>
               <span :class="[
                 'text-lg font-bold',
-                selectedBooking.paymentMethod === 'free' ? 'text-blue-400' : 'text-green-400'
+                selectedBooking.paymentStatus === 'unpaid' || selectedBooking.paymentMethod === 'free' ? 'text-blue-400' : 'text-green-400'
               ]">
                 Rs. {{ selectedBooking.price }}
               </span>
-              <span class="text-xs ml-1">
-                {{ selectedBooking.paymentMethod === 'free' ? '(Free)' : '(Paid)' }}
+              <span class="text-xs ml-1 capitalize">
+                 {{ getPaymentStatusText(selectedBooking.paymentStatus) }}
               </span>
             </div>
           </div>
@@ -362,7 +362,9 @@
               <div>
                 <p class="text-xs text-gray-400 mb-1">Payment Method</p>
                 <p class="text-sm text-white capitalize">
-                  {{ selectedBooking.paymentMethod === 'free' ? 'Free Booking' : selectedBooking.paymentMethod || 'N/A' }}
+                  {{ selectedBooking.paymentStatus === 'unpaid' ? 'Not Required (Free)' : 
+                     selectedBooking.paymentMethod === 'free' ? 'Free Booking' : 
+                     selectedBooking.paymentMethod || 'N/A' }}
                 </p>
               </div>
             </div>
@@ -660,7 +662,27 @@ const getPaymentStatusColor = (status) => {
   }
 };
 
+const getPaymentStatusText = (status) => {
+  switch (status) {
+    case 'paid': return '(Paid)';
+    case 'unpaid': return '(No Prepayment)';
+    case 'pending': return '(Pending)';
+    case 'failed': return '(Failed)';
+    case 'refunded': return '(Refunded)';
+    default: return '(N/A)';
+  }
+};
+
 const showBookingDetails = (booking) => {
+  // Add debug logging to inspect booking payment data
+  console.log('Showing details for booking:', {
+    id: booking._id,
+    status: booking.status,
+    paymentStatus: booking.paymentStatus,
+    paymentMethod: booking.paymentMethod,
+    price: booking.price,
+    requirePrepayment: booking.requirePrepayment
+  });
   selectedBooking.value = booking;
   showModal.value = true;
 };
@@ -684,6 +706,16 @@ const fetchBookings = async () => {
       const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
       const todayBookings = data.filter(b => b.date.startsWith(today) || b.date.startsWith(tomorrow));
       log('DEBUG', 'BOOKINGS', `Found ${todayBookings.length} bookings for today/tomorrow: ${todayBookings.map(b => b._id).join(', ')}`);
+      
+      // Additional debug logging for payment status
+      data.forEach(booking => {
+        console.log(`Booking ${booking._id} payment details:`, {
+          price: booking.price,
+          paymentStatus: booking.paymentStatus,
+          paymentDetails: booking.paymentDetails,
+          requirePrepayment: booking.requirePrepayment
+        });
+      });
     }
     
     bookings.value = data.map(booking => ({
@@ -694,9 +726,6 @@ const fetchBookings = async () => {
       courtType: booking.courtDetails?.courtType || 'Unknown',
       // Fix image URL construction with proper checks
       courtImage: (() => {
-        // Improved logging for debugging
-        console.log('Court details for booking:', booking.courtDetails);
-        
         // Check if courtDetails and images exist
         if (!booking.courtDetails?.images || !booking.courtDetails.images.length) {
           return '/placeholder-court.jpg';
@@ -713,8 +742,10 @@ const fetchBookings = async () => {
         // Otherwise, prefix with the API base URL
         return `http://localhost:5000${img}`;
       })(),
-      // Set payment method to 'free' if it was a free booking
-      paymentMethod: booking.paymentDetails?.method || (booking.price === 0 ? 'free' : 'standard')
+      // Set payment method to 'free' if it was a free booking or not requiring prepayment
+      paymentMethod: booking.paymentDetails?.method || 
+                    (booking.price === 0 ? 'free' : 
+                     booking.paymentStatus === 'unpaid' ? 'no-prepayment' : 'standard')
     }));
     
     log('INFO', 'BOOKINGS', `Successfully processed ${bookings.value.length} bookings`);

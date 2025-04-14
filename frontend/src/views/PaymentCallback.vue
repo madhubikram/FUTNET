@@ -11,7 +11,7 @@
         <h2 class="text-2xl font-semibold mb-2">Payment Successful!</h2>
         <p class="text-gray-300 mb-6">Your payment has been verified and your item is confirmed.</p>
         <button @click="navigateToTarget" class="px-6 py-2 bg-green-600 rounded-lg hover:bg-green-700 transition-colors">
-          Go to My {{ itemType === 'booking' ? 'Bookings' : 'Registrations' }}
+          Go to My {{ itemType === 'booking' ? 'Bookings' : 'Tournaments' }}
         </button>
       </template>
       <template v-else>
@@ -145,7 +145,8 @@ const navigateToTarget = () => {
       localStorage.setItem('paymentSuccessful', 'true');
       localStorage.setItem('lastPaymentTimestamp', Date.now().toString());
     } else if (itemType.value === 'tournament') {
-      router.push('/my-tournaments');
+      log('INFO', 'PAYMENT_CALLBACK', 'Payment successful - redirecting to My Tournaments tab');
+      router.push({ path: '/tournaments', query: { tab: 'my-tournaments' } });
     }
   } else {
     // On failure, redirect back to where they likely started

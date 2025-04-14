@@ -7,103 +7,104 @@
       <div class="animate-spin rounded-full h-12 w-12 border-4 border-green-500 border-t-transparent"></div>
     </div>
 
-    <!-- Error State -->
-    <div v-else-if="error" class="flex justify-center items-center min-h-screen">
-      <div class="text-red-400">{{ error }}</div>
-    </div>
+      <!-- Error State -->
+      <div v-else-if="error" class="flex justify-center items-center min-h-screen">
+        <div class="text-red-400">{{ error }}</div>
+      </div>
 
-    <!-- Main Content -->
-    <template v-else>
-      <!-- Image Gallery Component -->
-      <ImageGallery
-        :images="courtImages"
-        :court-name="court.courtName"
-        :court-side="court.courtSide"
-        :rating="court.averageRating"
-        :location="shortLocation"
-      />
+      <!-- Main Content -->
+      <template v-else>
+        <!-- Image Gallery Component -->
+        <ImageGallery
+          :images="courtImages"
+          :court-name="court.courtName"
+          :court-side="court.courtSide"
+          :rating="court.averageRating"
+          :location="shortLocation"
+        />
 
-      <!-- Navigation Tabs -->
-      <div class="bg-gray-900">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div class="flex space-x-8 border-b border-gray-700">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              @click="currentTab = tab.id"
-              :class="[
-                'py-4 text-sm font-medium border-b-2 -mb-px transition-colors',
-                currentTab === tab.id
-                  ? 'text-green-400 border-green-400'
-                  : 'text-gray-400 border-transparent hover:text-gray-300'
-              ]"
-            >
-              {{ tab.name }}
-            </button>
+        <!-- Navigation Tabs -->
+        <div class="bg-gray-900">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex space-x-8 border-b border-gray-700">
+              <button
+                v-for="tab in tabs"
+                :key="tab.id"
+                @click="currentTab = tab.id"
+                :class="[
+                  'py-4 text-sm font-medium border-b-2 -mb-px transition-colors',
+                  currentTab === tab.id
+                    ? 'text-green-400 border-green-400'
+                    : 'text-gray-400 border-transparent hover:text-gray-300'
+                ]"
+              >
+                {{ tab.name }}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Tab Content -->
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div v-if="currentTab === 'description'" class="space-y-8">
-          <!-- Court Information Component -->
-          <CourtInfo :court="court" />
-          <section class="bg-gray-800 rounded-xl p-6">
-            <h2 class="text-xl font-semibold text-white mb-4">Location</h2>
-            <div class="h-80 rounded-lg overflow-hidden relative">
-              <MapComponent 
-                :initial-location="courtLocation" 
-                :readonly="true"
-                :hide-search="true"
-              />
-              
-              <!-- North Compass Symbol -->
-              <div class="absolute top-4 right-4 z-10 bg-black/50 p-2 rounded-lg">
-                <div class="w-8 h-8 relative">
-                  <div class="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-4 bg-red-500"></div>
-                  <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-4 bg-white"></div>
-                  <div class="absolute top-1/2 -translate-y-1/2 left-0 h-1 w-4 bg-white"></div>
-                  <div class="absolute top-1/2 -translate-y-1/2 right-0 h-1 w-4 bg-white"></div>
-                  <div class="absolute top-1 left-1/2 -translate-x-1/2 text-xs font-bold text-red-500">N</div>
+        <!-- Tab Content -->
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div v-if="currentTab === 'description'" class="space-y-8">
+            <!-- Court Information Component -->
+            <CourtInfo :court="court" />
+            <section class="bg-gray-800 rounded-xl p-6">
+              <h2 class="text-xl font-semibold text-white mb-4">Location</h2>
+              <div class="h-80 rounded-lg overflow-hidden relative">
+                <MapComponent 
+                  :initial-location="courtLocation" 
+                  :readonly="true"
+                  :hide-search="true"
+                />
+                
+                <!-- North Compass Symbol -->
+                <div class="absolute top-4 right-4 z-10 bg-black/50 p-2 rounded-lg">
+                  <div class="w-8 h-8 relative">
+                    <div class="absolute top-0 left-1/2 -translate-x-1/2 w-1 h-4 bg-red-500"></div>
+                    <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-4 bg-white"></div>
+                    <div class="absolute top-1/2 -translate-y-1/2 left-0 h-1 w-4 bg-white"></div>
+                    <div class="absolute top-1/2 -translate-y-1/2 right-0 h-1 w-4 bg-white"></div>
+                    <div class="absolute top-1 left-1/2 -translate-x-1/2 text-xs font-bold text-red-500">N</div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </section>
-          <div ref="reviewsSection">
-          <!-- Review Section Component -->
-          <ReviewSection
-            :court="court"
-            :current-user-id="currentUserId"
-            @submit-review="handleSubmitReview"
-            @update-review="handleUpdateReview"
-            @delete-review="handleDeleteReview"
-            @toggle-reaction="handleToggleReaction"
-          />
-        </div>
-        </div>
+            </section>
+            <div ref="reviewsSection">
+            <!-- Review Section Component -->
+            <ReviewSection
+              :court="court"
+              :current-user-id="currentUserId"
+              @submit-review="handleSubmitReview"
+              @update-review="handleUpdateReview"
+              @delete-review="handleDeleteReview"
+              @toggle-reaction="handleToggleReaction"
+            />
+          </div>
+          </div>
 
-        <div v-else-if="currentTab === 'timetable'" class="space-y-8">
-          <!-- Booking Section Component -->
-          <BookingSection
-            ref="bookingSectionRef"
-            v-if="court"
-            :court="court"
-            @proceed-booking="handleProceedBooking"
-          />
+          <div v-else-if="currentTab === 'timetable'" class="space-y-8">
+            <!-- Booking Section Component -->
+            <BookingSection
+              ref="bookingSectionRef"
+              v-if="court"
+              :court="court"
+              @proceed-booking="handleProceedBooking"
+            />
+          </div>
         </div>
-      </div>
-    </template>
+      </template>
 
-    <!-- Booking Confirmation Modal -->
-    <BookingConfirmationModal
-      v-if="showBookingModal"
-      :booking-details="bookingDetails"
-      :requires-prepayment="court?.requirePrepayment"
-      :is-processing="isProcessingBooking"
-      @close="closeBookingModal"
-      @confirm-booking="handleConfirmBooking"
-    />
+      <!-- Booking Confirmation Modal -->
+      <BookingConfirmationModal
+        v-if="showBookingModal"
+        :booking-details="bookingDetails"
+        :requires-prepayment="court?.requirePrepayment"
+        :is-processing="isProcessingBooking"
+        @close="closeBookingModal"
+        @confirm-booking="handleConfirmBooking"
+      />
+
   </PageLayout>
 </template>
 
@@ -121,6 +122,7 @@ import ReviewSection from '@/components/court-details/ReviewSection.vue'
 import BookingSection from '@/components/court-details/BookingSection.vue'
 import BookingConfirmationModal from '@/components/court-details/BookingConfirmationModal.vue'
 import { useApi } from '@/composables/useApi'
+import { log } from '@/utils/logger'
 
 const route = useRoute()
 const router = useRouter()
@@ -174,12 +176,6 @@ const courtLocation = computed(() => {
     lng: court.value.futsalId.coordinates.lng
   };
 });
-
-// Utility for logging (define within setup)
-const log = (level, context, message, data = null) => {
-  const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] [${level}] [${context}] ${message}`, data ? JSON.stringify(data) : '');
-};
 
 // API Calls
 const fetchCourtDetails = async () => {
@@ -335,11 +331,11 @@ const handleProceedBooking = (details) => {
   showBookingModal.value = true
 }
 
-const handleConfirmBooking = async () => {
+const handleConfirmBooking = async ({ paymentMethod }) => {
   const context = 'FRONTEND_BOOKING_SUBMIT';
   try {
     isProcessingBooking.value = true;
-    log('INFO', context, 'Starting booking confirmation process.', { bookingDetails: bookingDetails.value, courtRequiresPrepayment: court.value.requirePrepayment });
+    log('INFO', context, `Starting booking confirmation process with method: ${paymentMethod}`, { bookingDetails: bookingDetails.value, courtRequiresPrepayment: court.value?.requirePrepayment });
 
     // Use the raw date string (YYYY-MM-DD) directly from bookingDetails
     const dateToSend = bookingDetails.value.date;
@@ -385,6 +381,9 @@ const handleConfirmBooking = async () => {
       startTime: startTime,
       endTime: endTime,
       selectedSlotsDetail: bookingDetails.value.slots.map(s => ({ time: s.time, rate: s.rate })), 
+      paymentMethod: paymentMethod,
+      totalAmount: bookingDetails.value.totalAmount,
+      totalPointsCost: bookingDetails.value.totalPointsCost,
       userDetails: {
         name: localStorage.getItem('username') || '',
         email: localStorage.getItem('email') || '',
@@ -404,20 +403,61 @@ const handleConfirmBooking = async () => {
       });
 
       log('INFO', context, 'Received response from backend /api/bookings.', responseData);
+      
+      // Add detailed debugging for Khalti payment flow
+      if (paymentMethod === 'khalti') {
+        log('DEBUG', context, 'Checking Khalti payment redirect conditions:', { 
+          hasPaymentUrl: !!responseData.paymentUrl,
+          paymentUrl: responseData.paymentUrl,
+          isFreeBooking: bookingDetails.value.isFreeBooking,
+          requiresPrepayment: court.value?.requirePrepayment
+        });
+
+        // If we're trying to pay with Khalti but didn't get a payment URL, log error
+        if (!responseData.paymentUrl) {
+          log('ERROR', context, 'Missing Khalti payment URL in response. Backend may not be properly initiating Khalti payment.', responseData);
+          alert('Error: Missing payment URL for Khalti. Please try a different payment method or contact support.');
+          isProcessingBooking.value = false;
+          return; // Exit early to prevent unexpected behavior
+        }
+      }
 
       // --- Handle Backend Response --- 
       // Status check needs adjustment as fetchData throws on non-ok status
       // If code reaches here, the request was successful (status 2xx)
       
-      if (responseData.paymentUrl) {
+      if (paymentMethod === 'khalti' && responseData.paymentUrl) {
         // --- Payment Required: Redirect to Khalti --- 
         log('INFO', context, `Payment required. Redirecting to Khalti for BookingID: ${responseData.bookingId}, OrderID: ${responseData.purchaseOrderId}`);
-        alert('Redirecting to Khalti for payment...'); // Use toast in production
-        window.location.href = responseData.paymentUrl;
-      } else {
+        // Show alert with more info about the redirection
+        alert(`Redirecting to Khalti payment gateway for ${bookingDetails.value.isFreeBooking ? 'optional prepayment' : 'required payment'}...`);
+        
+        // Add a small delay to ensure the alert is seen before redirect
+        setTimeout(() => {
+          console.log('[REDIRECT] Navigating to Khalti payment URL:', responseData.paymentUrl);
+          window.location.href = responseData.paymentUrl;
+        }, 500);
+      } else if (paymentMethod === 'points') {
+        // --- Points Payment Confirmed --- 
+        log('INFO', context, `Booking confirmed and paid with points. BookingID: ${responseData.booking?._id || responseData._id}`);
+        alert('Booking confirmed and paid with points!'); // Use toast
+        showBookingModal.value = false;
+        bookingDetails.value = null;
+        bookingSectionRef.value?.refreshBookingData(); // Refresh slots
+        router.push('/my-bookings'); // Navigate to bookings page
+      } else if (paymentMethod === 'physical' || paymentMethod === 'free') {
         // --- Free Booking Confirmed Directly --- 
-        log('INFO', context, `Free booking confirmed directly by backend. BookingID: ${responseData.bookingId || responseData._id}`);
-        alert('Booking confirmed successfully (Free Slot)!'); // Use toast
+        const paymentInfo = paymentMethod === 'free' ? 'Free Slot' : 'Pay at Venue';
+        log('INFO', context, `Booking confirmed directly by backend (${paymentInfo}). BookingID: ${responseData.booking?._id || responseData.bookingId || responseData._id}`);
+        alert(`Booking confirmed successfully! (${paymentInfo})`); // Use toast
+        showBookingModal.value = false;
+        bookingDetails.value = null;
+        bookingSectionRef.value?.refreshBookingData(); // Refresh slots
+        router.push('/my-bookings'); // Navigate to bookings page
+      } else {
+        // --- Default Case for Unknown Payment Method --- 
+        log('INFO', context, `Booking processed with unknown payment method: ${paymentMethod}. BookingID: ${responseData.booking?._id || responseData.bookingId || responseData._id}`);
+        alert('Booking processed successfully!'); // Use toast
         showBookingModal.value = false;
         bookingDetails.value = null;
         bookingSectionRef.value?.refreshBookingData(); // Refresh slots

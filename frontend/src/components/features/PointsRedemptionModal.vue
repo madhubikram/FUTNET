@@ -11,7 +11,7 @@
             <div class="flex justify-between items-center">
               <div>
                 <p class="text-sm text-purple-300">Available Points</p>
-                <p class="text-2xl font-bold text-purple-400">{{ formattedPoints }}</p>
+                <p class="text-2xl font-bold text-purple-400">{{ formattedAvailablePoints }}</p>
               </div>
               <MedalIcon class="w-10 h-10 text-purple-400" />
             </div>
@@ -27,27 +27,31 @@
               </div>
               <div class="flex justify-between">
                 <span>Points Required</span>
-                <span>{{ pointsRequired }} points</span>
+                <span>{{ props.pointsRequired }} points</span>
               </div>
             </div>
           </div>
   
-          <!-- Points Selection -->
-          <div class="space-y-4">
-            <label class="block">
+          <!-- Points Selection - REMOVED INPUT -->
+          <div class="space-y-2">
+            <!-- <label class="block">
               <span class="text-sm text-gray-300">Points to Redeem</span>
               <input
                 v-model="pointsToRedeem"
                 type="number"
-                :max="Math.min(availablePoints, pointsRequired)"
-                class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white"
+                :max="Math.min(props.availablePoints, props.pointsRequired)"
+                min="0"
+                step="1"
+                class="mt-1 block w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white disabled:opacity-60"
                 :disabled="!canRedeem"
               >
-            </label>
-  
-            <div class="text-sm text-gray-400">
-              <p>You will save: Rs. {{ savedAmount }}</p>
-              <p>Remaining to pay: Rs. {{ remainingAmount }}</p>
+            </label> -->
+            
+            <!-- Display Fixed Saving Info -->
+            <div v-if="canRedeem" class="text-sm text-gray-300 bg-gray-700/30 p-3 rounded-md">
+              <p>Redeeming <span class="font-semibold text-purple-300">{{ props.pointsRequired }} points</span> will cover the full cost.</p>
+              <p>You will save: <span class="font-semibold text-white">Rs. {{ savedAmount }}</span></p>
+              <p>Remaining to pay: <span class="font-semibold text-white">Rs. {{ remainingAmount }}</span></p>
             </div>
           </div>
   
@@ -71,7 +75,7 @@
           
           <button
             @click="confirmRedemption"
-            :disabled="!canRedeem || pointsToRedeem <= 0"
+            :disabled="!canRedeem"
             class="px-6 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 
                   disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -83,37 +87,59 @@
   </template>
   
   <script setup>
-  import { ref, computed } from 'vue'
+  import { computed } from 'vue'
   import { MedalIcon } from 'lucide-vue-next'
-  import { useLoyaltyPoints } from '@/composables/useLoyaltyPoints'
   import BaseModal from '@/components/BaseModal.vue'
   
   const props = defineProps({
     bookingAmount: {
       type: Number,
       required: true
+    },
+    pointsRequired: {
+      type: Number,
+      required: true
+    },
+    availablePoints: {
+      type: Number,
+      required: true
     }
   })
   
+  // --- Log received props ---
+  console.log('[PointsRedemptionModal] Received props:', {
+    availablePoints: props.availablePoints,
+    pointsRequired: props.pointsRequired,
+    bookingAmount: props.bookingAmount
+  });
+  
   const emit = defineEmits(['close', 'redeem'])
   
-  const { points: availablePoints, formattedPoints } = useLoyaltyPoints()
-  const pointsToRedeem = ref(0)
+  const formattedAvailablePoints = computed(() => 
+    new Intl.NumberFormat().format(props.availablePoints)
+  );
   
-  // Computed properties
-  const pointsRequired = computed(() => props.bookingAmount)
-  const canRedeem = computed(() => availablePoints.value >= pointsRequired.value)
-  const pointsShortfall = computed(() => pointsRequired.value - availablePoints.value)
+  const canRedeem = computed(() => props.availablePoints >= props.pointsRequired)
+  const pointsShortfall = computed(() => Math.max(0, props.pointsRequired - props.availablePoints))
   
-  const savedAmount = computed(() => Math.min(pointsToRedeem.value, props.bookingAmount))
-  const remainingAmount = computed(() => Math.max(0, props.bookingAmount - pointsToRedeem.value))
+  const POINT_VALUE = 5;
+  const savedAmount = computed(() => {
+      // If they can redeem, the saving covers the points required * value, capped by booking amount
+      return canRedeem.value ? Math.min(props.bookingAmount, Math.round(props.pointsRequired * POINT_VALUE)) : 0;
+  });
   
-  // Methods
+  const remainingAmount = computed(() => 
+      // If they can redeem, remaining is booking amount - saved amount
+      canRedeem.value ? Math.max(0, props.bookingAmount - savedAmount.value) : props.bookingAmount
+  );
+  
   const confirmRedemption = () => {
-    emit('redeem', {
-      points: pointsToRedeem.value,
-      savedAmount: savedAmount.value,
-      remainingAmount: remainingAmount.value
-    })
+      // Only emit if redemption is possible
+      if (!canRedeem.value) return;
+
+      emit('redeem', {
+          // Emit the fixed required points amount
+          points: props.pointsRequired,
+      })
   }
   </script>

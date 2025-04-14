@@ -126,7 +126,22 @@ const courtSchema = new mongoose.Schema({
               type: Date,
               default: Date.now
             }
-          }]
+          }],
+        replies: [{
+            adminUser: {
+                type: mongoose.Schema.Types.ObjectId,
+                ref: 'User',
+                required: true
+            },
+            text: {
+                type: String,
+                required: true
+            },
+            createdAt: {
+                type: Date,
+                default: Date.now
+            }
+        }]
       }],
       
       averageRating: {

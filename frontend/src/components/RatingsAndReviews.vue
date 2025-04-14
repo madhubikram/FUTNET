@@ -53,7 +53,7 @@
                 </div>
                 <div>
                   <div class="text-white font-medium">
-                    {{ review.user?.username || 'Anonymous' }}
+                    {{ review.user?.firstName ? `${review.user.firstName} ${review.user.lastName}` : (review.user?.username || 'Anonymous') }}
                   </div>
                   <div class="flex items-center gap-1 mt-1">
                     <StarIcon 
@@ -70,26 +70,154 @@
             </div>
             <div class="text-sm text-gray-400 flex items-center gap-2">
               <CalendarIcon class="w-4 h-4" />
-              {{ formatDate(review.date) }}
+              {{ formatDate(review.createdAt) }}
             </div>
           </div>
-          <p class="text-gray-300 pl-13">{{ review.comment }}</p>
+          <p class="text-gray-300 pl-13 mb-4">{{ review.comment }}</p>
+          
+          <!-- Display Replies -->
+           <div v-if="review.replies && review.replies.length > 0" class="pl-13 mt-4 space-y-3">
+             <div 
+                v-for="reply in review.replies" 
+                :key="reply._id" 
+                class="bg-gray-700/50 p-3 rounded-lg relative group" 
+             >
+               <div class="flex justify-between items-start mb-1">
+                 <div>
+                   <span class="text-sm font-medium text-blue-300">{{ reply.adminUser?.futsal?.name || 'Admin' }} replied:</span>
+                   <span v-if="isCurrentUserAdminReply(reply)" class="ml-2 text-xs text-yellow-400">(Your Reply)</span>
+                 </div>
+                 <span class="text-xs text-gray-400">{{ formatDate(reply.createdAt) }}</span>
+               </div>
+               <p class="text-sm text-gray-300 mb-2">{{ reply.text }}</p>
+
+               <!-- Edit/Delete buttons for own reply -->
+                <div v-if="isCurrentUserAdminReply(reply)" class="mt-2 flex justify-end gap-1">
+                    <button @click="startEditReply(review._id, reply)" class="p-1 bg-gray-600/50 hover:bg-gray-500/50 rounded text-yellow-400">
+                        <Edit3Icon class="w-3 h-3" />
+                    </button>
+                     <button @click="$emit('delete-reply', { reviewId: review._id, replyId: reply._id })" class="p-1 bg-gray-600/50 hover:bg-gray-500/50 rounded text-red-400">
+                        <Trash2Icon class="w-3 h-3" />
+                    </button>
+                </div>
+
+                <!-- Reply/Edit Input Area - MOVED INSIDE REPLY LOOP -->
+                <div v-if="editingReplyId === reply._id" class="mt-3 space-y-2">
+                  <textarea 
+                    v-model="replyText" 
+                    placeholder="Edit your reply..." 
+                    rows="2"
+                    class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:ring-green-500 focus:border-green-500"
+                  ></textarea>
+                  <div class="flex justify-end gap-2">
+                     <button @click="cancelReplyOrEdit" class="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+                     <button 
+                       @click="submitEditReply(review._id)" 
+                       class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded"
+                      >
+                       Update Reply
+                     </button>
+                  </div>
+               </div>
+                 <!-- End Moved Input Area -->
+             </div>
+           </div>
+
+           <!-- Reply Section & Input (Only show Reply button if admin hasn't replied) -->
+           <div class="pl-13 mt-4 pt-4 border-t border-gray-700/50">
+              <!-- Show Reply button only if no reply exists from current admin AND not currently editing ANY reply-->
+              <div v-if="!hasAdminReplied(review) && editingReplyId === null && replyingTo !== review._id" class="flex justify-end">
+                 <button @click="startReply(review._id)" class="text-sm text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1">
+                    <MessageSquareIcon class="w-4 h-4" />
+                    Reply
+                 </button>
+              </div>
+              <!-- Input for NEW reply (only shown when clicking 'Reply') -->
+              <div v-else-if="replyingTo === review._id && editingReplyId === null" class="space-y-2">
+                 <textarea 
+                   v-model="replyText" 
+                   placeholder="Write your reply..." 
+                   rows="2"
+                   class="w-full p-2 bg-gray-700 border border-gray-600 rounded-md text-white text-sm focus:ring-green-500 focus:border-green-500"
+                 ></textarea>
+                 <div class="flex justify-end gap-2">
+                    <button @click="cancelReplyOrEdit" class="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-500 rounded">Cancel</button>
+                    <button 
+                      @click="submitReply(review._id)" 
+                      class="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded"
+                     >
+                      Submit Reply
+                    </button>
+                 </div>
+              </div>
+           </div>
         </div>
       </div>
     </div>
   </template>
   
   <script setup>
-  import { computed } from 'vue'
-  import { StarIcon, UserIcon, CalendarIcon } from 'lucide-vue-next'
+  import { computed, ref } from 'vue'
+  import { StarIcon, UserIcon, CalendarIcon, MessageSquareIcon, Edit3Icon, Trash2Icon } from 'lucide-vue-next'
 
-  
   const props = defineProps({
     reviews: {
       type: Array,
       default: () => []
+    },
+    currentUserId: {
+        type: String,
+        required: true
     }
   })
+
+   // Define emits
+   const emit = defineEmits(['submit-reply', 'update-reply', 'delete-reply'])
+
+   // State for handling replies/edits
+   const replyingTo = ref(null); 
+   const editingReplyId = ref(null); // ID of the reply being edited
+   const replyText = ref('');
+
+   const startReply = (reviewId) => {
+     replyingTo.value = reviewId;
+     editingReplyId.value = null;
+     replyText.value = '';
+   };
+
+   const startEditReply = (reviewId, reply) => {
+     replyingTo.value = reviewId; // Need reviewId context for submission
+     editingReplyId.value = reply._id;
+     replyText.value = reply.text;
+   };
+
+   const cancelReplyOrEdit = () => {
+     replyingTo.value = null;
+     editingReplyId.value = null;
+     replyText.value = '';
+   };
+
+   const submitReply = (reviewId) => {
+     if (!replyText.value.trim()) return;
+     emit('submit-reply', { reviewId, text: replyText.value });
+     cancelReplyOrEdit(); // Clear after emitting
+   };
+
+   const submitEditReply = (reviewId) => {
+     if (!replyText.value.trim() || !editingReplyId.value) return;
+     emit('update-reply', { reviewId, replyId: editingReplyId.value, text: replyText.value });
+      cancelReplyOrEdit(); // Clear after emitting
+   };
+
+   // Helper to check if the current admin user wrote a specific reply
+   const isCurrentUserAdminReply = (reply) => {
+     return reply.adminUser?._id === props.currentUserId;
+   };
+
+   // Helper to check if the current admin has replied to a review
+   const hasAdminReplied = (review) => {
+     return review.replies?.some(reply => reply.adminUser?._id === props.currentUserId);
+   };
 
     const getRatingCount = (stars) => {
     return props.reviews.filter(review => review.rating === stars).length
@@ -109,10 +237,17 @@
   
   // Format date helper function
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
+     console.log('[RatingsAndReviews] Formatting date:', date);
+     if (!date) return 'No date';
+     try {
+       return new Date(date).toLocaleDateString('en-US', {
+         year: 'numeric',
+         month: 'short',
+         day: 'numeric'
+       });
+     } catch (e) {
+        console.error('[RatingsAndReviews] Error formatting date:', e);
+        return 'Invalid Date';
+     }
   }
   </script>

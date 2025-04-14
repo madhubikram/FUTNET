@@ -46,6 +46,7 @@
           <p class="text-xs text-green-400">Current Rate</p>
           <p class="text-sm font-semibold text-green-400">
             Rs. {{ currentRate }}/hr
+            <span class="text-xs text-purple-300"> / {{ calculatePointsCost(currentRate) }} pts</span>
           </p>
         </div>
       </div>
@@ -80,7 +81,11 @@
         ]"
         :disabled="!slot.available || slot.booked || slot.isPending"
       >
-        {{ formatTime(slot.time) }}
+        <div class="text-sm">{{ formatTime(slot.time) }}</div>
+        <div class="text-xs mt-1">
+          <span class="text-gray-300">Rs. {{ slot.rate }}</span>
+          <span class="text-purple-300/80"> / {{ calculatePointsCost(slot.rate) }} pts</span>
+        </div>
         <div v-if="slot.yourBooking" class="mt-1 text-xs text-blue-300">Your booking</div>
         <div v-if="slot.isPending" class="mt-1 text-xs text-yellow-300">Pending</div>
       </button>
@@ -156,7 +161,10 @@
             >
               <span class="text-gray-300">{{ formatTime(slot.time) }}</span>
               <div class="flex items-center gap-4">
-                <span class="text-white">Rs. {{ slot.rate }}</span>
+                <span class="text-white">
+                  Rs. {{ slot.rate }}
+                  <span class="text-xs text-purple-300"> / {{ calculatePointsCost(slot.rate) }} pts</span>
+                </span>
                 <button 
                   @click="toggleTimeSlot(slot)" 
                   class="text-red-400 hover:text-red-300"
@@ -172,6 +180,7 @@
             <span class="text-green-400 font-medium">Total Amount</span>
             <span class="text-xl font-bold text-white">
               Rs. {{ totalAmount }}
+              <span class="text-base font-medium text-purple-300"> / {{ totalPointsCost }} pts</span>
             </span>
           </div>
 
@@ -182,50 +191,20 @@
                 <p class="text-lg font-semibold text-blue-400">{{ freeBookingsRemaining }}</p>
                 <p class="text-xs text-blue-200 mt-1">Free slots are automatically confirmed!</p>
               </div>
-              <div class="text-sm text-blue-300">
-                <p>You're using free slots</p>
-              </div>
             </div>
           </div>
-
-          <div v-if="loyaltyPoints > 0" class="mt-4 p-4 bg-purple-500/10 rounded-lg border border-purple-500/20">
-            <div class="flex justify-between items-center">
-              <div>
-                <p class="text-sm text-purple-300">Available Points</p>
-                <p class="text-lg font-semibold text-purple-400">{{ formattedLoyaltyPoints }}</p>
-              </div>
-              <button
-                @click="showPointsRedemption = true"
-                class="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm"
-              >
-                Use Points
-              </button>
-            </div>
-          </div>
-
-          <!-- Points Redemption Modal -->
-          <PointsRedemptionModal
-            v-if="showPointsRedemption"
-            :booking-amount="totalAmount"
-            @close="showPointsRedemption = false"
-            @redeem="handlePointsRedemption"
-          />
 
           <!-- Proceed Button -->
-          <button
-            @click="proceedToBooking"
-            class="w-full px-6 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
-          >
-            <span v-if="exceedsFreeSlots && !props.court.requirePrepayment">
-              Proceed to Payment
-            </span>
-            <span v-else-if="!exceedsFreeSlots && freeBookingsRemaining > 0 && !props.court.requirePrepayment">
-              Book Now (Auto-Confirm)
-            </span>
-            <span v-else>
-              Book Now
-            </span>
-          </button>
+          <div>
+             <button
+              @click="proceedToBooking"
+              class="w-full px-6 py-3 bg-green-500 text-white rounded-lg font-medium hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+              :disabled="selectedTimeSlots.length === 0"
+            >
+              Proceed to Booking
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
@@ -239,19 +218,13 @@ import { useTimeFormatting } from '@/composables/useTimeFormatting'
 import { usePriceCalculation } from '@/composables/usePriceCalculation'
 import { useBooking } from '@/composables/useBooking'
 import { useLoyaltyPoints } from '@/composables/useLoyaltyPoints'
-import PointsRedemptionModal from '@/components/features/PointsRedemptionModal.vue'
 
 const { formatTime, formatTimeRange, formatDate } = useTimeFormatting()
 const { isTimeInRange, determineRate } = usePriceCalculation()
 const { generateBookingId } = useBooking()
-const { points: loyaltyPoints, formattedPoints: formattedLoyaltyPoints } = useLoyaltyPoints()
+const { points: loyaltyPoints, fetchPoints } = useLoyaltyPoints()
 
-const showPointsRedemption = ref(false)
-const redeemedPoints = ref(0)
-const remainingAmount = ref(0)
-// Removed unused freeSlotCount and selectedFreeSlotsCount
 const freeBookingsRemaining = ref(2);
-const exceedsFreeSlots = computed(() => selectedTimeSlots.value.length > freeBookingsRemaining.value);
 
 const props = defineProps({
   court: {
@@ -269,12 +242,12 @@ const refreshBookingData = async () => {
   await generateTimeSlots();
   // Reset selected slots after refresh
   selectedTimeSlots.value = [];
-  redeemedPoints.value = 0; // Reset redeemed points as well
 }
 // --- Expose the refresh method ---
 defineExpose({ refreshBookingData })
 
 onMounted(async () => {
+  await fetchPoints(); // Fetch points on mount
   await refreshBookingData(); // Call the new refresh method
 });
 
@@ -309,11 +282,9 @@ const totalAmount = computed(() =>
   selectedTimeSlots.value.reduce((sum, slot) => sum + slot.rate, 0)
 )
 
-const handlePointsRedemption = ({ points, remainingAmount: remaining }) => {
-  redeemedPoints.value = points
-  remainingAmount.value = remaining
-  showPointsRedemption.value = false
-}
+const totalPointsCost = computed(() => 
+  calculatePointsCost(totalAmount.value)
+);
 
 const proceedToBooking = () => {
   const context = 'PROCEED_BOOKING_EMIT'; // Context for logging
@@ -322,56 +293,69 @@ const proceedToBooking = () => {
     return;
   }
 
-  // Confirm before proceeding if prepayment is required
-  // This check might need adjustment based on actual payment flow
-  if (props.court.requirePrepayment && !confirm('This court requires prepayment. Proceed?')) {
-    return;
-  }
-
-  // --- Log values just before calculation --- 
+  // Recalculate necessary flags just before emitting
   const numberOfSelectedSlots = selectedTimeSlots.value.length;
-  const courtRequiresPrepayment = props.court?.requirePrepayment; // Safely access
+  const courtRequiresPrepayment = props.court?.requirePrepayment ?? false;
   const freeSlotsRemaining = freeBookingsRemaining.value;
-  
-  console.log(`[${context}] Debug Values: `,
-    `Court Requires Prepayment: ${courtRequiresPrepayment}`,
-    `Selected Slots: ${numberOfSelectedSlots}`, 
-    `Free Slots Remaining: ${freeSlotsRemaining}`
-  );
-  // --- End Logging --- 
-
-  // --- Calculation --- 
   const slotsExceedFreeLimit = numberOfSelectedSlots > freeSlotsRemaining;
+  
+  // Payment is required if court mandates it OR if free slots are exceeded (when no prepayment needed)
   const requiresPayment = courtRequiresPrepayment || (!courtRequiresPrepayment && slotsExceedFreeLimit);
+  // It's a free booking if no prepayment needed AND slots are within limit
   const isFreeBooking = !courtRequiresPrepayment && !slotsExceedFreeLimit;
-  // --- End Calculation ---
+  
+  console.log(`[${context}] Debug Values Before Emit: `,
+    `Court Requires Prepayment: ${courtRequiresPrepayment}`,
+    `Selected Slots: ${numberOfSelectedSlots}`,
+    `Free Slots Remaining: ${freeSlotsRemaining}`,
+    `Total Amount: ${totalAmount.value}`,
+    `Total Points Cost: ${totalPointsCost.value}`
+  );
 
-  console.log(`[${context}] Calculated Flags: `,
-    `Slots Exceed Free Limit: ${slotsExceedFreeLimit}`,
-    `Requires Payment: ${requiresPayment}`, 
+  console.log(`[${context}] Calculated Flags Before Emit: `,
+    `Requires Payment: ${requiresPayment}`,
     `Is Free Booking: ${isFreeBooking}`
   );
-
-  // Construct the booking details object to emit
+  
   const detailsToEmit = {
     bookingId: generateBookingId(),
     date: selectedDate.value,
     slots: selectedTimeSlots.value.map(slot => ({
       time: slot.time,
-      rate: slot.rate
+      rate: slot.rate,
+      pointsCost: calculatePointsCost(slot.rate)
     })),
     totalAmount: totalAmount.value,
+    totalPointsCost: totalPointsCost.value,
     duration: `${numberOfSelectedSlots} hour(s)`,
-    redeemedPoints: redeemedPoints.value, 
-    remainingAmount: totalAmount.value - redeemedPoints.value,
-    pointsDiscount: redeemedPoints.value,
-    requiresPayment: requiresPayment, // <-- Use corrected value
-    isFreeBooking: isFreeBooking // <-- Use corrected value
+    
+    // --- Payment Related Flags (Modal will decide method) ---
+    requiresPayment: requiresPayment, 
+    isFreeBooking: isFreeBooking,
+    
+    // Pass available points for modal logic
+    availablePoints: loyaltyPoints.value
+    
+    // REMOVE fields related to specific method selection
+    // paymentMethod: method, 
+    // redeemedPoints: pointsToRedeem,
+    // pointsDiscount: pointsDiscountValue, 
+    // remainingAmount: finalAmountToPay, 
   };
 
   console.log(`[${context}] Emitting proceed-booking with details:`, JSON.stringify(detailsToEmit, null, 2));
 
   emit('proceed-booking', detailsToEmit);
+  // REMOVE hiding payment options
+  // paymentMethodSelectionActive.value = false; 
+};
+
+// Helper function for points calculation
+const calculatePointsCost = (price) => {
+  if (price === null || price === undefined || isNaN(Number(price))) {
+    return 0;
+  }
+  return Math.round(Number(price) / 5);
 };
 
 const fetchFreeSlots = async () => {
