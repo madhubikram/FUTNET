@@ -417,7 +417,11 @@
     </template>
 
     <template #body>
-      <div v-if="selectedTournament" class="space-y-8">
+      <div v-if="detailsLoading" class="flex justify-center items-center h-64">
+        <Loader2Icon class="animate-spin w-8 h-8 text-gray-400" />
+        <span class="ml-2 text-gray-400">Loading details...</span>
+      </div>
+      <div v-else-if="selectedTournament" class="space-y-8">
         <div v-if="selectedTournament.banner" class="aspect-video rounded-lg overflow-hidden">
           <img
             :src="`http://localhost:5000${selectedTournament.banner}`"
@@ -547,6 +551,9 @@
           <p class="text-white whitespace-pre-line">{{ selectedTournament.rules }}</p>
         </div>
       </div>
+      <div v-else class="text-center text-gray-400 py-10">
+        Could not load tournament details.
+      </div>
     </template>
 
     <template #footer>
@@ -578,15 +585,17 @@ import {
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router';
 
-const toast = useToast() // Initialize toast
+const toast = useToast()
 const router = useRouter();
-const API_URL = 'http://localhost:5000/api';
+const API_URL = 'http://localhost:5000/api'; // RESTORED API_URL
+
 // State Management
 const showCreateTournamentModal = ref(false)
 const showViewModal = ref(false)
 const isSubmitting = ref(false)
+const loading = ref(false) // Loading for the main list
+const detailsLoading = ref(false) // Loading state for details modal fetch
 const tournaments = ref([])
-const loading = ref(false)
 const tournamentImages = ref([])
 const errors = ref({})
 const selectedTournament = ref(null)
@@ -967,10 +976,53 @@ const handleCreateTournament = async () => {
   }
 };
 
-const viewTournament = (tournament) => {
-  selectedTournament.value = tournament
-  showViewModal.value = true
-}
+const viewTournament = async (tournamentFromList) => {
+  if (!tournamentFromList?._id) {
+    console.error("viewTournament called with invalid tournament data");
+    toast.error("Cannot view details for this tournament.");
+    return;
+  }
+  
+  console.log(`[Frontend Log] viewTournament triggered for ID: ${tournamentFromList._id}`);
+  detailsLoading.value = true;
+  selectedTournament.value = null; // Clear previous selection while loading
+  showViewModal.value = true; // Show modal container (could show loading state inside)
+
+  try {
+    // Fetch fresh details from the backend using fetch
+    const token = localStorage.getItem('token');
+    console.log(`[Frontend Log] Fetching details from GET ${API_URL}/tournaments/${tournamentFromList._id}`);
+    const response = await fetch(`${API_URL}/tournaments/${tournamentFromList._id}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to parse error response' }));
+      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    // The response structure from getTournamentDetailsForAdmin is { tournament, registeredTeamsDetails }
+    selectedTournament.value = data.tournament; 
+    console.log("[Frontend Log] Received tournament details:", selectedTournament.value);
+
+    // Optional: Update the main tournaments list with the fresh data?
+    const index = tournaments.value.findIndex(t => t._id === selectedTournament.value._id);
+    if (index !== -1) {
+      tournaments.value[index] = selectedTournament.value;
+      console.log("[Frontend Log] Updated tournament list in place with fresh data.");
+    }
+
+  } catch (error) {
+    console.error('Error fetching tournament details:', error);
+    toast.error(error.message || 'Failed to fetch tournament details.');
+    showViewModal.value = false; // Close modal on error
+  } finally {
+    detailsLoading.value = false;
+  }
+};
 
 const editTournament = (tournament) => {
   editingTournamentId.value = tournament._id;
@@ -1028,23 +1080,28 @@ const deleteTournament = async (tournamentToDelete) => {
 };
 
 const navigateToBracket = (tournament) => {
-  if (!tournament || !tournament._id) {
-    console.error('Cannot navigate to bracket: Invalid tournament data provided.', tournament);
-    toast.error('Could not open bracket view for this tournament.');
-    return;
-  }
+  // Log the received tournament data
+  console.log('[Frontend Log] navigateToBracket called for: ',
+    {
+      id: tournament._id,
+      name: tournament.name,
+      status: tournament.status,
+      bracketExists: !!tournament.bracket?.generated,
+      isBracketGenerated: tournament.bracket?.generated,
+      minTeams: tournament.minTeams,
+      registeredTeams: tournament.registeredTeams
+    });
 
-  // 1. Check if bracket is generated in the data we have
   if (tournament.bracket?.generated) {
-    console.log('Bracket is generated, navigating...');
+    // Correct route name based on router/index.js
     router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
-    return;
+  } else {
+    // Optional: Show a message if bracket not generated
+    // Use your preferred notification system (e.g., toast)
+    console.warn('Bracket not generated yet for this tournament.');
+    // Example using a simple alert:
+    // alert('The bracket for this tournament has not been generated yet.');
   }
-
-  // 2. If not generated, inform the user about the process.
-  // The actual generation happens on the backend when viewing details after the deadline.
-  toast.info('Bracket is not generated yet. Please view tournament details after the registration deadline passes to trigger generation (if minimum teams are met).');
-
 };
 
 const navigateToTeams = (tournament) => {

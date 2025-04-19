@@ -1,0 +1,10 @@
+:root {
+    --color-primary: #22c55e; /* Green 500 */
+    --color-primary-dark: #16a34a; /* Green 600 */
+    --color-secondary: #334155; /* Slate 700 */
+    --color-background: #0f172a; /* Slate 900 */
+    --color-surface: #1e293b; /* Slate 800 */
+    --color-text: #f8fafc; /* Slate 50 */
+    --color-text-muted: #94a3b8; /* Slate 400 */
+  }
+  

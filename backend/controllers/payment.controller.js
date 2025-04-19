@@ -56,7 +56,7 @@ const calculateDurationHours = (startTime, endTime) => {
  */
 const initiatePaymentFlow = async (itemType, itemId, userId) => {
     const context = 'PAYMENT_INITIATE_FLOW';
-    log('INFO', context, `Starting internal payment initiation. ItemType: ${itemType}, ItemID: ${itemId}, UserID: ${userId}`);
+    log('INFO', context, `[STEP 1 - START] Internal payment initiation. ItemType: ${itemType}, ItemID: ${itemId}, UserID: ${userId}`);
 
     try {
         let item;
@@ -64,139 +64,91 @@ const initiatePaymentFlow = async (itemType, itemId, userId) => {
         let purchase_order_name = '';
         let model;
         let expectedDbAmount = 0;
+        let actualTournamentId = null; // Variable to store tournament ID for logging
 
-        // 1. Fetch the item and determine details
+        // 1. Fetch item and details
+        log('INFO', context, `[STEP 1 - FETCH] Fetching ${itemType} record with ID: ${itemId}`);
         if (itemType === 'booking') {
             model = Booking;
             item = await model.findById(itemId).populate('court', 'name priceHourly pricePeakHours priceOffPeakHours futsalId');
             if (!item) throw new Error('Booking not found');
-            // Ensure price is correctly determined (use booking price if already set, otherwise calculate)
-             expectedDbAmount = item.price;
+            expectedDbAmount = item.price;
              if (typeof expectedDbAmount !== 'number') {
-                 log('WARN', context, `Booking ${itemId} price is missing or invalid. Attempting calculation based on court.`);
-                 // Recalculate based on court - This logic should ideally be robust/shared
-                 // For now, assume item.price was correctly set during booking creation
-                 if (!item.court) throw new Error('Booking court data not available for price calculation.');
-                 expectedDbAmount = item.court.priceHourly; // Simplified fallback
+                 log('WARN', context, `[STEP 1 - FETCH] Booking ${itemId} price missing/invalid.`);
+                 // Add fallback or throw error
+                 expectedDbAmount = item.court?.priceHourly ?? 0; // Simplified fallback
              }
-            
-            // Debug log the amount being calculated
-            log('DEBUG', context, `Calculated amount for Khalti payment for booking ${itemId}:`, {
-                expectedDbAmount,
-                priceSource: typeof item.price === 'number' ? 'booking.price' : 'court.priceHourly',
-                courtId: item.court?._id
-            });
-            
-            amount = Math.round(expectedDbAmount * 100); // Convert to Paisa
+            amount = Math.round(expectedDbAmount * 100);
             purchase_order_name = `Court Booking: ${item.court?.name || 'Court'} on ${moment(item.date).format('YYYY-MM-DD')}`;
-
+            log('INFO', context, `[STEP 1 - FETCHED] Booking ${item._id} fetched. Amount(Paisa): ${amount}`);
         } else if (itemType === 'tournament') {
             model = TournamentRegistration;
-            item = await model.findById(itemId).populate({
-                path: 'tournament',
-                select: 'name registrationFee'
-            });
+            item = await model.findById(itemId).populate({ path: 'tournament', select: 'name registrationFee _id' }); // <<< Fetch tournament ID
             if (!item || !item.tournament) throw new Error('Tournament registration or associated tournament not found');
+            actualTournamentId = item.tournament._id; // Store the ID
             expectedDbAmount = item.tournament.registrationFee;
-            amount = Math.round(expectedDbAmount * 100); // Convert to Paisa
+            amount = Math.round(expectedDbAmount * 100);
             purchase_order_name = `Tournament Reg: ${item.tournament.name} - ${item.teamName}`;
+            log('INFO', context, `[STEP 1 - FETCHED] Reg ID: ${item._id}, Linked Tournament ID: ${actualTournamentId}, Amount(Paisa): ${amount}`); // Log fetched IDs
         } else {
             throw new Error('Invalid itemType specified');
         }
 
         if (amount <= 0) {
-             log('WARN', context, `Attempting to initiate payment for zero or negative amount for ItemID: ${itemId}. Type: ${itemType}. Amount: ${expectedDbAmount}`);
-             // Allow zero-amount for free slots/tournaments, but Khalti might reject < 1000 Paisa (Rs 10)
-             // If amount is truly 0, we should bypass Khalti, but for this flow, Khalti will likely handle the error.
+             log('WARN', context, `[STEP 1 - AMOUNT CHECK] Zero/Negative amount. ItemID: ${itemId}. Type: ${itemType}. Amount: ${expectedDbAmount}.`);
         }
 
-        // 2. Generate unique purchase order ID and set expiry
+        // 2. Generate purchase order ID and expiry
         const purchase_order_id = `${itemType.toUpperCase()}-${itemId}-${uuidv4().substring(0, 8)}`;
         const reservationExpiresAt = moment().add(PAYMENT_TIMEOUT_MINUTES, 'minutes').toDate();
 
-        // 3. Update DB record with purchaseOrderId and expiry
+        // 3. Update DB with purchaseOrderId and expiry
+        log('INFO', context, `[STEP 2 - UPDATE PENDING] Updating ${itemType} ${itemId} with PurchaseOrderID: ${purchase_order_id}`);
         item.purchaseOrderId = purchase_order_id;
         item.reservationExpiresAt = reservationExpiresAt;
-        item.paymentStatus = 'pending'; // Ensure it's pending
+        item.paymentStatus = 'pending';
         if (itemType === 'booking') item.status = 'pending';
         if (itemType === 'tournament') item.status = 'pending_payment';
-
         await item.save();
-        log('INFO', context, `Updated DB with PurchaseOrderID: ${purchase_order_id} and Expiry for ItemID: ${itemId}`);
+        log('INFO', context, `[STEP 2 - SUCCESS] DB updated.`);
 
-        // 4. Prepare data for Khalti initiation
-        const user = await User.findById(userId).select('firstName lastName email phone'); // Fetch user details
-        const customer_info = user ? {
-            name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'N/A',
-            email: user.email,
-            phone: user.phone || 'N/A' // Khalti might require phone
-        } : undefined;
-
-        const initiationData = {
-            purchase_order_id,
-            purchase_order_name,
-            amount,
-            website_url: process.env.FRONTEND_URL, // Your base frontend URL
-            customer_info
-            // Add amount_breakdown or product_details if needed
-        };
+        // 4. Prepare Khalti data
+        const user = await User.findById(userId).select('firstName lastName email phone');
+        const customer_info = user ? { name: `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'N/A', email: user.email, phone: user.phone || 'N/A' } : undefined;
+        const initiationData = { purchase_order_id, purchase_order_name, amount, website_url: process.env.FRONTEND_URL, customer_info };
+        log('INFO', context, `[STEP 3 - KHALTI INIT] Calling Khalti initiate. OrderID: ${purchase_order_id}, Amount: ${amount}`);
 
         // 5. Call Khalti Service
         const khaltiResult = await khaltiService.initiateKhaltiPayment(initiationData);
-        
-        // Enhanced logging for Khalti result
-        log('DEBUG', context, `Received Khalti initiation result for ${itemType} ${itemId}:`, {
-            success: khaltiResult.success,
-            hasPaymentUrl: !!khaltiResult.payment_url,
-            paymentUrl: khaltiResult.payment_url,
-            pidx: khaltiResult.pidx,
-            error: khaltiResult.error || 'none'
-        });
+        log('DEBUG', context, `[STEP 3 - KHALTI RESULT] Khalti initiation raw result:`, khaltiResult);
 
         // 6. Handle Khalti Response
         if (khaltiResult.success) {
-            log('INFO', context, `Khalti initiation successful. Updating DB with PIDX for OrderID: ${purchase_order_id}`);
+            log('INFO', context, `[STEP 4 - KHALTI SUCCESS] Khalti OK. Updating ${itemType} ${itemId} with PIDX: ${khaltiResult.pidx}`);
             item.pidx = khaltiResult.pidx;
-            item.paymentDetails = { // Initialize payment details
-                method: 'khalti'
-            };
+            item.paymentDetails = { method: 'khalti' };
             await item.save();
             
-            const successResult = {
-                success: true,
-                payment_url: khaltiResult.payment_url,
-                purchase_order_id: purchase_order_id
-            };
-            
-            // Final validation check before returning
-            if (!successResult.payment_url) {
-                log('ERROR', context, `Payment URL missing in successful Khalti result for ${itemType} ${itemId}. This will break redirection!`);
-            }
-            
-            log('DEBUG', context, `Returning success result from initiatePaymentFlow for ${itemType} ${itemId}:`, successResult);
+            const successResult = { success: true, payment_url: khaltiResult.payment_url, purchase_order_id: purchase_order_id };
+            log('INFO', context, `[STEP 5 - FLOW SUCCESS] Returning success to caller for ItemID: ${itemId}.`, successResult);
             return successResult;
         } else {
-            log('ERROR', context, `Khalti initiation failed for OrderID: ${purchase_order_id}. Reverting status.`, { error: khaltiResult.error });
-            // Revert status or mark as failed immediately
+            log('ERROR', context, `[STEP 4 - KHALTI FAIL] Khalti initiation failed. OrderID: ${purchase_order_id}. Reverting status for ${itemType} ${itemId}.`, { error: khaltiResult.error });
             item.paymentStatus = 'failed';
-            if (itemType === 'booking') item.status = 'pending'; // Or maybe 'cancelled'? Decide policy.
-            if (itemType === 'tournament') item.status = 'withdrawn'; // Or handle differently
-            item.purchaseOrderId = undefined; // Clear purchase ID
-            item.pidx = undefined; // Clear pidx
-            item.reservationExpiresAt = undefined; // Clear expiry
+            if (itemType === 'booking') item.status = 'pending'; 
+            if (itemType === 'tournament') item.status = 'withdrawn';
+            item.purchaseOrderId = undefined; item.pidx = undefined; item.reservationExpiresAt = undefined;
             await item.save();
+            log('INFO', context, `[STEP 4 - REVERTED] Status reverted for ${itemType} ${itemId}.`);
             return { success: false, error: khaltiResult.error || 'Khalti initiation failed.' };
         }
 
     } catch (error) {
-        log('ERROR', context, `Internal error during payment initiation flow for ItemID: ${itemId}.`, { message: error.message, stack: error.stack });
-        // Attempt to mark item as failed if possible
+        log('ERROR', context, `[STEP - FAIL] Internal error during payment initiation flow. ItemID: ${itemId}.`, { message: error.message, stack: error.stack });
         try {
             let model = (itemType === 'booking') ? Booking : TournamentRegistration;
             await model.findByIdAndUpdate(itemId, { $set: { paymentStatus: 'failed' }, $unset: { purchaseOrderId: "", pidx: "", reservationExpiresAt: "" } });
-        } catch (dbError) {
-            log('ERROR', context, `Failed to mark item as failed after error for ItemID: ${itemId}.`, { dbError: dbError.message });
-        }
+        } catch (dbError) { log('ERROR', context, `[STEP - FAIL] Failed to mark item as failed after error. ItemID: ${itemId}.`, { dbError: dbError.message }); }
         return { success: false, error: `Internal server error during initiation: ${error.message}` };
     }
 };
@@ -253,8 +205,8 @@ const verifyPayment = async (req, res) => {
 
 // --- Helper function to update DB based on verification --- 
 const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_order_id, context, khaltiStatus, failureReason = null, khaltiAmount = null, transactionId = null) => {
-    // Note: received_purchase_order_id is the one from the *Khalti callback/lookup*, which might be unreliable or absent.
-    // We prioritize finding our record using the verified PIDX.
+    context = 'PAYMENT_UPDATE_DB'; // More specific context
+    log('INFO', context, `[STEP 1 - START] Updating DB based on verification. PIDX: ${pidx}, Khalti Status: ${khaltiStatus}`);
     try {
         let item = null;
         let model = null;
@@ -262,110 +214,98 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
         let expectedDbAmount = 0;
         let userToNotify = null;
         let notificationTitle = '';
-        // Use a different variable name to avoid redeclaration issues
         let notificationText = '';
         let notificationType = '';
-        let finalStatus = ''; // Booking/Registration status
-        let paymentStatus = 'failed'; // Default payment status
+        let finalStatus = ''; 
+        let paymentStatus = 'failed'; 
         let notificationLink = '/my-bookings';
+        let actualTournamentId = null; // Variable to store tournament ID
 
-        // --- Find internal record using PIDX --- 
-        log('INFO', context, `Attempting to find record by PIDX: ${pidx}`);
-        item = await Booking.findOne({ pidx }).populate('court', 'name priceHourly'); // Populate needed fields
+        // Find internal record using PIDX
+        log('INFO', context, `[STEP 1 - FIND BY PIDX] Searching for record with PIDX: ${pidx}`);
+        item = await Booking.findOne({ pidx }).populate('court', 'name priceHourly');
         if (item) {
             model = Booking;
             itemType = 'booking';
             expectedDbAmount = item.price;
-            log('INFO', context, `Found Booking record by PIDX: ${item._id}`);
+            log('INFO', context, `[STEP 1 - FOUND] Found Booking record by PIDX: ${item._id}`);
         } else {
-            item = await TournamentRegistration.findOne({ pidx }).populate('tournament', 'name registrationFee');
+            // Ensure tournament field is populated when finding registration
+            item = await TournamentRegistration.findOne({ pidx }).populate({ path: 'tournament', select: 'name registrationFee _id' }); // <<< Populate tournament ID
             if (item) {
                 model = TournamentRegistration;
                 itemType = 'tournament';
-                expectedDbAmount = item.tournament?.registrationFee;
+                if (!item.tournament) {
+                    log('ERROR', context, `[STEP 1 - FAIL] Found Reg ID ${item._id} but its associated tournament is missing/null. Cannot proceed.`);
+                    // Handle this critical error - maybe mark as failed?
+                    return { success: false, error: `Registration ${item._id} is missing tournament link.`, statusCode: 500 };
+                }
+                actualTournamentId = item.tournament._id; // Store ID
+                expectedDbAmount = item.tournament.registrationFee;
                 notificationLink = '/my-tournaments';
-                log('INFO', context, `Found TournamentRegistration record by PIDX: ${item._id}`);
+                log('INFO', context, `[STEP 1 - FOUND] Found Reg record ${item._id} by PIDX. Linked Tournament ID: ${actualTournamentId}`); // Log IDs
             } 
         }
-        // --- End PIDX lookup --- 
-
-        // If not found by PIDX, maybe log a warning but proceed cautiously, or fail.
-        // For now, we rely on PIDX being stored correctly during initiation.
+        
         if (!item) {
-            log('ERROR', context, `Could not find internal record matching PIDX: ${pidx}. Cannot update status.`);
-            // It's crucial we find the record. If PIDX wasn't saved or is wrong, we have a problem.
+            log('ERROR', context, `[STEP 1 - FAIL] Could not find internal record matching PIDX: ${pidx}. Cannot update status.`);
             return { success: false, error: `Internal record not found for PIDX: ${pidx}.`, statusCode: 404 };
         }
 
-        // Get the purchase order ID stored in *our* database record
         const internalPurchaseOrderId = item.purchaseOrderId;
-        log('INFO', context, `Found internal record. Type: ${itemType}, ID: ${item._id}, DB OrderID: ${internalPurchaseOrderId}. Current PaymentStatus: ${item.paymentStatus}`);
+        log('INFO', context, `[STEP 2 - CHECK STATUS] Record Found. Type: ${itemType}, ID: ${item._id}, DB OrderID: ${internalPurchaseOrderId}. Current PaymentStatus: ${item.paymentStatus}`);
         userToNotify = item.user;
 
-        // Check if already processed
         if (item.paymentStatus === 'paid') {
-             log('WARN', context, `Transaction already marked as paid for PIDX: ${pidx}, ItemID: ${item._id}. Skipping update.`);
+             log('WARN', context, `[STEP 2 - SKIP] Transaction already marked as paid. PIDX: ${pidx}, ItemID: ${item._id}. Skipping update.`);
              return { success: true, finalStatus: item.status, message: 'Already paid' };
         }
         
         // --- Core Verification Logic --- 
         if (khaltiStatus === 'Completed') {
-            const amountInPaisa = khaltiAmount; // Already in Paisa from Khalti
+            const amountInPaisa = khaltiAmount; 
             const expectedAmountPaisa = Math.round(expectedDbAmount * 100);
-            
-            log('INFO', context, `Khalti status is Completed. Checking amount. Khalti (Paisa): ${amountInPaisa}, Expected (Paisa): ${expectedAmountPaisa}`);
+            log('INFO', context, `[STEP 3 - VERIFY AMOUNT] Khalti status Completed. Amount(Paisa): ${amountInPaisa}, Expected(Paisa): ${expectedAmountPaisa}. PIDX: ${pidx}`);
 
-            // Security Check: Verify amount
             if (amountInPaisa === null || amountInPaisa !== expectedAmountPaisa) {
-                // Amount Mismatch or missing
-                log('ERROR', context, `AMOUNT MISMATCH or missing for PIDX: ${pidx}! Khalti Amount (Paisa): ${amountInPaisa}, Expected (Paisa): ${expectedAmountPaisa}. Marking as FAILED.`);
+                // Amount Mismatch
+                log('ERROR', context, `[STEP 3 - AMOUNT FAIL] AMOUNT MISMATCH/MISSING! PIDX: ${pidx}. Marking FAILED.`);
                 item.paymentStatus = 'failed';
                 item.paymentDetails = { ...(item.paymentDetails || {}), method: 'khalti', transactionId, paidAmount: amountInPaisa !== null ? amountInPaisa / 100 : undefined, paidAt: new Date(), failureReason: 'Amount mismatch or missing' };
-                finalStatus = itemType === 'booking' ? 'cancelled' : 'withdrawn'; // Decide policy
+                finalStatus = itemType === 'booking' ? 'cancelled' : 'withdrawn';
                 item.status = finalStatus; 
                 paymentStatus = 'failed';
                 notificationTitle = 'Payment Verification Issue';
-                notificationText = `There was an issue verifying your payment for ${internalPurchaseOrderId} (amount mismatch). Please contact support.`;
+                notificationText = `Amount mismatch verifying payment for ${internalPurchaseOrderId}. Contact support.`;
                 notificationType = 'payment_failed';
             } else {
                 // --- SUCCESS CASE --- 
-                log('INFO', context, `Payment Completed and Amount Verified for PIDX: ${pidx}. Updating DB.`);
+                log('INFO', context, `[STEP 3 - SUCCESS] Payment Completed & Amount OK. PIDX: ${pidx}. Updating DB for ${itemType} ${item._id}.`);
                 item.paymentStatus = 'paid';
                 item.paymentDetails = { method: 'khalti', transactionId, paidAmount: amountInPaisa / 100, paidAt: new Date() };
                 finalStatus = itemType === 'booking' ? 'confirmed' : 'active';
                 item.status = finalStatus;
                 paymentStatus = 'paid';
+                // --- UNSET reservationExpiresAt --- 
+                item.reservationExpiresAt = undefined; 
+                log('INFO', context, `[STEP 3 - SUCCESS] Unsetting reservationExpiresAt for PIDX: ${pidx} to prevent TTL deletion.`);
+                // --- End Unset ---
                 notificationTitle = 'Payment Successful!';
-                
-                // --- Construct User Notification Message with Details ---
-                let detailedUserNotificationMessage = `Your payment for ${internalPurchaseOrderId} was successful! Your ${itemType} is confirmed.`; // Default
-                if (itemType === 'booking') {
-                    try {
-                        // Fetch court details specifically for user notification
-                        const bookingCourt = await Court.findById(item.court).populate('futsalId', 'name').select('futsalId name');
-                        if (bookingCourt) {
-                             const courtName = bookingCourt.name || 'the court';
-                             const futsalName = bookingCourt.futsalId?.name || 'the futsal';
-                             detailedUserNotificationMessage = `Payment confirmed! Your booking for ${courtName} at ${futsalName} on ${moment(item.date).format('YYYY-MM-DD')} at ${item.startTime} is confirmed.`
-                        }
-                    } catch (detailError) {
-                        log('ERROR', context, `Failed to fetch court details for user notification for booking ${item._id}`, detailError);
-                        // Keep default message if details fail
-                    }
-                }
-                // TODO: Add similar logic for tournament user notifications if needed
-                notificationText = detailedUserNotificationMessage; // Use the detailed message
-                // --- End User Notification Message Construction ---
-                
+                notificationText = `Payment confirmed for ${internalPurchaseOrderId}. Your ${itemType} is confirmed.`; 
                 notificationType = 'payment_confirmation';
 
                 // Increment registered teams count for tournaments
-                if (itemType === 'tournament' && item.tournament) {
-                   try {
-                      await Tournament.findByIdAndUpdate(item.tournament._id, { $inc: { registeredTeams: 1 } });
-                      log('INFO', context, `Incremented registered teams for tournament ${item.tournament._id}`);
-                   } catch (incError) {
-                      log('ERROR', context, `Failed to increment registered teams count for tournament ${item.tournament._id}`, incError);
+                if (itemType === 'tournament') {
+                   if (!actualTournamentId) { // Double check we have the ID
+                       log('ERROR', context, `[STEP 3 - SUCCESS] Cannot increment team count because Tournament ID is missing for Reg ID ${item._id}!`);
+                   } else {
+                       log('INFO', context, `[STEP 3 - SUCCESS] Incrementing registered teams for Tournament ID: ${actualTournamentId} (from Reg ID: ${item._id})`);
+                       try {
+                          await Tournament.findByIdAndUpdate(actualTournamentId, { $inc: { registeredTeams: 1 } });
+                          log('INFO', context, `[STEP 3 - SUCCESS] Incremented team count OK for Tournament ID: ${actualTournamentId}`);
+                       } catch (incError) {
+                          log('ERROR', context, `[STEP 3 - SUCCESS] FAILED to increment team count for Tournament ID: ${actualTournamentId}`, incError);
+                       }
                    }
                 }
                 // Award loyalty points for paid bookings (if applicable)
@@ -389,41 +329,36 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
                 }
             }
         } else {
-            // --- FAILURE CASE --- 
-            log('ERROR', context, `Khalti status is ${khaltiStatus}. Marking as FAILED.`, { khaltiStatus });
+            // --- FAILURE CASE (Khalti status not Completed) --- 
+            log('ERROR', context, `[STEP 3 - KHALTI FAIL] Khalti status is ${khaltiStatus}. Marking FAILED. PIDX: ${pidx}`);
             item.paymentStatus = 'failed';
-            item.paymentDetails = { ...(item.paymentDetails || {}), method: 'khalti', transactionId, paidAmount: khaltiAmount !== null ? khaltiAmount / 100 : undefined, paidAt: new Date(), failureReason: failureReason || 'Khalti status indicates failure' };
-            finalStatus = itemType === 'booking' ? 'cancelled' : 'withdrawn'; // Decide policy
+            item.paymentDetails = { ...(item.paymentDetails || {}), method: 'khalti', transactionId, paidAmount: khaltiAmount !== null ? khaltiAmount / 100 : undefined, paidAt: new Date(), failureReason: failureReason || `Khalti status: ${khaltiStatus}` };
+            finalStatus = itemType === 'booking' ? 'cancelled' : 'withdrawn'; 
             item.status = finalStatus;
             paymentStatus = 'failed';
             notificationTitle = 'Payment Verification Issue';
-            notificationText = `There was an issue verifying your payment for ${internalPurchaseOrderId}. Please contact support.`;
+            notificationText = `Payment verification failed for ${internalPurchaseOrderId}. Khalti Status: ${khaltiStatus}.`;
             notificationType = 'payment_failed';
         }
 
-        // Update DB with final status and payment details
-        item.paymentStatus = paymentStatus;
-        item.paymentDetails = item.paymentDetails || {};
-        item.paymentDetails.method = item.paymentDetails.method || 'khalti';
-        item.paymentDetails.transactionId = transactionId;
-        item.paymentDetails.paidAmount = item.paymentDetails.paidAmount || (khaltiAmount !== null ? khaltiAmount / 100 : undefined);
-        item.paymentDetails.paidAt = item.paymentDetails.paidAt || new Date();
-        item.paymentDetails.failureReason = item.paymentDetails.failureReason || failureReason;
-        item.status = finalStatus;
+        // --- SAVE & NOTIFY --- 
+        log('INFO', context, `[STEP 4 - SAVE] Saving ${itemType} ${item._id}. Final Status: ${item.status}, Payment Status: ${item.paymentStatus}.`);
+        item.paymentStatus = paymentStatus; 
+        item.status = finalStatus;         
+        // reservationExpiresAt is already set to undefined in success case above
         await item.save();
+        log('INFO', context, `[STEP 4 - SAVED] Record ${item._id} saved.`);
 
-        // Final notification message with reason if needed
-        if (failureReason) {
-            notificationText += ` Reason: ${failureReason}`;
-        }
+        if (failureReason && paymentStatus === 'failed') { notificationText += ` Reason: ${failureReason}`; }
 
-        // Send notification to user
+        log('INFO', context, `[STEP 5 - NOTIFY] Sending notification. User: ${userToNotify}, Title: ${notificationTitle}`);
         await createNotification(userToNotify, notificationTitle, notificationText, notificationType, notificationLink);
 
-        return { success: true, finalStatus, message: notificationText };
+        return { success: paymentStatus === 'paid', finalStatus, message: notificationText }; // Return success based on final payment status
+
     } catch (error) {
-        log('ERROR', context, `Internal error during verification for PIDX: ${pidx}.`, { message: error.message, stack: error.stack });
-        return { success: false, error: `Internal server error during verification: ${error.message}` };
+        log('ERROR', context, `[STEP - FAIL] Internal error during DB update. PIDX: ${pidx}.`, { message: error.message, stack: error.stack });
+        return { success: false, error: `Internal server error during verification update: ${error.message}` };
     }
 };
 

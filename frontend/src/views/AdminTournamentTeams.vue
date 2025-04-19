@@ -158,44 +158,46 @@ const fetchTournamentAndTeams = async () => {
 
     console.log(`Fetching details for tournament: ${props.id}`);
     
-    // Fetch basic tournament details (like name, maxTeams)
+    // Fetch tournament details (which includes bracket generation check on backend)
     const tournamentResponse = await fetch(`${API_URL}/tournaments/${props.id}`, {
        headers: { 'Authorization': `Bearer ${token}` },
     });
-    if (!tournamentResponse.ok) throw new Error('Failed to fetch tournament details.');
-    tournamentDetails.value = await tournamentResponse.json();
+    if (!tournamentResponse.ok) {
+      const errData = await tournamentResponse.json().catch(() => ({}));
+      throw new Error(errData.message || `Failed to fetch tournament details. Status: ${tournamentResponse.status}`);
+    }
+    
+    const tournamentData = await tournamentResponse.json();
+    // ** FIX: Access the tournament object nested in the response **
+    tournamentDetails.value = tournamentData.tournament; 
     console.log('Tournament details received:', tournamentDetails.value?.name);
+    // We don't need the registeredTeamsDetails from this response here, as we fetch separately.
 
     // Fetch registered teams details
     console.log(`Attempting to fetch registrations for tournament ${props.id}`);
-    try {
-      const teamsResponse = await fetch(`${API_URL}/tournaments/${props.id}/registrations`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      
-      console.log(`Registration fetch status: ${teamsResponse.status}`);
-      
-      if (teamsResponse.ok) {
-        const data = await teamsResponse.json();
-        console.log(`Received ${data.length} team registrations:`, data);
-        registrationDetails.value = data;
-      } else if (teamsResponse.status === 403) {
-        // If 403 Forbidden, treat it as "no teams yet" rather than an error
-        console.log('Tournament exists but no access to registrations (403 error).');
-        registrationDetails.value = [];
-      } else {
-        console.error(`Teams fetch failed with status: ${teamsResponse.status}`);
-        throw new Error(`Failed to fetch registered teams. Status: ${teamsResponse.status}`);
-      }
-    } catch (teamsError) {
-      console.error('Error fetching teams:', teamsError);
-      // Don't set error.value here, just log it and continue with empty registrations
-      registrationDetails.value = [];
+    const teamsResponse = await fetch(`${API_URL}/tournaments/${props.id}/registrations`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    
+    console.log(`Registration fetch status: ${teamsResponse.status}`);
+    
+    if (teamsResponse.ok) {
+      const data = await teamsResponse.json();
+      console.log(`Received ${data.length} team registrations:`, data);
+      registrationDetails.value = data;
+    } else {
+      const errData = await teamsResponse.json().catch(() => ({}));
+      // Don't throw error for teams fetch, just log and show empty list
+      console.error(`Failed to fetch registered teams. Status: ${teamsResponse.status}, Message: ${errData.message}`);
+      registrationDetails.value = []; 
     }
 
   } catch (err) {
-    console.error('Error in tournament teams page:', err);
+    console.error('Error loading tournament teams page:', err);
     error.value = err.message;
+    // Ensure lists are empty on error
+    tournamentDetails.value = null;
+    registrationDetails.value = [];
   } finally {
     loading.value = false;
     console.log('Final registrationDetails:', registrationDetails.value);

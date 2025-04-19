@@ -1,0 +1,29 @@
+@layer components {
+    /* Input styles */
+    .base-input {
+      @apply w-full px-3 py-2 bg-white dark:bg-gray-800 
+             border border-gray-300 dark:border-gray-600 
+             rounded-lg shadow-sm;
+    }
+  
+    .base-input--error {
+      @apply border-red-500 focus:ring-red-500 focus:border-red-500;
+    }
+  
+    /* Button styles */
+    .base-button {
+      @apply inline-flex items-center justify-center px-4 py-2
+             font-medium rounded-lg transition-colors duration-200;
+    }
+  
+    .base-button--primary {
+      @apply bg-primary-500 text-white hover:bg-primary-600;
+    }
+  
+    /* Select styles */
+    .base-select {
+      @apply w-full px-3 py-2 bg-white dark:bg-gray-800 
+             border border-gray-300 dark:border-gray-600 
+             rounded-lg shadow-sm;
+    }
+  }

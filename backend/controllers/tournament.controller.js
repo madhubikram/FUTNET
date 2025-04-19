@@ -7,6 +7,10 @@ const User = require('../models/user.model');
 const { createNotification } = require('../utils/notification.service');
 const moment = require('moment');
 const { generateSingleEliminationBracket } = require('../utils/bracketGenerator'); // Import generator
+const mongoose = require('mongoose'); // Import mongoose for ObjectId validation
+
+// --- Define Controller Object Early ---
+const tournamentController = {};
 
 // Helper function to delete file
 const deleteFile = async (filePath) => {
@@ -17,8 +21,9 @@ const deleteFile = async (filePath) => {
     }
 };
 
-const tournamentController = {
-    createTournament: async (req, res) => {
+// --- Define Controller Functions and Attach ---
+
+const createTournament = async (req, res) => {
         try {
             console.log('Creating tournament with data:', {
                 body: req.body,
@@ -75,9 +80,10 @@ const tournamentController = {
             }
             res.status(400).json({ message: `Error creating tournament: ${error.message}` });
         }
-    },
+};
+tournamentController.createTournament = createTournament;
 
-    getTournaments: async (req, res) => {
+const getTournaments = async (req, res) => {
         try {
             // Select the bracket field along with other defaults
             const tournaments = await Tournament.find({ futsalId: req.user.futsal }, '+bracket'); 
@@ -92,11 +98,11 @@ const tournamentController = {
                 try {
                     const deadlineDateTime = new Date(`${tournament.registrationDeadline.toISOString().split('T')[0]}T${tournament.registrationDeadlineTime || '23:59'}`);
                     if (now > deadlineDateTime && tournament.registeredTeams < tournament.minTeams && tournament.status !== 'Cancelled (Low Teams)') {
-                        console.log(`[Status Update - Low Teams] Tournament ${tournament.name} (${tournament._id}) being cancelled.`);
+                        console.log(`[!!!][GET_TOURNAMENTS_CANCEL_CHECK] Running cancellation logic for Tournament ${tournament._id}. Now: ${now.toISOString()}, Deadline: ${deadlineDateTime.toISOString()}, Registered: ${tournament.registeredTeams}, Min: ${tournament.minTeams}`);
                         tournament.status = 'Cancelled (Low Teams)';
                         await tournament.save();
-                        statusChanged = true; // Mark that status changed here
-                        console.log(`[Status Update - Low Teams] Saved status for ${tournament.name}.`);
+                        statusChanged = true;
+                        console.log(`[!!!][GET_TOURNAMENTS_CANCEL_CHECK] Saved status Cancelled for ${tournament.name}.`);
 
                         // --- Send Cancellation Notifications (Low Teams) --- 
                         try {
@@ -121,7 +127,7 @@ const tournamentController = {
                                     await createNotification(
                                         admin._id,
                                         `Tournament Auto-Cancelled: ${tournament.name}`,
-                                        `"${tournament.name}" was automatically cancelled ${reason} (${tournament.registeredTeams}/${tournament.minTeams} teams).`,
+                                    `\"${tournament.name}\" was automatically cancelled ${reason} (${tournament.registeredTeams}/${tournament.minTeams} teams).`,
                                         'tournament_cancel_admin',
                                         `/admin/tournaments/${tournament._id}` 
                                     );
@@ -131,7 +137,7 @@ const tournamentController = {
                         } catch (notifyError) {
                             console.error(`[Notification - Low Teams] Error sending cancellation notifications for ${tournament._id}:`, notifyError);
                         }
-                        // --- End Notifications ---
+                    // --- End Notifications ---\
 
                         return tournament; // Return the updated tournament
                     }
@@ -180,9 +186,10 @@ const tournamentController = {
         } catch (error) {
             res.status(500).json({ message: error.message });
         }
-    },
+};
+tournamentController.getTournaments = getTournaments;
 
-    getTournament: async (req, res) => {
+const getTournament = async (req, res) => {
         try {
             let tournament = await Tournament.findOne({
                 _id: req.params.id,
@@ -193,137 +200,215 @@ const tournamentController = {
                 return res.status(404).json({ message: 'Tournament not found' });
             }
 
+        // --- START BRACKET GENERATION LOGIC (moved to getTournamentDetailsForAdmin) ---
+        // This logic is intentionally removed from here as it should likely only run 
+        // when the admin specifically views the details page prepared for bracket management.
+
+        // --- START POPULATING TEAM DETAILS for bracket display (moved to getTournamentDetailsForAdmin) ---
+        // This logic is also removed for the same reason.
+
+        // If the basic tournament info is needed (without bracket generation/population):
+        res.json(tournament); 
+
+    } catch (error) {
+        console.error('Error fetching tournament:', error);
+        res.status(500).json({ message: error.message });
+    }
+};
+tournamentController.getTournament = getTournament;
+
+
+const getTournamentDetailsForAdmin = async (req, res) => {
+    console.log(`[LOG] Entering getTournamentDetailsForAdmin for Tournament ID: ${req.params.id}`); // Log entry
+    try {
+        let tournament = await Tournament.findOne({
+            _id: req.params.id,
+            futsalId: req.user.futsal
+        }).select('+bracket');
+
+        if (!tournament) {
+            console.log(`[LOG] Tournament ${req.params.id} not found for admin.`);
+            return res.status(404).json({ message: 'Tournament not found' });
+        }
+        console.log(`[LOG] Found tournament ${req.params.id}. Current status: ${tournament.status}`);
+        console.log(`[LOG] Tournament Bracket status BEFORE check:`, tournament.bracket ? `Exists, Generated=${tournament.bracket.generated}` : 'null');
+
             // --- START BRACKET GENERATION LOGIC ---
             const now = new Date();
+        let deadlineDateTime = null;
             let deadlinePassed = false;
             try {
-                 const deadlineDateTime = new Date(`${tournament.registrationDeadline.toISOString().split('T')[0]}T${tournament.registrationDeadlineTime || '23:59'}`);
+             deadlineDateTime = new Date(`${tournament.registrationDeadline.toISOString().split('T')[0]}T${tournament.registrationDeadlineTime || '23:59'}`);
                  deadlinePassed = now > deadlineDateTime;
+             console.log(`[LOG] Bracket Check Time: Now=${now.toISOString()}, Deadline=${deadlineDateTime.toISOString()}, Passed=${deadlinePassed}`);
             } catch (e) {
-                console.error(`[Bracket Check] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
+            console.error(`[LOG][ERROR] Could not parse deadline for tournament ${tournament._id}: ${e.message}`);
             }
+
+        const minTeamsMet = tournament.registeredTeams >= tournament.minTeams;
+        console.log(`[LOG] Bracket Check Teams: Registered=${tournament.registeredTeams}, MinRequired=${tournament.minTeams}, Met=${minTeamsMet}`);
 
             const needsBracketGeneration = 
                 deadlinePassed &&
-                tournament.registeredTeams >= tournament.minTeams &&
+            minTeamsMet &&
                 (!tournament.bracket || !tournament.bracket.generated);
+        
+        console.log(`[LOG] Needs Bracket Generation? ${needsBracketGeneration}`);
 
             if (needsBracketGeneration) {
-                console.log(`[Admin Bracket] Conditions met for tournament ${tournament._id}. Attempting to generate bracket...`);
+            console.log(`[LOG] Conditions met for tournament ${tournament._id}. Attempting to generate bracket...`);
                 
-                const allRegistrations = await TournamentRegistration.find({
-                  tournament: tournament._id,
-                  status: 'active'
-                });
+                const registrationQuery = { tournament: tournament._id, status: 'active' }; // Explicit query
+                console.log(`[LOG] Performing query to find active registrations for bracket:`, registrationQuery); // <<< Log the query
+                const activeRegistrations = await TournamentRegistration.find(registrationQuery)
+                    .populate('user', 'username') // Need usernames for display names potentially
+                    .populate('teamId', 'name'); // Need team names
+
+                console.log(`[LOG] Found ${activeRegistrations.length} active registrations from DB query.`); // <<< Log the result count
                 
-                if (allRegistrations.length >= tournament.minTeams) {
-                    const generatedBracket = generateSingleEliminationBracket(allRegistrations, tournament.maxTeams);
-                    if (generatedBracket) {
-                        tournament.bracket = generatedBracket;
-                        await tournament.save(); // Save the updated tournament with the bracket
-                        console.log(`[Admin Bracket] Successfully generated and saved bracket for tournament ${tournament._id}`);
-                        // Re-fetch the tournament to ensure the response includes the saved bracket
-                        // (Alternatively, just use the 'tournament' variable directly if save was successful)
-                        // tournament = await Tournament.findById(tournament._id);
-                    } else {
-                        console.error(`[Admin Bracket] Failed to generate bracket structure for tournament ${tournament._id}`);
-                    }
-                } else {
-                    console.warn(`[Admin Bracket] Conditions met, but couldn't fetch enough active registrations (${allRegistrations.length}) for ${tournament._id}`);
+                // Log details if few registrations found (for debugging)
+                if (activeRegistrations.length < tournament.minTeams && activeRegistrations.length > 0) {
+                    console.log(`[LOG] Details of found registrations (count < minTeams):`, activeRegistrations.map(r => ({ id: r._id, status: r.status, team: r.teamName, user: r.user?.username })));
+                } else if (activeRegistrations.length === 0) {
+                    console.log(`[LOG] ZERO active registrations found by the query.`);
                 }
+
+                if (activeRegistrations.length >= tournament.minTeams) {
+                  const teams = activeRegistrations.map(reg => ({
+                    _id: reg.teamId?._id || reg._id, // Use team ID if available, else registration ID as fallback key
+                    name: reg.teamName || reg.teamId?.name || `Team ${reg._id.toString().slice(-4)}`, // Ensure a name
+                    seed: activeRegistrations.length - activeRegistrations.indexOf(reg) // Example seeding
+                  }));
+
+                  console.log(`[LOG] Calling generateSingleEliminationBracket with ${teams.length} teams.`);
+                  const generatedBracket = generateSingleEliminationBracket(teams, tournament.maxTeams);
+                    if (generatedBracket) {
+                    console.log(`[LOG] Bracket successfully generated by utility.`);
+                        tournament.bracket = generatedBracket;
+                    console.log(`[LOG] Saving tournament ${tournament._id} with new bracket...`);
+                    await tournament.save();
+                    console.log(`[LOG] Tournament ${tournament._id} successfully saved with bracket.`);
+                } else {
+                    console.error(`[LOG][ERROR] generateSingleEliminationBracket returned null/false for tournament ${tournament._id}`);
+                }
+            } else {
+                console.warn(`[LOG] Conditions met, but couldn't fetch enough active registrations (${activeRegistrations.length}) for ${tournament._id} at the moment of generation check.`);
+            }
+        } else {
+            console.log(`[LOG] Conditions for bracket generation not met or bracket already exists.`);
             }
             // --- END BRACKET GENERATION LOGIC ---
 
             // --- START POPULATING TEAM DETAILS for bracket display ---
             let registeredTeamsDetails = [];
             if (tournament.bracket?.generated) {
-                console.log(`[Admin Details] Bracket is generated for ${tournament._id}. Fetching registration details...`);
+            console.log(`[LOG] Bracket is generated for ${tournament._id}. Fetching registration details for display...`);
                 try {
-                    // Fetch details for all teams registered for the tournament
                     registeredTeamsDetails = await TournamentRegistration.find({
                         tournament: tournament._id,
-                        status: 'active' // Ensure only active teams are included
-                    }).select('teamName teamId _id players'); // Select necessary fields (_id is key for matching)
-
-                    console.log(`[Admin Details] Found ${registeredTeamsDetails.length} registration details.`);
+                    status: 'active'
+                }).select('teamName teamId _id players');
+                console.log(`[LOG] Found ${registeredTeamsDetails.length} registration details for display.`);
                 } catch(regError) {
-                    console.error(`[Admin Details] Error fetching registration details for tournament ${tournament._id}:`, regError);
-                    // Continue without details, frontend might show 'Unknown Team'
+                console.error(`[LOG][ERROR] Error fetching registration details for tournament ${tournament._id}:`, regError);
                 }
             }
             // --- END POPULATING TEAM DETAILS ---
 
-            // Prepare response object
-            const responseObject = tournament.toObject(); // Convert Mongoose doc to plain object
-            responseObject.registeredTeamsDetails = registeredTeamsDetails; // Add the fetched details
+        // IMPORTANT FIX: Convert the Mongoose document to a plain JS object 
+        // before sending to ensure virtuals and selected fields (like bracket) are included.
+        const tournamentToSend = tournament.toObject({ virtuals: true }); 
 
-            res.json(responseObject); // Send the combined object
+        console.log(`[LOG] Returning details for tournament ${req.params.id}. Bracket Generated: ${tournamentToSend.bracket?.generated}`);
+        res.json({ tournament: tournamentToSend, registeredTeamsDetails });
+
         } catch (error) {
+        console.error(`[LOG][ERROR] Error fetching tournament details for admin ${req.params.id}:`, error);
             res.status(500).json({ message: error.message });
         }
-    },
+};
+tournamentController.getTournamentDetailsForAdmin = getTournamentDetailsForAdmin;
 
-    updateTournament: async (req, res) => {
+const updateTournament = async (req, res) => {
         try {
             console.log('Updating tournament with data:', {
+            params: req.params,
                  body: req.body,
                  file: req.file,
                  user: req.user
             });
 
-             // Explicitly parse prize fields
-             const prizes = {
-                 first: req.body['prizes.first'] ? Number(req.body['prizes.first']) : 0,
-                 second: req.body['prizes.second'] ? Number(req.body['prizes.second']) : 0,
-                 third: req.body['prizes.third'] ? Number(req.body['prizes.third']) : 0
-             };
+        const tournament = await Tournament.findOne({
+            _id: req.params.id,
+            futsalId: req.user.futsal
+        });
 
-            const updateData = {
-                ...req.body,
-                prizes: prizes, // Assign parsed prizes object
-                registrationDeadlineTime: req.body.registrationDeadlineTime, // Explicitly include if needed
-                // Ensure numeric fields are numbers
-                minTeams: Number(req.body.minTeams),
-                maxTeams: Number(req.body.maxTeams),
-                teamSize: Number(req.body.teamSize),
-                substitutes: Number(req.body.substitutes),
-                registrationFee: Number(req.body.registrationFee),
-                halfDuration: Number(req.body.halfDuration),
-                breakDuration: Number(req.body.breakDuration)
-            };
+        if (!tournament) {
+            return res.status(404).json({ message: 'Tournament not found' });
+        }
 
-            // Default endTime if endDate exists and endTime is missing
-            if (updateData.endDate && !updateData.endTime) {
-                 console.log(`[Update Tournament] endTime missing for endDate ${updateData.endDate}. Defaulting endTime to 23:59.`);
-                 updateData.endTime = '23:59';
-            }
+        // Explicitly parse prize fields from the request body
+        const prizes = {};
+        if (req.body['prizes.first'] !== undefined) prizes.first = Number(req.body['prizes.first']);
+        if (req.body['prizes.second'] !== undefined) prizes.second = Number(req.body['prizes.second']);
+        if (req.body['prizes.third'] !== undefined) prizes.third = Number(req.body['prizes.third']);
 
-            if (req.file) {
-                // Handle banner update - potentially delete old banner
-                const oldTournament = await Tournament.findById(req.params.id);
-                if (oldTournament && oldTournament.banner) {
-                    const oldBannerPath = path.join(__dirname, '..', oldTournament.banner);
-                    await deleteFile(oldBannerPath).catch(err => console.error("Failed to delete old banner:", err));
-                }
-                updateData.banner = `/uploads/tournaments/${req.file.filename}`;
-            }
-            
-            // Remove flattened prize fields
+        // Prepare update data, excluding sensitive or immutable fields
+        const updateData = { ...req.body };
+        delete updateData.futsalId; // Don't allow changing futsalId
+        delete updateData.registeredTeams; // Don't allow manual update
+        delete updateData.status; // Status is updated automatically
+        delete updateData.bracket; // Bracket updated via separate endpoint
+        delete updateData.stats; // Stats updated via separate endpoint
+
+        // Remove flattened prize fields if they exist from spread
             delete updateData['prizes.first'];
             delete updateData['prizes.second'];
             delete updateData['prizes.third'];
 
-            console.log('Processed tournament data for update:', updateData);
+        // If prizes were provided in the nested format, use them
+        if (Object.keys(prizes).length > 0) {
+            updateData.prizes = { ...tournament.prizes, ...prizes }; // Merge with existing prizes
+        } else if (req.body.prizes) {
+             // Handle case where prizes might be sent as a JSON object string
+             try {
+                 let parsedPrizes = typeof req.body.prizes === 'string' ? JSON.parse(req.body.prizes) : req.body.prizes;
+                 updateData.prizes = {
+                     first: Number(parsedPrizes.first || tournament.prizes.first),
+                     second: Number(parsedPrizes.second || tournament.prizes.second),
+                     third: Number(parsedPrizes.third || tournament.prizes.third)
+                 };
+             } catch(e) {
+                 console.warn('Could not parse prizes object string:', e.message);
+                 // Keep existing prizes if parsing fails
+             }
+        }
 
-            const tournament = await Tournament.findOneAndUpdate(
-                { _id: req.params.id, futsalId: req.user.futsal },
-                updateData,
-                { new: true, runValidators: true } // Ensure validators run on update
-            );
-
-            if (!tournament) {
-                return res.status(404).json({ message: 'Tournament not found' });
+        // Handle numeric fields, ensuring they are numbers
+        ['minTeams', 'maxTeams', 'teamSize', 'substitutes', 'registrationFee', 'halfDuration', 'breakDuration'].forEach(field => {
+            if (updateData[field] !== undefined) {
+                updateData[field] = Number(updateData[field]);
             }
+        });
+
+
+        // Handle file upload
+        if (req.file) {
+            // Delete old banner if it exists
+            if (tournament.banner) {
+                const oldBannerPath = path.join(__dirname, '..', tournament.banner);
+                console.log(`Deleting old banner: ${oldBannerPath}`);
+                await deleteFile(oldBannerPath).catch(err => console.error("Non-fatal: Error deleting old banner", err));
+            }
+            updateData.banner = `/uploads/tournaments/${req.file.filename}`;
+            console.log(`New banner uploaded: ${updateData.banner}`);
+        }
+
+        // Update the tournament fields
+        Object.assign(tournament, updateData);
+
+        // Recalculate prize pool (done by pre-save hook)
+        await tournament.save();
 
             console.log('Tournament updated successfully:', tournament);
             res.json(tournament);
@@ -334,185 +419,293 @@ const tournamentController = {
             }
             res.status(400).json({ message: `Error updating tournament: ${error.message}` });
         }
-    },
+};
+tournamentController.updateTournament = updateTournament;
 
-    deleteTournament: async (req, res) => {
+const deleteTournament = async (req, res) => {
         try {
             // Step 1: Find the tournament first without deleting it
-            const tournamentToDelete = await Tournament.findOne({
+        const tournament = await Tournament.findOne({
                 _id: req.params.id,
                 futsalId: req.user.futsal
             });
 
-            if (!tournamentToDelete) {
-                return res.status(404).json({ message: 'Tournament not found' });
-            }
-
-            // Step 2: Find registered users
-            const registrations = await TournamentRegistration.find({ tournament: tournamentToDelete._id }).populate('user', '_id');
-            const participants = registrations.map(reg => reg.user).filter(Boolean); // Get user objects
-
-            // Step 3: Send notifications (best effort)
-            if (participants.length > 0) {
-                console.log(`[Delete Notify] Sending notifications to ${participants.length} users for deleted tournament ${tournamentToDelete._id}`);
-                for (const participant of participants) {
-                    try {
-                        await createNotification(
-                            participant._id,
-                            `Tournament Removed: ${tournamentToDelete.name}`,
-                            `The tournament "${tournamentToDelete.name}" you were registered for has been removed by the organizer. Please contact them regarding any applicable refunds.`,
-                            'tournament_cancel', // Using existing type, message clarifies context
-                            `/my-profile` // Link to user's profile/dashboard
-                        );
-                    } catch (notifyError) {
-                        // Log error but continue deletion even if notification fails
-                        console.error(`[Delete Notify] Failed to send notification to user ${participant._id} for tournament ${tournamentToDelete._id}:`, notifyError);
-                    }
-                }
-            } else {
-                console.log(`[Delete Notify] No registered users found to notify for deleted tournament ${tournamentToDelete._id}`);
-            }
-            
-            // Step 4: Delete the banner file if it exists
-            if (tournamentToDelete.banner) {
-                const bannerPath = path.join(__dirname, '..', tournamentToDelete.banner);
-                 await deleteFile(bannerPath).catch(err => console.error(`[Delete Notify] Failed to delete banner file ${bannerPath}:`, err));
-            }
-
-
-            // Step 5: Now delete the tournament document
-            await Tournament.findByIdAndDelete(tournamentToDelete._id);
-
-            console.log(`[Delete Notify] Successfully deleted tournament ${tournamentToDelete._id} after notifications.`);
-            res.json({ message: 'Tournament deleted successfully and registered users notified.' });
-
-        } catch (error) {
-            console.error(`[Delete Notify] Error deleting tournament ${req.params.id}:`, error);
-            res.status(500).json({ message: `Error deleting tournament: ${error.message}` });
+        if (!tournament) {
+            return res.status(404).json({ message: 'Tournament not found or not authorized.' });
         }
-    },
 
-    getTournamentRegistrations: async (req, res) => {
-        try {
-            const tournamentId = req.params.id;
-            const userId = req.user._id;
-            const userRole = req.user.role;
-            
-            console.log(`[DEBUG] Fetching registrations for tournament: ${tournamentId} by user ${userId} (role: ${userRole})`);
-            
-            // Basic validation for tournament existence
-            const tournamentExists = await Tournament.findById(tournamentId);
-            if (!tournamentExists) {
-                console.log(`[ERROR] Tournament ${tournamentId} not found`);
-                return res.status(404).json({ message: 'Tournament not found' });
-            }
-
-            console.log(`[DEBUG] Tournament found: ${tournamentExists._id}, owned by futsal: ${tournamentExists.futsalId}, user's futsal: ${req.user.futsal}`);
-
-            // Check permissions with detailed logging
-            let hasAccess = false;
-            
-            // Case 1: User is ANY futsal admin - temporarily allow all futsal admins access
-            if (userRole === 'futsalAdmin') {
-                hasAccess = true;
-                console.log(`[DEBUG] Access granted: User is a futsal admin`);
-                
-                // Just log ownership status but don't restrict access
-                if (tournamentExists.futsalId && req.user.futsal && 
-                    tournamentExists.futsalId.toString() === req.user.futsal.toString()) {
-                    console.log(`[DEBUG] Note: User is the owner of this tournament`);
-                } else {
-                    console.log(`[DEBUG] Note: User is NOT the owner of this tournament`);
-                }
-            } 
-            // Case 2: User is player and is registered for this tournament
-            else if (userRole === 'player') {
-                // Check if player is registered for this tournament
-                const playerRegistered = await TournamentRegistration.exists({
-                    tournament: tournamentId,
-                    user: userId
-                });
-                
-                if (playerRegistered) {
-                    hasAccess = true;
-                    console.log(`[DEBUG] Access granted: User is player registered for this tournament`);
-                } else {
-                    console.log(`[DEBUG] Access denied: User is player but NOT registered for this tournament`);
-                }
-            }
-            
-            if (!hasAccess) {
-                console.log(`[ERROR] Access denied: User ${userId} does not have permission to view registrations`);
-                return res.status(403).json({ message: 'Forbidden: You do not have permission to view these registrations' });
-            }
-
-            // Get registrations
-            console.log(`[DEBUG] Searching for registrations with tournament: ${tournamentId}`);
-            
-            const registrations = await TournamentRegistration.find({
-                tournament: tournamentId
-            }).populate('user', 'username email');
-
-            console.log(`[DEBUG] Found ${registrations.length} registrations for tournament ${tournamentId}`);
-            
-            // Log the registrations to help with debugging
-            if (registrations.length > 0) {
-                registrations.forEach((reg, index) => {
-                    console.log(`[DEBUG] Registration ${index+1}:`, {
-                        id: reg._id,
-                        teamName: reg.teamName,
-                        userId: reg.user?._id || reg.user,
-                        players: Array.isArray(reg.players) ? reg.players.length : 'invalid players array',
-                        createdAt: reg.createdAt
-                    });
+        // Step 2: Check for active registrations (Allow deletion for Cancelled status regardless)
+        if (tournament.status !== 'Cancelled (Low Teams)') {
+            const activeRegistrations = await TournamentRegistration.countDocuments({
+                tournament: req.params.id,
+                status: 'active' 
+            });
+    
+            if (activeRegistrations > 0) {
+                return res.status(400).json({
+                    message: `Cannot delete tournament with ${activeRegistrations} active registration(s). Cancel registrations first.`
                 });
             }
-            
-            // Always return an array (empty if no registrations)
+        } // Skip active registration check if status is Cancelled
+
+        // Optional: Add checks for tournament status (Allow deletion for Completed)
+        if (['Ongoing'].includes(tournament.status)) { // Only block deletion if Ongoing
+             return res.status(400).json({
+                 message: `Cannot delete a tournament that is ${tournament.status}.`
+             });
+        }
+
+        // Step 3: Delete the tournament itself
+        await Tournament.findByIdAndDelete(req.params.id);
+
+        // Step 4: Delete the associated banner image if it exists
+        if (tournament.banner && tournament.banner.startsWith('/uploads/')) {
+            const bannerPath = path.join(__dirname, '..', tournament.banner);
+            try {
+                await deleteFile(bannerPath);
+                console.log(`Deleted banner image: ${bannerPath}`);
+            } catch (unlinkErr) {
+                if (unlinkErr.code !== 'ENOENT') { // Ignore error if file doesn't exist
+                    console.error(`Error deleting banner image ${bannerPath}:`, unlinkErr);
+                }
+            }
+        }
+
+        // Optional Step 5: Clean up related data (registrations)
+        // NOTE: We decided to allow deletion even with registrations for Cancelled/Completed
+        // If you wanted to delete associated registrations upon tournament delete:
+        // const deleteResult = await TournamentRegistration.deleteMany({ tournament: req.params.id });
+        // console.log(`Deleted ${deleteResult.deletedCount} associated registrations.`);
+
+        console.log(`Tournament ${req.params.id} deleted successfully by admin ${req.user._id}`);
+
+        res.json({ message: 'Tournament deleted successfully' });
+
+    } catch (error) {
+        console.error(`Error deleting tournament ${req.params.id}:`, error);
+        res.status(500).json({ message: 'Error deleting tournament' });
+    }
+};
+tournamentController.deleteTournament = deleteTournament;
+
+const getTournamentRegistrations = async (req, res) => {
+    const tournamentId = req.params.id;
+    console.log(`[LOG] Entering getTournamentRegistrations for Tournament ID: ${tournamentId}`); // Log entry
+    try {
+        // Basic check if the tournament belongs to the admin's futsal
+        // Note: This check might be too strict if other roles need access later
+        console.log(`[LOG] Checking ownership: Tournament=${tournamentId}, Admin Futsal=${req.user.futsal}`);
+        const tournament = await Tournament.findOne({ _id: tournamentId, futsalId: req.user.futsal }, '_id name'); // Fetch name for logging
+        if (!tournament) {
+            console.log(`[LOG] Tournament ${tournamentId} not found or not associated with admin futsal ${req.user.futsal}.`);
+            return res.status(404).json({ message: 'Tournament not found or not associated with this futsal.' });
+        }
+        console.log(`[LOG] Ownership check passed for tournament: ${tournament.name}`);
+
+        // THE ACTUAL QUERY for registrations
+        const query = { 
+            tournament: tournamentId,
+            status: 'active' // <<< RESTORED status filter
+        }; 
+        console.log(`[LOG] Querying TournamentRegistration collection with:`, query);
+        
+        // Find registrations matching the query
+        const registrations = await TournamentRegistration.find(query)
+            .populate('user', 'name email profilePicture username') // <<< Added username
+            .populate('teamId', 'name') 
+            .sort({ createdAt: -1 }); 
+
+        console.log(`[LOG] Found ${registrations.length} registrations in DB matching query.`);
+        // Log details of found registrations (optional, can be verbose)
+        // registrations.forEach((reg, i) => console.log(`[LOG] Reg ${i}: ID=${reg._id}, Status=${reg.status}, Team=${reg.teamName}`)); 
+
             res.json(registrations);
         } catch (error) {
-            console.error('[ERROR] Error fetching tournament registrations:', error);
+        console.error(`[LOG][ERROR] Error fetching registrations for tournament ${tournamentId}:`, error);
             res.status(500).json({ message: `Error fetching registrations: ${error.message}` });
         }
-    },
+};
+tournamentController.getTournamentRegistrations = getTournamentRegistrations;
 
-    updateTournamentBracket: async (req, res) => {
-        try {
-            console.log('Updating tournament bracket with data:', {
-                tournamentId: req.params.id,
-                body: req.body,
-                user: req.user
-            });
+const updateTournamentBracket = async (req, res) => {
+    const tournamentId = req.params.id;
+    const adminFutsalId = req.user.futsal;
+    try {
+        console.log(`[UPDATE BRACKET] Request received for tournament: ${tournamentId} by admin: ${req.user._id}`);
+        // --- ADD LOGGING HERE ---
+        console.log('[UPDATE BRACKET] Received Body:', JSON.stringify(req.body, null, 2));
+        // Log the received payload
+        // --- END LOGGING ---
+
+        // Basic validation
+        if (!req.body.bracket) {
+            console.log('[UPDATE BRACKET] Validation failed: Missing bracket data.');
+            return res.status(400).json({ message: 'Bracket data is required in the request body.' });
+        }
 
             // Only update bracket and stats fields
             const bracketUpdateData = {
                 bracket: req.body.bracket,
-                stats: req.body.stats
+            stats: req.body.stats // Include stats if provided
             };
 
-            // Add generated flag if not present
+        // Add generated flag if not present and bracket data exists
             if (bracketUpdateData.bracket && !bracketUpdateData.bracket.generated) {
                 bracketUpdateData.bracket.generated = true;
             }
 
-            // Find and update the tournament
+        // --- ADD LOGGING HERE ---
+        console.log('[UPDATE BRACKET] Prepared Update Data:', JSON.stringify(bracketUpdateData, null, 2));
+        // Log the data that will be set in the database
+        // --- END LOGGING ---
+
+        // Find and update the tournament, ensuring it belongs to the admin's futsal
             const tournament = await Tournament.findOneAndUpdate(
-                { _id: req.params.id, futsalId: req.user.futsal },
-                bracketUpdateData,
-                { new: true, runValidators: true }
+            { _id: tournamentId, futsalId: adminFutsalId }, // Match ID and admin's futsal
+            { $set: bracketUpdateData }, // Use $set to update specific fields
+            { new: true, runValidators: true } // Return updated doc, run schema validators
             );
 
             if (!tournament) {
-                return res.status(404).json({ message: 'Tournament not found' });
-            }
-
-            console.log('Tournament bracket updated successfully for tournament:', tournament._id);
-            res.json(tournament);
-        } catch (error) {
-            console.error('Error updating tournament bracket:', error);
-            res.status(500).json({ message: `Error updating tournament bracket: ${error.message}` });
+            console.log(`[UPDATE BRACKET] Update bracket failed: Tournament ${tournamentId} not found or doesn't belong to futsal ${adminFutsalId}`);
+            return res.status(404).json({ message: 'Tournament not found or not authorized' });
         }
+
+        console.log('[UPDATE BRACKET] Tournament bracket updated successfully in DB for tournament:', tournament._id);
+
+        // --- START: Update Stats Based on Bracket --- 
+        let statsNeedUpdate = false;
+        const finalRound = tournament.bracket?.rounds?.[tournament.bracket.rounds.length - 1];
+        const finalMatch = finalRound?.matches?.find(m => !m.isThirdPlace); // Find the actual final match
+        const thirdPlaceMatch = finalRound?.matches?.find(m => m.isThirdPlace);
+
+        console.log(`[UPDATE STATS CHECK] Final Match Found: ${!!finalMatch}, 3rd Place Match Found: ${!!thirdPlaceMatch}`);
+
+        // Update 1st and 2nd Place
+        if (finalMatch?.completed && finalMatch?.winner) {
+            console.log(`[UPDATE STATS CHECK] Final match winner ID: ${finalMatch.winner.id}`);
+            if (tournament.stats?.firstPlace?.id !== finalMatch.winner.id) {
+                tournament.stats.firstPlace = finalMatch.winner; // Winner is 1st
+                 // Loser is 2nd - determine loser
+                const loser = finalMatch.team1?.id === finalMatch.winner.id ? finalMatch.team2 : finalMatch.team1;
+                if (loser && loser.id !== 'BYE' && tournament.stats?.secondPlace?.id !== loser.id) {
+                    tournament.stats.secondPlace = loser;
+                    console.log(`[UPDATE STATS] Set 1st: ${tournament.stats.firstPlace?.name}, 2nd: ${tournament.stats.secondPlace?.name}`);
+                    statsNeedUpdate = true;
+                } else if (loser?.id === 'BYE') {
+                     console.log(`[UPDATE STATS] Final match opponent was BYE. Setting 2nd place to null.`);
+                     if (tournament.stats?.secondPlace !== null) {
+                         tournament.stats.secondPlace = null;
+                         statsNeedUpdate = true;
+                     }
+                } else {
+                     console.log(`[UPDATE STATS] Could not determine 2nd place or it hasn't changed.`);
+                }
+            } else {
+                console.log(`[UPDATE STATS CHECK] 1st place already matches final winner.`);
+            }
+        }
+
+        // Update 3rd Place
+        if (thirdPlaceMatch?.completed && thirdPlaceMatch?.winner) {
+            console.log(`[UPDATE STATS CHECK] 3rd place match winner ID: ${thirdPlaceMatch.winner.id}`);
+            if (tournament.stats?.thirdPlace?.id !== thirdPlaceMatch.winner.id) {
+                tournament.stats.thirdPlace = thirdPlaceMatch.winner;
+                console.log(`[UPDATE STATS] Set 3rd: ${tournament.stats.thirdPlace?.name}`);
+                statsNeedUpdate = true;
+            }
+        } else if (thirdPlaceMatch && !thirdPlaceMatch.winner) {
+             // If 3rd place match exists but has no winner yet, ensure stat is null
+             if (tournament.stats?.thirdPlace !== null) {
+                 console.log(`[UPDATE STATS] Resetting 3rd place stat to null as match winner is not set.`);
+                 tournament.stats.thirdPlace = null;
+                 statsNeedUpdate = true;
+             }
+        }
+
+        // Save again ONLY if stats were updated
+        if (statsNeedUpdate) {
+            console.log('[UPDATE STATS] Saving tournament again due to stats updates...');
+            await tournament.save(); // Use save() to trigger any potential pre-save hooks if needed
+            console.log('[UPDATE STATS] Tournament stats saved successfully.');
+        }
+        // --- END: Update Stats Based on Bracket --- 
+
+        res.json(tournament); // Send the potentially updated tournament doc back
+        } catch (error) {
+        console.error('[UPDATE BRACKET] Error updating tournament bracket:', error);
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ message: 'Validation Failed', errors: error.errors });
+        }
+            res.status(500).json({ message: `Error updating tournament bracket: ${error.message}` });
     }
 };
+tournamentController.updateTournamentBracket = updateTournamentBracket;
+
+const debugGenerateBracket = async (req, res) => {
+    // IMPORTANT: This should ONLY run in non-production environments
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ message: 'This function is disabled in production.' });
+    }
+
+    try {
+        const tournamentId = req.params.id;
+        console.log(`[DEBUG BRACKET] Received request for tournament: ${tournamentId}`);
+        
+        if (!mongoose.Types.ObjectId.isValid(tournamentId)) {
+            return res.status(400).json({ message: 'Invalid Tournament ID format.' });
+        }
+
+        const tournament = await Tournament.findById(tournamentId);
+        if (!tournament) {
+            return res.status(404).json({ message: 'Tournament not found.' });
+        }
+        
+         if (tournament.bracket && tournament.bracket.generated) {
+            console.log(`[DEBUG BRACKET] Bracket already generated for ${tournamentId}. Re-generating anyway.`);
+            // Optionally allow re-generation or return a message
+            // return res.status(400).json({ message: 'Bracket already generated for this tournament.' });
+        }
+
+        const allRegistrations = await TournamentRegistration.find({
+            tournament: tournament._id,
+            status: 'active' // Ensure we only use active registrations
+        });
+
+        // Use a reasonable minimum for generation in debug, or just proceed
+        const minTeamsForDebug = Math.max(2, tournament.minTeams || 2); // At least 2 teams needed
+
+        if (allRegistrations.length < minTeamsForDebug) {
+             console.warn(`[DEBUG BRACKET] Not enough active registrations (${allRegistrations.length}) found for tournament ${tournamentId}. Minimum needed for debug generation: ${minTeamsForDebug}. Generating anyway if possible, but might be empty.`);
+             // Decide if you want to stop or proceed with potentially empty bracket
+             // If you want to stop:
+             // return res.status(400).json({ message: `Need at least ${minTeamsForDebug} active registrations to generate bracket (found ${allRegistrations.length}). Register more teams.` });
+        }
+
+        console.log(`[DEBUG BRACKET] Generating bracket for ${tournamentId} with ${allRegistrations.length} active registrations.`);
+        
+        const generatedBracket = generateSingleEliminationBracket(allRegistrations, tournament.maxTeams);
+
+        if (generatedBracket) {
+            tournament.bracket = generatedBracket;
+             // Ensure the generated flag is set
+            if (!tournament.bracket.generated) {
+                tournament.bracket.generated = true;
+            }
+            await tournament.save();
+            console.log(`[DEBUG BRACKET] Successfully generated and saved bracket for tournament ${tournament._id}`);
+            res.status(200).json({ message: 'Bracket generated successfully via debug.', bracket: tournament.bracket });
+        } else {
+            console.error(`[DEBUG BRACKET] Failed to generate bracket structure for tournament ${tournament._id}`);
+            res.status(500).json({ message: 'Failed to generate bracket structure.' });
+        }
+    } catch (error) {
+        console.error(`[DEBUG BRACKET] Error generating bracket: ${error.message}`);
+        res.status(500).json({ message: `Error generating bracket via debug: ${error.message}` });
+    }
+};
+tournamentController.debugGenerateBracket = debugGenerateBracket;
+
+// --- Export Controller Object ---
 
 module.exports = tournamentController;
