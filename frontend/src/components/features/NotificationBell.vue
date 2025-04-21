@@ -58,11 +58,10 @@
           
           <ul v-else class="divide-y divide-gray-700">
             <li 
-              v-for="notification in notifications" 
+              v-for="notification in paginatedNotifications" 
               :key="notification._id"
-              @click="handleNotificationClick(notification)"
               :class="[
-                'block px-4 py-3 hover:bg-gray-700/80 cursor-pointer transition-colors duration-150',
+                'block px-4 py-3 hover:bg-gray-700/80 transition-colors duration-150',
                 { 'bg-gray-700/40': !notification.read }
               ]"
             >
@@ -76,12 +75,48 @@
                   <p class="text-sm text-gray-400">{{ notification.message }}</p>
                   <p class="text-xs text-gray-500 mt-1">{{ formatRelativeTime(notification.createdAt) }}</p>
                 </div>
-                <div v-if="!notification.read" class="flex-shrink-0 self-center">
-                  <span class="w-2.5 h-2.5 bg-blue-500 rounded-full inline-block" title="Unread"></span>
+                <div class="flex-shrink-0 self-center">
+                  <button 
+                    v-if="!notification.read" 
+                    @click.stop="markAsRead(notification._id)" 
+                    class="ml-2 text-emerald-400 hover:text-emerald-300"
+                    title="Mark as read"
+                  >
+                    <CheckCircle class="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </li>
           </ul>
+          
+          <!-- Pagination Controls -->
+          <div v-if="notifications.length > itemsPerPage" class="flex justify-center items-center p-3 border-t border-gray-700">
+            <button 
+              @click="currentPage = Math.max(1, currentPage - 1)" 
+              :disabled="currentPage === 1" 
+              class="p-1 rounded-full hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Previous page"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            
+            <span class="mx-2 text-sm text-gray-400">
+              {{ currentPage }} / {{ totalPages }}
+            </span>
+            
+            <button 
+              @click="currentPage = Math.min(totalPages, currentPage + 1)" 
+              :disabled="currentPage === totalPages" 
+              class="p-1 rounded-full hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Next page"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
     </transition>
@@ -89,8 +124,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import axios from 'axios';
 import { useToast } from 'vue-toastification';
 import { 
@@ -116,7 +150,6 @@ const vClickOutside = {
   },
 };
 
-const router = useRouter();
 const toast = useToast();
 
 const isOpen = ref(false);
@@ -126,15 +159,30 @@ const loading = ref(false);
 const error = ref(null);
 let intervalId = null;
 
+// Pagination
+const currentPage = ref(1);
+const itemsPerPage = 5;
+
+const totalPages = computed(() => {
+  return Math.max(1, Math.ceil(notifications.value.length / itemsPerPage));
+});
+
+const paginatedNotifications = computed(() => {
+  const startIdx = (currentPage.value - 1) * itemsPerPage;
+  const endIdx = startIdx + itemsPerPage;
+  return notifications.value.slice(startIdx, endIdx);
+});
+
 const fetchNotifications = async () => {
   loading.value = true;
   error.value = null;
   try {
     const response = await axios.get('/api/notifications', {
-      params: { limit: 20 } // Fetch latest 20
+      params: { limit: 50 } // Increased limit since we're paginating client-side
     });
     notifications.value = response.data.notifications || [];
     unreadCount.value = response.data.unreadCount || 0;
+    currentPage.value = 1; // Reset to first page when refreshing
   } catch (err) {
     console.error("Failed to fetch notifications:", err);
     error.value = "Couldn't load notifications.";
@@ -186,27 +234,6 @@ const markAllAsRead = async () => {
     // Revert optimistic update on error (more complex, might need refetch)
     await fetchNotifications(); // Refetch to get accurate state
   }
-};
-
-const handleNotificationClick = async (notification) => {
-  // Mark as read first (if unread)
-  if (!notification.read) {
-    await markAsRead(notification._id);
-  }
-  
-  // Navigate if a link exists
-  if (notification.link) {
-    try {
-       // Attempt to navigate using Vue Router
-       await router.push(notification.link); 
-    } catch (navigationError) {
-       console.warn(`Vue Router couldn't navigate to ${notification.link}. Attempting window.location.`, navigationError);
-       // Fallback for external links or non-router paths
-       window.location.href = notification.link; 
-    }
-  }
-  
-  closeDropdown(); // Close dropdown after interaction
 };
 
 const toggleDropdown = () => {

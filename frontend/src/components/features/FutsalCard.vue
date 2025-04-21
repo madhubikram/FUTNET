@@ -43,7 +43,7 @@
       class="relative px-1.5 py-0.5 bg-black/70 rounded-full text-xs font-medium shadow-sm backdrop-blur-sm flex items-center gap-0.5 border border-sky-300/20 group-hover:bg-black/80 transition-all duration-200"
     >
       <MapPinIcon class="w-3 h-3 text-emerald-400" />
-      <span class="text-gray-100">{{ futsal.distance }} km</span>
+      <span class="text-gray-100">{{ formattedDistance }}</span>
     </span>
   </div>
 </div>
@@ -386,6 +386,20 @@ const isTimeInRange = (currentTime, start, end) => {
     return false;
   }
 };
+
+// Format distance display
+const formattedDistance = computed(() => {
+  if (props.futsal.distance === '?' || props.futsal.distance === null || props.futsal.distance === undefined) {
+    return 'N/A';
+  }
+  
+  const distance = Number(props.futsal.distance);
+  if (isNaN(distance)) {
+    return 'N/A';
+  }
+  
+  return `${distance.toFixed(1)} km`;
+});
 
 // Navigate to futsal details page
 const navigateToDetails = () => {

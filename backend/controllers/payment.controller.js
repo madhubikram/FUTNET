@@ -321,10 +321,47 @@ const updateRecordStatusBasedOnVerification = async (pidx, received_purchase_ord
                            if (isOptionalPrepayment) {
                                log('INFO', context, `This is an optional prepayment for court ${court.name} (doesn't require prepayment). Awarding bonus points.`);
                            }
+                           
+                           // Calculate points to award based on duration
+                           const pointsToAward = Math.round(durationHours * PREPAID_POINTS_PER_HOUR);
+                           log('INFO', context, `Awarding ${pointsToAward} loyalty points for ${durationHours} hour booking.`);
+                           
+                           // Find or create loyalty record for the user
+                           const loyaltyUpdate = await Loyalty.findOneAndUpdate(
+                               { user: item.user },
+                               {
+                                   $inc: { points: pointsToAward },
+                                   $setOnInsert: { user: item.user }
+                               },
+                               { upsert: true, new: true }
+                           );
+                           
+                           // Create transaction record
+                           await LoyaltyTransaction.create({
+                               user: item.user,
+                               type: 'credit',
+                               points: pointsToAward,
+                               reason: `Prepaid booking payment - ${isOptionalPrepayment ? 'bonus points' : 'standard points'} - Booking ID: ${item._id}`,
+                               relatedBooking: item._id
+                           });
+                           
+                           log('INFO', context, `Successfully awarded ${pointsToAward} points to user ${item.user}. New balance: ${loyaltyUpdate.points}`);
+                           
+                           // Include points info in notification
+                           notificationText += ` You've earned ${pointsToAward} loyalty points for this booking!`;
+                           
+                           // Send a separate notification specifically for loyalty points
+                           await createNotification(
+                               item.user,
+                               "Loyalty Points Earned!",
+                               `You've earned ${pointsToAward} loyalty points for prepaying your booking at ${court ? court.name : 'the court'}.`,
+                               "loyalty_points_received",
+                               "/profile"
+                           );
                        }
                    } catch (detailError) {
-                       log('ERROR', context, `Failed to fetch court details for user notification for booking ${item._id}`, detailError);
-                       // Keep default message if details fail
+                       log('ERROR', context, `Failed to award loyalty points for booking ${item._id}`, detailError);
+                       // Continue with payment verification success, even if points awarding fails
                    }
                 }
             }

@@ -7,6 +7,9 @@ import { createPinia } from 'pinia'
 import Toast from 'vue-toastification'
 import 'vue-toastification/dist/index.css'
 
+// Import ApexCharts
+import VueApexCharts from "vue3-apexcharts"; // Use correct path based on installation
+
 // Import Axios
 import axios from 'axios'
 
@@ -33,6 +36,7 @@ const app = createApp(App)
 
 app.use(createPinia())
 app.use(router)
+app.use(VueApexCharts); // Register ApexCharts globally
 app.use(Toast, {
   transition: "Vue-Toastification__bounce",
   maxToasts: 5,

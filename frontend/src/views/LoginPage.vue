@@ -35,24 +35,6 @@
             variant="glass"
           />
 
-          <div class="flex items-center justify-between">
-            <label class="flex items-center space-x-2 cursor-pointer">
-              <input
-                type="checkbox"
-                v-model="form.remember"
-                class="w-4 h-4 rounded bg-white/10 border-green-400/30
-                       text-green-500 focus:ring-green-400"
-              >
-              <span class="text-sm text-green-100">Remember me</span>
-            </label>
-            <router-link
-              to="/forgot-password"
-              class="text-sm text-green-300 hover:text-green-200"
-            >
-              Forgot password?
-            </router-link>
-          </div>
-
           <BaseButton
             type="submit"
             :loading="isLoading"
@@ -94,7 +76,6 @@ import { RouterLink } from 'vue-router';
 const { form, errors, validate } = useForm({
   username: '',
   password: '',
-  remember: false
 }, {
   username: { required: true },
   password: { required: true }

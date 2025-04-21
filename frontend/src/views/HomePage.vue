@@ -45,15 +45,27 @@
             >
               <button
                 @click="sortBy('name')"
-                class="w-full px-4 py-2 text-left text-white hover:bg-gray-700 rounded-t-lg"
+                class="w-full px-4 py-2 text-left text-white hover:bg-gray-700"
               >
                 Sort by Name
               </button>
               <button
                 @click="sortBy('price')"
-                class="w-full px-4 py-2 text-left text-white hover:bg-gray-700 rounded-b-lg"
+                class="w-full px-4 py-2 text-left text-white hover:bg-gray-700"
               >
                 Sort by Price
+              </button>
+              <button
+                @click="sortBy('nearest')"
+                class="w-full px-4 py-2 text-left text-white hover:bg-gray-700"
+              >
+                Sort by Nearest
+              </button>
+              <button
+                @click="sortBy('farthest')"
+                class="w-full px-4 py-2 text-left text-white hover:bg-gray-700"
+              >
+                Sort by Farthest
               </button>
             </div>
           </div>
@@ -267,9 +279,22 @@ const fetchUserDetails = async () => {
 };
 
 // Helper function to calculate distance using Haversine formula
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) {
+const calculateDistance = (point1, point2) => {
+  // Check if both points exist and have lat/lng properties
+  if (!point1 || !point2 || 
+      typeof point1.lat === 'undefined' || typeof point1.lng === 'undefined' ||
+      typeof point2.lat === 'undefined' || typeof point2.lng === 'undefined') {
     return null; // Cannot calculate if any coordinate is missing
+  }
+
+  const lat1 = Number(point1.lat);
+  const lon1 = Number(point1.lng);
+  const lat2 = Number(point2.lat);
+  const lon2 = Number(point2.lng);
+
+  // Verify all coordinates are valid numbers
+  if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
+    return null;
   }
 
   const R = 6371; // Radius of the Earth in kilometers
@@ -281,7 +306,7 @@ const calculateDistance = (lat1, lon1, lat2, lon2) => {
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const distance = R * c; // Distance in km
-  return distance.toFixed(1); // Return distance rounded to one decimal place
+  return distance;
 };
 
 // Function to get user's current location
@@ -353,7 +378,12 @@ const loading = ref(true)
 
 // Sorting function
 const sortBy = (field) => {
-  if (sortOption.value.field === field) {
+  // Special case for nearest/farthest which are essentially the same field, but different directions
+  if (field === 'nearest') {
+    sortOption.value = { field: 'distance', direction: 'asc' }
+  } else if (field === 'farthest') {
+    sortOption.value = { field: 'distance', direction: 'desc' }
+  } else if (sortOption.value.field === field) {
     // Reverse direction if sorting by the same field again
     sortOption.value.direction = sortOption.value.direction === 'asc' ? 'desc' : 'asc'
   } else {
@@ -460,19 +490,32 @@ const filteredFutsals = computed(() => {
 
   // Apply sorting
   result.sort((a, b) => {
-  const modifier = sortOption.value.direction === 'asc' ? 1 : -1;
-  if (sortOption.value.field === 'name') {
-    // Access the correct property name and handle undefined values
-    const nameA = a.futsalName || a.courtName || '';
-    const nameB = b.futsalName || b.courtName || '';
-    return modifier * nameA.localeCompare(nameB);
-  } else {
-    // Ensure these values exist with fallbacks to 0
-    const priceA = a.regularPrice || 0;
-    const priceB = b.regularPrice || 0;
-    return modifier * (priceA - priceB);
-  }
-});
+    const modifier = sortOption.value.direction === 'asc' ? 1 : -1;
+    
+    if (sortOption.value.field === 'name') {
+      // Access the correct property name and handle undefined values
+      const nameA = a.futsalName || a.courtName || '';
+      const nameB = b.futsalName || b.courtName || '';
+      return modifier * nameA.localeCompare(nameB);
+    } else if (sortOption.value.field === 'distance') {
+      // Sort by distance if location is available, otherwise fall back to name
+      if (userLocation.value) {
+        const distanceA = calculateDistance(userLocation.value, a.coordinates) || Number.MAX_VALUE;
+        const distanceB = calculateDistance(userLocation.value, b.coordinates) || Number.MAX_VALUE;
+        return modifier * (distanceA - distanceB);
+      } else {
+        // Fall back to name sort if no location
+        const nameA = a.futsalName || a.courtName || '';
+        const nameB = b.futsalName || b.courtName || '';
+        return modifier * nameA.localeCompare(nameB);
+      }
+    } else {
+      // Ensure these values exist with fallbacks to 0
+      const priceA = a.regularPrice || 0;
+      const priceB = b.regularPrice || 0;
+      return modifier * (priceA - priceB);
+    }
+  });
 
   return result;
 })
@@ -548,23 +591,32 @@ const fetchCourts = async () => {
       const futsalLng = court.futsalId?.coordinates?.lng;
 
       if (userLocation.value && futsalLat != null && futsalLng != null) {
-        const calculatedDist = calculateDistance(
-          userLocation.value.lat,
-          userLocation.value.lng,
-          Number(futsalLat), // Ensure coordinates are numbers
-          Number(futsalLng)
-        );
-        if (calculatedDist !== null) {
-          distance = calculatedDist;
-        } else {
-           console.warn(`Could not calculate distance for ${court.futsalId?.name}, invalid coordinates?`, {futsalLat, futsalLng});
+        try {
+          const futsalCoords = { 
+            lat: Number(futsalLat), 
+            lng: Number(futsalLng) 
+          };
+          
+          const calculatedDist = calculateDistance(userLocation.value, futsalCoords);
+          
+          if (calculatedDist !== null) {
+            distance = calculatedDist; // Store as number, will be formatted in the card
+          } else {
+            console.warn(`Could not calculate distance for ${court.futsalId?.name}:`, {
+              userLocation: userLocation.value,
+              futsalCoordinates: futsalCoords
+            });
+          }
+        } catch (err) {
+          console.error(`Error calculating distance for ${court.futsalId?.name}:`, err);
         }
       } else if (!userLocation.value) {
-          console.log(`Cannot calculate distance for ${court.futsalId?.name}: User location not available.`);
-          // Keep distance as '?'
+        console.log(`Cannot calculate distance for ${court.futsalId?.name}: User location not available.`);
       } else {
-         console.log(`Cannot calculate distance for ${court.futsalId?.name}: Futsal coordinates missing or invalid.`, {futsalLat, futsalLng});
-         // Keep distance as '?'
+        console.log(`Cannot calculate distance for ${court.futsalId?.name}: Futsal coordinates missing or invalid.`, {
+          futsalLat, 
+          futsalLng
+        });
       }
 
       // Use court operating hours to generate potential slots
@@ -601,6 +653,10 @@ const fetchCourts = async () => {
         location: formattedLocation,
         rating: court.averageRating || 0,
         distance: distance, // Use calculated distance
+        coordinates: { 
+          lat: futsalLat ? Number(futsalLat) : null, 
+          lng: futsalLng ? Number(futsalLng) : null 
+        }, // Add coordinates for distance calculation in filtering
         courtSide: court.courtSide,
         regularPrice: court.priceHourly,
         currentRate: currentRate,

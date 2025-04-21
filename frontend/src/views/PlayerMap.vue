@@ -72,12 +72,12 @@
                     :key="futsal.id"
                     :lat-lng="[futsal.coordinates.lat, futsal.coordinates.lng]"
                     @click="handleFutsalClick(futsal)"
-                    :icon="greenIcon"
-                    >
-                    <LIcon :icon-url="'/marker-icon.png'" :icon-size="[25, 41]" :icon-anchor="[12, 41]" class="custom-marker">
-                        <div class="marker-tooltip">{{ futsal.futsalName }}</div>
-                    </LIcon>
-                    <LPopup :options="{ offset: [0, -35] }">
+                    :icon="futsalIcon"
+                  >
+                    <LTooltip :options="{ permanent: true, direction: 'top', offset: [0, -45], className: 'custom-tooltip' }">
+                      {{ futsal.futsalName }}
+                    </LTooltip>
+                    <LPopup :options="{ offset: [0, -25] }">
                         <div class="popup-content">
                             <h3 class="font-medium">{{ futsal.futsalName }}</h3>
                             <p class="text-sm mt-1">{{ futsal.location }}</p>
@@ -105,9 +105,9 @@ import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import PageLayout from '@/components/layout/PageLayout.vue';
 import { Icon } from 'leaflet';
-import { LMap, LTileLayer, LMarker, LPopup, LIcon } from "@vue-leaflet/vue-leaflet";
+import { LMap, LTileLayer, LMarker, LPopup, LTooltip } from "@vue-leaflet/vue-leaflet";
 import "leaflet/dist/leaflet.css";
-import { ArrowLeftIcon, MapPinIcon } from 'lucide-vue-next';
+import { ArrowLeftIcon } from 'lucide-vue-next';
 
 
 const router = useRouter();
@@ -116,6 +116,13 @@ const futsals = ref([]);
 const loading = ref(true);
 const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
+// Futsal marker icon
+const futsalIcon = new Icon({
+  iconUrl: `data:image/svg+xml;base64,${btoa('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40" fill="none"><path d="M16 0C7.164 0 0 7.164 0 16C0 25.886 13.486 38.704 14.056 39.246C14.694 39.734 15.347 40 16 40C16.653 40 17.306 39.734 17.944 39.246C18.514 38.704 32 25.886 32 16C32 7.164 24.836 0 16 0ZM16 24C11.582 24 8 20.418 8 16C8 11.582 11.582 8 16 8C20.418 8 24 11.582 24 16C24 20.418 20.418 24 16 24Z" fill="#10B981"/><path d="M16 10C12.686 10 10 12.686 10 16C10 19.314 12.686 22 16 22C19.314 22 22 19.314 22 16C22 12.686 19.314 10 16 10ZM16 20C13.794 20 12 18.206 12 16C12 13.794 13.794 12 16 12C18.206 12 20 13.794 20 16C20 18.206 18.206 20 16 20Z" fill="white"/></svg>')}`,
+  iconSize: [32, 40],
+  iconAnchor: [16, 40], // Anchor at the bottom center of the pin
+  popupAnchor: [0, -25] // Popup appears above the pin
+});
 
 // User location handling
 const userLocation = ref(null);
@@ -315,14 +322,6 @@ const fetchFutsals = async () => {
   }
 };
 
-const greenIcon = new Icon({
-  iconUrl: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCAzMCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cGF0aCBkPSJNMTUgMkM4LjEgMiAyIDguMSAyIDE1QzIgMjYuMiAxNSAzOCAxNSAzOFMyOCAyNi4yIDI4IDE1QzI4IDguMSAyMS45IDIgMTUgMloiIGZpbGw9IiMxMGI5ODEiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPjxjaXJjbGUgY3g9IjE1IiBjeT0iMTUiIHI9IjciIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9IjAuOCIvPjwvc3ZnPg==',
-  iconSize: [30, 40],
-  iconAnchor: [15, 40], // Point of the icon which corresponds to marker's location
-  popupAnchor: [0, -40], // Point from which the popup should open relative to the iconAnchor
-  shadowUrl: null
-});
-
 const generateTimeSlots = (opening, closing) => {
   if (!opening || !closing) {
     console.warn('Missing opening or closing time for slot generation');
@@ -500,14 +499,8 @@ onMounted(() => {
   background: #059669;
 }
 
-.custom-marker {
-  position: relative;
-}
-
-.custom-marker img {
-  filter: hue-rotate(140deg) saturate(2); /* Make default blue markers green */
-}
-
+/* Remove marker-tooltip styles */
+/*
 .marker-tooltip {
   position: absolute;
   bottom: 40px;
@@ -525,13 +518,59 @@ onMounted(() => {
   z-index: 1000 !important;
 }
 
-/* Add a small arrow at the bottom of the tooltip */
 .marker-tooltip:after {
   content: '';
   position: absolute;
   top: 100%;
   left: 50%;
   margin-left: -5px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid rgba(16, 185, 129, 0.9);
+}
+*/
+
+/* Additional styling for the popup */
+.leaflet-popup-content-wrapper {
+  border-radius: 8px !important;
+  border-top: 3px solid #10b981 !important;
+}
+
+.popup-content button {
+  text-transform: uppercase !important;
+  font-weight: bold !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* Style the map zoom controls to match theme better */
+.leaflet-control-zoom a {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Restore Custom Tooltip Styling */
+.custom-tooltip {
+  background-color: rgba(16, 185, 129, 0.9) !important;
+  border: none !important;
+  border-radius: 4px !important;
+  color: white !important;
+  font-weight: bold !important;
+  padding: 3px 8px !important;
+  font-size: 11px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  z-index: 1001 !important; /* Ensure it's above the marker */
+}
+
+.custom-tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: -5px; /* Position arrow correctly */
+  left: 50%;
+  transform: translateX(-50%);
   width: 0;
   height: 0;
   border-left: 5px solid transparent;

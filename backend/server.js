@@ -41,6 +41,7 @@ const bookingRoutes = require('./routes/booking.routes');
 const notificationRoutes = require('./routes/notification.routes.js');
 const { updateTournamentStatuses } = require('./utils/tournamentStatus');
 const paymentRoutes = require('./routes/payment.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
 
 // Import services and models needed for cron jobs
 const { createNotification } = require('./utils/notification.service');
@@ -118,6 +119,7 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api', protectedRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 
 // Test Routes (development only)

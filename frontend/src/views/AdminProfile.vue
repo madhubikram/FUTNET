@@ -146,6 +146,17 @@
            <button type="button" @click="discardChanges" class="action-button secondary px-8"> Discard All </button>
           <button type="submit" :disabled="isSaving" class="action-button primary px-8"> <span v-if="isSaving" class="flex items-center gap-2"> <div class="spinner-xs"></div> Saving... </span> <span v-else class="flex items-center gap-2"> <Save class="w-5 h-5"/> Save All Changes </span> </button>
         </div>
+        
+        <!-- Logout Button - Visible in both desktop and mobile views -->
+        <div class="mt-6 border-t border-gray-700 pt-6">
+          <button 
+            @click="handleLogout"
+            class="w-full md:w-auto px-4 py-3 bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2"
+          >
+            <LogOut class="w-5 h-5" />
+            Log Out
+          </button>
+        </div>
       </form>
     </div>
   </PageLayout>
@@ -154,10 +165,11 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
 import { useToast } from 'vue-toastification';
+import { useRouter } from 'vue-router';
 import PageLayout from '@/components/layout/PageLayout.vue';
 import AdminProfileMap from '@/components/AdminProfileMap.vue';
 import NotificationBell from '@/components/features/NotificationBell.vue';
-import { Loader2, Save, Lock, User, Mail, Phone, Building2, Info, MapPin, KeyRound /* Removed ImagePlus, Trash2 */ } from 'lucide-vue-next';
+import { Loader2, Save, Lock, User, Mail, Phone, Building2, Info, MapPin, KeyRound, LogOut /* LogOut added */ } from 'lucide-vue-next';
 import axios from 'axios';
 import _ from 'lodash';
 
@@ -167,6 +179,7 @@ const isSaving = ref(false);
 const isChangingPassword = ref(false);
 const toast = useToast();
 const futsalId = ref(null);
+const router = useRouter(); // Added router for logout navigation
 
 // --- Reverted default operating hours to simple object ---
 const defaultOperatingHours = () => ({
@@ -409,6 +422,19 @@ const reverseGeocode = async (lat, lng) => {
   } catch (error) {
     console.error("Nominatim API error:", error.response?.data || error.message);
     throw new Error("Failed to fetch address from Nominatim");
+  }
+};
+
+// --- Logout Handler ---
+const handleLogout = () => {
+  try {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    toast.success('Logged out successfully');
+    router.push('/login');
+  } catch (error) {
+    console.error('Logout error:', error);
+    toast.error('Failed to log out');
   }
 };
 

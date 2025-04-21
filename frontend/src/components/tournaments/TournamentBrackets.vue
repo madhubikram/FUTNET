@@ -325,7 +325,7 @@
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div class="bg-gray-800/70 rounded-lg p-2 border border-gray-700/50">
               <div class="text-xs text-gray-500">Teams</div>
-              <div class="text-lg font-semibold mt-1">{{ teams.length }}</div>
+              <div class="text-lg font-semibold mt-1">{{ teamGoalsDisplayData.length }}</div>
             </div>
             <div class="bg-gray-800/70 rounded-lg p-2 border border-gray-700/50">
               <div class="text-xs text-gray-500">Rounds</div>
@@ -384,7 +384,7 @@
             Team Goals
           </h3>
             <div class="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
-            <div v-for="(team, index) in teamGoals" :key="team.id" class="bg-gray-800/70 rounded-lg p-2 border border-gray-700/30 flex items-center justify-between">
+            <div v-for="(team, index) in teamGoalsDisplayData" :key="team.id" class="bg-gray-800/70 rounded-lg p-2 border border-gray-700/30 flex items-center justify-between">
               <div class="flex items-center">
                   <div class="w-5 h-5 flex items-center justify-center rounded-full bg-gray-700/70 text-xs font-medium text-gray-300 mr-2">
                   {{ index + 1 }}
@@ -554,7 +554,29 @@
 
                   <!-- Match top scorer -->
                   <div v-if="!match.hasBye && match.team1 && match.team1.id !== 'BYE' && match.team2 && match.team2.id !== 'BYE'" class="pt-2 border-t border-gray-700/30 grid grid-cols-12 gap-1 items-center">
-                    <!-- ... existing top scorer ... -->
+                    <div class="col-span-3 text-xs text-emerald-500/80 flex items-center">
+                      <Star class="h-3 w-3 mr-1 flex-shrink-0" />
+                      <span class="truncate">Top Scorer:</span>
+                    </div>
+                    <div class="col-span-6">
+                      <input
+                        type="text"
+                        v-model="match.topScorer.name"
+                        @input="updateMatch(roundIndex, matchIndex, 'name', $event.target.value)"
+                        class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                        placeholder="Player name"
+                      />
+                    </div>
+                    <div class="col-span-3 flex items-center gap-1">
+                      <input
+                        type="number"
+                        min="0"
+                        v-model.number="match.topScorer.goals"
+                        @input="updateMatch(roundIndex, matchIndex, 'goals', $event.target.value)"
+                        class="w-full text-center bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
+                      />
+                      <span class="text-xs text-gray-400">g</span>
+                    </div>
                   </div>
 
                   <!-- Date and Time -->
@@ -566,7 +588,7 @@
                       <input
                         type="date"
                         v-model="match.date"
-                        @input="updateDateTime(roundIndex, matchIndex, 'date', $event.target.value)"
+                        @input="updateMatch(roundIndex, matchIndex, 'date', $event.target.value)"
                         class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
                       />
                     </div>
@@ -577,7 +599,7 @@
                       <input
                         type="time"
                         v-model="match.time"
-                        @input="updateDateTime(roundIndex, matchIndex, 'time', $event.target.value)"
+                        @input="updateMatch(roundIndex, matchIndex, 'time', $event.target.value)"
                         class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
                       />
                     </div>
@@ -656,7 +678,7 @@
                           type="number"
                           min="0"
                           v-model.number="getThirdPlaceMatch().score1"
-                          @input="updateThirdPlaceMatch('score1')"
+                          @input="updateMatch(0, 0, 'score1', true)"
                           :class="[
                             'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
                             getThirdPlaceMatch().winner === getThirdPlaceMatch().team1 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
@@ -673,7 +695,7 @@
                             type="number"
                             min="0"
                             v-model.number="getThirdPlaceMatch().pk1"
-                            @input="updateThirdPlaceMatch('pk1')"
+                            @input="updateMatch(0, 0, 'pk1', true)"
                             :class="[
                               'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
                               getThirdPlaceMatch().winner === getThirdPlaceMatch().team1 && getThirdPlaceMatch().pk1 > getThirdPlaceMatch().pk2 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
@@ -706,7 +728,7 @@
                           type="number"
                           min="0"
                           v-model.number="getThirdPlaceMatch().score2"
-                          @input="updateThirdPlaceMatch('score2')"
+                          @input="updateMatch(0, 0, 'score2', true)"
                           :class="[
                             'w-10 text-center rounded p-1 text-sm border transition-all focus:outline-none focus:ring-2',
                             getThirdPlaceMatch().winner === getThirdPlaceMatch().team2 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
@@ -723,7 +745,7 @@
                             type="number"
                             min="0"
                             v-model.number="getThirdPlaceMatch().pk2"
-                            @input="updateThirdPlaceMatch('pk2')"
+                            @input="updateMatch(0, 0, 'pk2', true)"
                             :class="[
                               'w-8 text-center rounded p-1 text-xs border transition-all focus:outline-none focus:ring-2',
                               getThirdPlaceMatch().winner === getThirdPlaceMatch().team2 && getThirdPlaceMatch().pk2 > getThirdPlaceMatch().pk1 ? 'bg-amber-950/30 border-amber-700/30 focus:ring-amber-500/50' : 'bg-gray-800 border-gray-700',
@@ -745,7 +767,7 @@
                       <input
                         type="text"
                         v-model="getThirdPlaceMatch().topScorer.name"
-                        @input="updateThirdPlaceTopScorer('name', $event.target.value)"
+                        @input="updateMatch(0, 0, 'name', true)"
                         class="w-full bg-gray-800/70 border border-amber-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
                         placeholder="Player name"
                       />
@@ -755,7 +777,7 @@
                         type="number"
                         min="0"
                         v-model.number="getThirdPlaceMatch().topScorer.goals"
-                        @input="updateThirdPlaceTopScorer('goals', $event.target.value)"
+                        @input="updateMatch(0, 0, 'goals', true)"
                         class="w-full text-center bg-gray-800/70 border border-amber-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-amber-500/50 focus:border-amber-500 transition-all"
                       />
                       <span class="text-xs text-gray-400">g</span>
@@ -771,7 +793,7 @@
                       <input
                         type="date"
                         v-model="getThirdPlaceMatch().date"
-                        @input="updateThirdPlaceDateTime('date', $event.target.value)"
+                        @input="updateMatch(0, 0, 'date', true)"
                         class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
                       />
                     </div>
@@ -782,7 +804,7 @@
                       <input
                         type="time"
                         v-model="getThirdPlaceMatch().time"
-                        @input="updateThirdPlaceDateTime('time', $event.target.value)"
+                        @input="updateMatch(0, 0, 'time', true)"
                         class="w-full bg-gray-800/70 border border-gray-700/30 rounded p-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all appearance-none"
                       />
                     </div>
@@ -871,7 +893,7 @@
 </template>
 
 <script>
-import { ref, computed, reactive, onMounted, watch } from 'vue';
+import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue';
 import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send, CheckCircle, AlertTriangle, X } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -899,6 +921,7 @@ export default {
     const teams = ref([]);
     const teamName = ref('');
     const rounds = ref([]);
+    const teamGoalsDisplayData = ref([]); // <-- New ref for team goals
     const bracketGenerated = ref(false);
     const zoomLevel = ref(100);
     const activeTab = ref('bracket');
@@ -1363,25 +1386,41 @@ export default {
 
 
     // --- Core Logic: Match Updates ---
-    const updateMatch = (roundIndex, matchIndex, field) => {
-      // Find the correct round object first
-      const round = rounds.value[roundIndex];
-      if (!round) return;
-      // Find the match within that round's matches array
-      // Need to find the actual index in the original array if filtering is used in template
-      const matchId = round.matches.filter(m => !m.isThirdPlace || round.matches.length === 1)[matchIndex]?.id;
-      const actualMatchIndex = round.matches.findIndex(m => m.id === matchId);
-      if (actualMatchIndex === -1) return; // Match not found
-      const match = round.matches[actualMatchIndex];
+    const updateMatch = (roundIndex, matchIndex, field, isFromThirdPlace = false) => {
+      let match;
+      let actualRoundIndex = roundIndex;
+      let actualMatchIndex = matchIndex;
+
+      if (isFromThirdPlace) {
+        console.log(`updateMatch: Called specifically for 3rd place match, field=${field}`);
+        match = getThirdPlaceMatch();
+        if (!match) {
+            console.error("updateMatch: Could not find 3rd place match object.");
+            return;
+        }
+        // Find the actual indices for logging and potential use later
+        const roundInfo = getThirdPlaceMatchRound();
+        actualRoundIndex = roundInfo.roundIndex;
+        const foundRound = rounds.value[actualRoundIndex];
+        actualMatchIndex = foundRound ? foundRound.matches.findIndex(m => m.id === match.id) : -1;
+      } else {
+        // Original logic for regular matches
+        const round = rounds.value[roundIndex];
+        if (!round) return;
+        // Find the match within that round's matches array using the filtered index
+        const matchId = round.matches.filter(m => !m.isThirdPlace)[matchIndex]?.id; 
+        actualMatchIndex = round.matches.findIndex(m => m.id === matchId);
+        if (actualMatchIndex === -1) { // Match not found
+            console.error(`updateMatch: Could not find regular match with filtered index ${matchIndex} in round ${roundIndex}.`);
+            return;
+        }
+        match = round.matches[actualMatchIndex];
+      }
 
       console.log(`updateMatch: Processing ${match.id}, field=${field}, isThirdPlace=${match.isThirdPlace}`);
 
-      // ** FIX: The bug was here - we were using event.target.value which doesn't exist in this context
-      // ** Since we're using v-model.number, the value is already updated in the object
       // Ensure scores are numbers or null
       if (field === 'score1' || field === 'score2' || field === 'pk1' || field === 'pk2') {
-         // No need to get value from event since v-model.number already updates the property
-         // Just ensure it's a valid number or null
          const value = match[field];
          match[field] = value === '' || value === null ? null : Math.max(0, parseInt(value || 0, 10));
       }
@@ -1418,24 +1457,23 @@ export default {
 
       // --- Update Match State ---
       const winnerChanged = match.winner?.id !== newWinner?.id;
-      // Store original state for logging
       const originalWinner = match.winner;
       const originalComplete = match.completed;
       
-      // Update match properties
       match.winner = newWinner;
       match.completed = isComplete;
       
       console.log(`updateMatch: Updated ${match.id} - Winner: ${newWinner?.name}, Completed: ${isComplete}, Scores: ${match.score1}-${match.score2}, IsThirdPlace: ${match.isThirdPlace}`);
 
       // --- Handle 3rd Place Match Specifically ---
+      // This logic remains, but now we are sure `match` is the correct object
       if (match.isThirdPlace && isComplete) {
-          console.log("Updating 3rd place match winner to:", newWinner?.name);
-          
-          // Also directly update tournament stats for 3rd place
+          console.log("Updating 3rd place match winner STAT directly to:", newWinner?.name);
           if (newWinner) {
               tournamentStats.thirdPlace = newWinner;
-              console.log("Updated tournament stats thirdPlace to:", newWinner.name);
+          } else {
+              // If match completed but somehow no winner (e.g., PK draw not handled yet)
+              tournamentStats.thirdPlace = null; 
           }
       }
 
@@ -1444,55 +1482,10 @@ export default {
           console.log(`updateMatch: Winner changed or match completed for ${match.id}. Triggering propagation.`);
           console.log(`updateMatch: Previous state - Winner: ${originalWinner?.name}, Completed: ${originalComplete}`);
           console.log(`updateMatch: New state - Winner: ${match.winner?.name}, Completed: ${match.completed}`);
-          propagateWinners(rounds.value); // Re-run propagation on the whole structure
-          updateTournamentPositions(); // Make sure we update tournament positions after match changes
+          propagateWinners(rounds.value); 
+          // updateTournamentPositions(); // updateTournamentPositions is called within propagateWinners end
       }
-    };
-
-    // Helper function to safely get the index of the 3rd place match
-    const getThirdPlaceMatchIndex = (round) => {
-      if (!round || !round.matches) return 0;
-      
-      // Find the third place match
-      const thirdPlaceMatch = round.matches.find(m => m.isThirdPlace);
-      if (!thirdPlaceMatch) return 0;
-      
-      // Return the actual index within the round's matches array
-      return round.matches.findIndex(m => m.id === thirdPlaceMatch.id);
-    };
-
-    const updateDateTime = (roundIndex, matchIndex, field, value) => {
-       // Add detailed logging 
-       console.log(`updateDateTime called - roundIndex: ${roundIndex}, matchIndex: ${matchIndex}, field: ${field}, value: ${value}`);
-       
-       const round = rounds.value[roundIndex];
-       if (!round) {
-           console.error('Invalid round index:', roundIndex);
-           return;
-       }
-       
-       // Direct update based on matchIndex
-       if (matchIndex >= 0 && matchIndex < round.matches.length) {
-           console.log(`Updating ${field} for match at index ${matchIndex} in round ${roundIndex}`);
-           round.matches[matchIndex][field] = value;
-       } else {
-           console.error('Invalid match index:', matchIndex, 'for round with', round.matches.length, 'matches');
-       }
-    };
-
-    const updateMatchTopScorer = (roundIndex, matchIndex, field, value) => {
-        const round = rounds.value[roundIndex];
-        if (!round) return;
-        const matchId = round.matches.filter(m => !m.isThirdPlace || round.matches.length === 1)[matchIndex]?.id;
-        const actualMatchIndex = round.matches.findIndex(m => m.id === matchId);
-        if (actualMatchIndex === -1) return;
-        const match = round.matches[actualMatchIndex];
-
-        if (field === 'goals') {
-             match.topScorer.goals = value === '' ? 0 : Math.max(0, parseInt(value || 0, 10));
-        } else {
-            match.topScorer.name = value;
-        }
+      calculateAndSetTeamGoals(); // <-- Recalculate goals after match update
     };
 
     // --- Core Logic: Stats Management ---
@@ -1554,40 +1547,27 @@ export default {
                         
                         // Process each match in this round
                         for (const matchData of roundData.matches) {
-                            // Fix the findTeam function to correctly map teams from the API response
-                            const findTeam = (teamRef) => {
-                                if (!teamRef) return null;
-                                const teamId = typeof teamRef === 'object' ? teamRef._id || teamRef.id : teamRef;
-                                if (teamId === 'BYE') return BYE_TEAM;
-                                // Look for the team in the teams array
-                                const team = teams.value.find(t => t.id === teamId);
-                                // If not found directly in teams array, look in the API data
-                                if (!team && data.registeredTeamsDetails) {
-                                    const apiTeam = data.registeredTeamsDetails.find(t => t._id === teamId);
-                                    if (apiTeam) {
-                                        return {
-                                            id: apiTeam._id,
-                                            name: apiTeam.teamName
-                                        };
-                                    }
-                                }
-                                return team || null;
-                            };
-
                             // Improve the processing by preserving team and winner information from the API
                             // Make sure we keep the team information from the API response
                             const processTeamInfo = (matchTeam) => {
                                 if (!matchTeam) return null;
-                                if (typeof matchTeam === 'object') {
-                                    // Already has id and name
-                                    if (matchTeam._id || matchTeam.id) {
-                                        return {
-                                            id: matchTeam._id || matchTeam.id,
-                                            name: matchTeam.teamName || matchTeam.name || 'Team'
-                                        };
-                                    }
-                                }
-                                return findTeam(matchTeam);
+                                
+                                // Ensure we consistently use the MongoDB _id as the primary id
+                                const teamId = typeof matchTeam === 'object' ? matchTeam._id || matchTeam.id : matchTeam;
+                                const teamName = typeof matchTeam === 'object' ? matchTeam.teamName || matchTeam.name : null;
+
+                                if (teamId === 'BYE') return BYE_TEAM;
+                                if (!teamId) return null; // No valid ID found
+
+                                // Prefer finding the full team object from teams.value if available
+                                const existingTeam = teams.value.find(t => t.id === teamId);
+                                if (existingTeam) return existingTeam;
+                                
+                                // Fallback: Construct team object from available info, prioritizing _id for consistency
+                                return {
+                                    id: teamId, // Use the resolved teamId (which should be the _id)
+                                    name: teamName || `Team ${teamId.toString().slice(-4)}` // Use provided name or generate fallback
+                                };
                             };
                             
                             const team1 = processTeamInfo(matchData.team1);
@@ -1670,6 +1650,7 @@ export default {
                 });
                 
                 rounds.value = processedRounds;
+                // teams.value = // Make sure teams.value is set before this point // <-- This line looks incomplete, might need fixing if teams aren't set correctly earlier
                 console.log("Loaded rounds structure:", JSON.stringify(processedRounds));
                 
                 // Set warning if Bye vs Bye was found
@@ -1689,8 +1670,12 @@ export default {
                         if (data.stats.playerOfTournament) tournamentStats.playerOfTournament = data.stats.playerOfTournament;
                     }
                     
-                    // Update tournament positions
+                    // Update tournament positions & Calculate goals using nextTick
                     updateTournamentPositions();
+                    nextTick(() => {
+                        console.log('[fetchTournamentBracket] Calling calculateAndSetTeamGoals inside nextTick');
+                        calculateAndSetTeamGoals(); 
+                    });
                 } else {
                     console.log('No valid rounds data found after processing');
                     if (teams.value.length >= 2) {
@@ -1844,18 +1829,7 @@ export default {
 
     // --- Computed Properties ---
     const getTotalMatches = computed(() => rounds.value.reduce((sum, round) => sum + round.matches.length, 0));
-    const getByeCount = computed(() => rounds.value[0]?.matches.filter(m => m.hasBye && !(m.team1?.id === 'BYE' && m.team2?.id === 'BYE')).length || calculateByes(teams.value.length)); // Exclude Bye vs Bye from count
-    const teamGoals = computed(() => { /* ... calculation ... */
-      const goalsByTeam = {};
-        teams.value.forEach(t => { goalsByTeam[t.id] = { id: t.id, name: t.name, goals: 0 }; });
-      rounds.value.forEach(round => {
-        round.matches.forEach(match => {
-            if (match.team1 && match.team1.id !== 'BYE' && match.score1 !== null) { if (goalsByTeam[match.team1.id]) { goalsByTeam[match.team1.id].goals += match.score1; } }
-            if (match.team2 && match.team2.id !== 'BYE' && match.score2 !== null) { if (goalsByTeam[match.team2.id]) { goalsByTeam[match.team2.id].goals += match.score2; } }
-        });
-      });
-      return Object.values(goalsByTeam).sort((a, b) => b.goals - a.goals);
-    });
+    const getByeCount = computed(() => rounds.value[0]?.matches.filter(m => m.hasBye && !(m.team1?.id === 'BYE' && m.team2?.id === 'BYE')).length || calculateByes(teams.value?.length ?? 0)); // Exclude Bye vs Bye from count
 
     // --- Style Helpers ---
     const getMatchCardColor = (match) => { return match.hasBye ? 'from-amber-800/20 to-amber-900/10' : match.winner ? 'from-emerald-800/20 to-emerald-900/10' : 'from-gray-700/50 to-gray-800/50'; };
@@ -1943,36 +1917,27 @@ export default {
     };
     
     const updateThirdPlaceMatch = (field) => {
-      const { roundIndex } = getThirdPlaceMatchRound();
-      const round = rounds.value[roundIndex];
-      if (!round) return;
-      
-      const matchIndex = round.matches.findIndex(m => m.isThirdPlace);
-      if (matchIndex === -1) return;
-      
-      updateMatch(roundIndex, matchIndex, field);
+      // Call updateMatch, passing true for the new isFromThirdPlace flag
+      // Pass placeholder 0s for indices as they aren't used when flag is true
+      updateMatch(0, 0, field, true);
     };
     
     const updateThirdPlaceTopScorer = (field, value) => {
-      const { roundIndex } = getThirdPlaceMatchRound();
-      const round = rounds.value[roundIndex];
-      if (!round) return;
-      
-      const matchIndex = round.matches.findIndex(m => m.isThirdPlace);
-      if (matchIndex === -1) return;
-      
-      updateMatchTopScorer(roundIndex, matchIndex, field, value);
+      // This function needs to directly update the 3rd place match top scorer
+      const match = getThirdPlaceMatch();
+      if (!match) return;
+      if (field === 'goals') {
+           match.topScorer.goals = value === '' ? 0 : Math.max(0, parseInt(value || 0, 10));
+      } else {
+          match.topScorer.name = value;
+      }
     };
     
     const updateThirdPlaceDateTime = (field, value) => {
-      const { roundIndex } = getThirdPlaceMatchRound();
-      const round = rounds.value[roundIndex];
-      if (!round) return;
-      
-      const matchIndex = round.matches.findIndex(m => m.isThirdPlace);
-      if (matchIndex === -1) return;
-      
-      updateDateTime(roundIndex, matchIndex, field, value);
+      // This function needs to directly update the 3rd place match date/time
+       const match = getThirdPlaceMatch();
+       if (!match) return;
+       match[field] = value;
     };
 
     // Toast notification system
@@ -1994,19 +1959,92 @@ export default {
       toasts.value.splice(index, 1);
     };
 
+    // --- Function to Calculate Team Goals ---
+    const calculateAndSetTeamGoals = () => {
+      console.log('[calculateAndSetTeamGoals] Attempting calculation...');
+      
+      // We need rounds data at minimum to calculate goals
+      if (!rounds.value || rounds.value.length === 0) {
+        console.warn('[calculateAndSetTeamGoals] Rounds not ready. Cannot calculate goals.');
+        teamGoalsDisplayData.value = [];
+        return;
+      }
+
+      console.log('[calculateAndSetTeamGoals] Calculating goals with teams:', JSON.parse(JSON.stringify(teams.value)), 'and rounds:', JSON.parse(JSON.stringify(rounds.value)));
+      
+      const goalsByTeam = {};
+      const teamSet = new Set(); // To track unique team IDs added
+
+      // 1. Add teams from the primary teams.value list (if available)
+      if (teams.value && teams.value.length > 0) {
+          teams.value.forEach(t => {
+              if (t && t.id && !teamSet.has(t.id)) { 
+                  goalsByTeam[t.id] = { id: t.id, name: t.name || `Team ${t.id.slice(-4)}`, goals: 0 }; 
+                  teamSet.add(t.id);
+              } else if (t && !t.id) {
+                  console.warn('[calculateAndSetTeamGoals] Invalid team object found in teams.value (missing id):', t);
+              }
+          });
+      }
+
+      // 2. Scan rounds to add any missing teams to the map
+      rounds.value.forEach(round => {
+          round.matches.forEach(match => {
+              [match.team1, match.team2].forEach(team => {
+                  if (team && team.id && team.id !== 'BYE' && !teamSet.has(team.id)) {
+                      goalsByTeam[team.id] = { id: team.id, name: team.name || `Team ${team.id.slice(-4)}`, goals: 0 };
+                      teamSet.add(team.id);
+                      console.log(`[calculateAndSetTeamGoals] Added team ${team.name} (${team.id}) from match data.`);
+                  }
+              });
+          });
+      });
+      
+      console.log('[calculateAndSetTeamGoals] Initial map (after scanning rounds):', JSON.parse(JSON.stringify(goalsByTeam)));
+
+      // 3. Accumulate goals
+      rounds.value.forEach((round /* Removed rIdx */) => {
+        // console.log(`[calculateAndSetTeamGoals] Accumulating goals for Round ${rIdx + 1}`); // Optional: less verbose log
+        round.matches.forEach((match /* Removed mIdx */) => {
+            // console.log(`[calculateAndSetTeamGoals]   Match ${mIdx + 1}: T1=${match.team1?.name}(${match.team1?.id}) S1=${match.score1} | T2=${match.team2?.name}(${match.team2?.id}) S2=${match.score2}`);
+            if (match.team1 && match.team1.id && match.team1.id !== 'BYE' && match.score1 !== null) { 
+                if (goalsByTeam[match.team1.id]) { 
+                    goalsByTeam[match.team1.id].goals += match.score1; 
+                    // console.log(`[calculateAndSetTeamGoals]     Added ${match.score1} to ${match.team1.name}. New total: ${goalsByTeam[match.team1.id].goals}`);
+                } else {
+                     // This warning should be less frequent now
+                     console.warn(`[calculateAndSetTeamGoals]     Accumulation WARN: Team ID ${match.team1.id} (${match.team1.name}) not found in map.`);
+                }
+            }
+            if (match.team2 && match.team2.id && match.team2.id !== 'BYE' && match.score2 !== null) { 
+                if (goalsByTeam[match.team2.id]) { 
+                    goalsByTeam[match.team2.id].goals += match.score2; 
+                    // console.log(`[calculateAndSetTeamGoals]     Added ${match.score2} to ${match.team2.name}. New total: ${goalsByTeam[match.team2.id].goals}`);
+                } else {
+                    console.warn(`[calculateAndSetTeamGoals]     Accumulation WARN: Team ID ${match.team2.id} (${match.team2.name}) not found in map.`);
+                }
+            }
+        });
+      });
+      
+      // 4. Set the display data
+      teamGoalsDisplayData.value = Object.values(goalsByTeam).sort((a, b) => b.goals - a.goals);
+      console.log('[calculateAndSetTeamGoals] Calculation complete. Updated teamGoalsDisplayData:', JSON.parse(JSON.stringify(teamGoalsDisplayData.value)));
+    };
+
     return {
       // ... returned properties and methods ...
       teams, rounds, teamName, bracketGenerated, error, loading, backendDataWarning, // Added warning ref
       zoomLevel, activeTab, teamInputRef, bracketContainerRef,
-      tournamentName, tournamentStats, teamGoals, route, router,
-      addTeam, generateBracket, handleKeyDown, updateMatch, updateDateTime,
-      updateMatchTopScorer, updateTopScorerName, updateTopScorerGoals,
+      tournamentName, tournamentStats, teamGoalsDisplayData, route, router,
+      addTeam, generateBracket, handleKeyDown, updateMatch, 
+      updateTopScorerName, updateTopScorerGoals,
       resetBracket, saveTournamentChanges, publishTournament,
       handleZoomIn, handleZoomOut, goBack, fetchTournamentBracket,
       calculateRounds, calculateByes, getRoundNamePreview,
       getTotalMatches, getByeCount,
       getMatchCardColor, getMatchCardBorder, getRoundName,
-      getThirdPlaceMatchIndex, getThirdPlaceMatch, getThirdPlaceMatchRound, updateThirdPlaceMatch, updateThirdPlaceTopScorer, updateThirdPlaceDateTime, // Make available to template
+      getThirdPlaceMatch, getThirdPlaceMatchRound, updateThirdPlaceMatch, updateThirdPlaceTopScorer, updateThirdPlaceDateTime, // Make available to template
       toasts,
       showToast,
       removeToast

@@ -66,6 +66,84 @@
         </div>
       </div>
     </div>
+
+    <!-- Full History Modal -->
+    <div v-if="showHistoryModal" 
+         class="fixed inset-0 z-50 overflow-y-auto" 
+         role="dialog"
+         @click.self="showHistoryModal = false">
+      <!-- Backdrop -->
+      <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"></div>
+
+      <!-- Modal -->
+      <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="relative bg-gray-800 rounded-xl max-w-xl w-full shadow-xl p-4">
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-gray-700 pb-4 mb-4">
+            <h2 class="text-lg font-bold text-white">Loyalty Points History</h2>
+            <button @click="showHistoryModal = false" class="text-gray-400 hover:text-white">
+              <XIcon class="w-5 h-5" />
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="max-h-[60vh] overflow-y-auto">
+            <div v-if="loading" class="text-center py-10">
+              <Loader2Icon class="w-8 h-8 text-purple-400 animate-spin mx-auto" />
+              <p class="mt-2 text-gray-400">Loading your points history...</p>
+            </div>
+            <div v-else-if="history.length === 0" class="text-center py-10">
+              <p class="text-gray-400">No transaction history found</p>
+            </div>
+            <div v-else class="space-y-3">
+              <div v-for="transaction in paginatedHistory" 
+                   :key="transaction._id"
+                   class="bg-gray-700/50 rounded-lg p-3 flex justify-between items-center">
+                <div>
+                  <p class="text-white font-medium">{{ transaction.description }}</p>
+                  <p class="text-xs text-gray-400 mt-1">
+                    {{ formatDate(transaction.date) }}
+                  </p>
+                </div>
+                <span :class="[
+                  'font-bold text-lg',
+                  transaction.type === 'earn' || transaction.type === 'credit' ? 'text-green-400' : 'text-red-400'
+                ]">
+                  {{ transaction.type === 'earn' || transaction.type === 'credit' ? '+' : '-' }}{{ transaction.points }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pagination -->
+          <div class="flex justify-center space-x-2 mt-4 pt-4 border-t border-gray-700">
+            <button 
+              @click="currentPage = Math.max(1, currentPage - 1)" 
+              :disabled="currentPage === 1"
+              :class="[
+                'px-3 py-1 rounded',
+                currentPage === 1 ? 'bg-gray-700 text-gray-500' : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+              ]"
+            >
+              Previous
+            </button>
+            <span class="px-3 py-1 bg-gray-700 rounded text-white">
+              {{ currentPage }} / {{ totalPages }}
+            </span>
+            <button 
+              @click="currentPage = Math.min(totalPages, currentPage + 1)" 
+              :disabled="currentPage === totalPages"
+              :class="[
+                'px-3 py-1 rounded',
+                currentPage === totalPages ? 'bg-gray-700 text-gray-500' : 'bg-purple-500/20 text-purple-400 hover:bg-purple-500/30'
+              ]"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </template>
   
   <script setup>
@@ -77,13 +155,29 @@
   const {formattedPoints, history, loading, fetchPoints, fetchHistory } = useLoyaltyPoints()
   const { formatDate } = useTimeFormatting()
   const showDetails = ref(false)
+  const showHistoryModal = ref(false)
+  
+  // Pagination
+  const currentPage = ref(1)
+  const itemsPerPage = 10
+  
+  const totalPages = computed(() => {
+    return Math.max(1, Math.ceil(history.value.length / itemsPerPage))
+  })
+  
+  const paginatedHistory = computed(() => {
+    const start = (currentPage.value - 1) * itemsPerPage
+    const end = start + itemsPerPage
+    return history.value.slice(start, end)
+  })
   
   const recentHistory = computed(() => {
     return history.value.slice(0, 5)
   })
   
   const viewAllHistory = () => {
-    // Implement view all history logic
+    // Show modal with full history instead of navigating
+    showHistoryModal.value = true
     showDetails.value = false
   }
   

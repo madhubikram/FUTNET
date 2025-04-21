@@ -1,6 +1,7 @@
 const Loyalty = require('../models/loyalty.model');
 const User = require('../models/user.model');
 const Booking = require('../models/booking.model');
+const LoyaltyTransaction = require('../models/loyaltyTransaction.model');
 
 const loyaltyController = {
     // Get user's loyalty points
@@ -28,17 +29,64 @@ const loyaltyController = {
     
       getPointsHistory: async (req, res) => {
         try {
+          console.log(`[LOYALTY] Getting points history for user ${req.user._id}`);
+          
+          // Fetch embedded transactions from Loyalty model
           const loyalty = await Loyalty.findOne({ user: req.user._id })
             .populate({
               path: 'transactions.booking',
               select: 'date startTime endTime price'
             });
-    
-          if (!loyalty) {
-            return res.json([]);
+            
+          console.log(`[LOYALTY] Found ${loyalty ? loyalty.transactions.length : 0} embedded transactions`);
+
+          // Fetch standalone transactions from LoyaltyTransaction model
+          const standaloneTransactions = await LoyaltyTransaction.find({ user: req.user._id })
+            .populate({
+              path: 'relatedBooking',
+              select: 'date startTime endTime price'
+            })
+            .sort({ createdAt: -1 });
+            
+          console.log(`[LOYALTY] Found ${standaloneTransactions.length} standalone transactions`);
+          
+          if (standaloneTransactions.length > 0) {
+            console.log(`[LOYALTY] First standalone transaction:`, JSON.stringify({
+              id: standaloneTransactions[0]._id,
+              type: standaloneTransactions[0].type,
+              points: standaloneTransactions[0].points,
+              reason: standaloneTransactions[0].reason,
+              createdAt: standaloneTransactions[0].createdAt
+            }));
           }
-    
-          res.json(loyalty.transactions);
+
+          // Convert standalone transactions to the same format as embedded ones
+          const formattedStandaloneTransactions = standaloneTransactions.map(transaction => ({
+            _id: transaction._id,
+            type: transaction.type === 'credit' ? 'earn' : 'redeem',
+            points: transaction.type === 'credit' ? transaction.points : -transaction.points,
+            booking: transaction.relatedBooking,
+            description: transaction.reason,
+            date: transaction.createdAt
+          }));
+
+          // Merge both sources of transactions
+          let allTransactions = [];
+          
+          // Include embedded transactions if loyalty record exists
+          if (loyalty) {
+            allTransactions = [...loyalty.transactions];
+          }
+          
+          // Add standalone transactions
+          allTransactions = [...allTransactions, ...formattedStandaloneTransactions];
+          
+          // Sort all transactions by date descending (newest first)
+          allTransactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+          
+          console.log(`[LOYALTY] Returning ${allTransactions.length} total transactions`);
+
+          res.json(allTransactions);
         } catch (error) {
           console.error('Error in getPointsHistory:', error);
           res.status(500).json({ message: error.message });
