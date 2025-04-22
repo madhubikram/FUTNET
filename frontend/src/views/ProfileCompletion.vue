@@ -92,6 +92,7 @@ import { useRouter } from 'vue-router'
 import { useNotification } from '@/composables/useNotification'
 import { BaseButton } from '@/components/base'
 import MapComponent from '@/components/MapComponent.vue'
+import API_URL from '@/config/api'
 
 const router = useRouter()
 const { addNotification } = useNotification()
@@ -165,7 +166,7 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const response = await fetch('http://localhost:5000/api/futsal/profile', {
+    const response = await fetch(`${API_URL}/futsal/profile`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,

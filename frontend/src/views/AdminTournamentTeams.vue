@@ -132,6 +132,7 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import PageLayout from '@/components/layout/PageLayout.vue';
 import { ArrowLeftIcon, Loader2Icon, ChevronRightIcon, ChevronDownIcon } from 'lucide-vue-next';
+import API_URL from '@/config/api';
 
 const props = defineProps({
   id: { // Tournament ID passed as prop from router
@@ -146,8 +147,6 @@ const registrationDetails = ref([]);
 const loading = ref(true);
 const error = ref(null);
 const expandedRowIndex = ref(null); // Track which row is expanded
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const fetchTournamentAndTeams = async () => {
   loading.value = true;

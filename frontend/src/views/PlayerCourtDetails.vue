@@ -123,6 +123,7 @@ import BookingSection from '@/components/court-details/BookingSection.vue'
 import BookingConfirmationModal from '@/components/court-details/BookingConfirmationModal.vue'
 import { useApi } from '@/composables/useApi'
 import { log } from '@/utils/logger'
+import API_URL, { getAssetUrl } from '@/config/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -162,7 +163,7 @@ const shortLocation = computed(() => {
 const courtImages = computed(() => {
   if (!court.value?.images?.length) return ['/placeholder-court.jpg']
   return court.value.images.map(img => 
-    img.startsWith('http') ? img : `http://localhost:5000${img}`
+    img.startsWith('http') ? img : getAssetUrl(img)
   )
 })
 
@@ -213,7 +214,7 @@ const fetchCourtDetails = async () => {
 const handleSubmitReview = async (reviewData) => {
   try {
     const response = await fetch(
-      `http://localhost:5000/api/player/courts/${route.params.id}/reviews`,
+      `${API_URL}/player/courts/${route.params.id}/reviews`,
       {
         method: 'POST',
         headers: {
@@ -248,7 +249,7 @@ const handleUpdateReview = async (reviewData) => {
 
   try {
     const response = await fetch(
-      `http://localhost:5000/api/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
+      `${API_URL}/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
       {
         method: 'PUT',
         headers: {
@@ -270,7 +271,7 @@ const handleUpdateReview = async (reviewData) => {
 const handleDeleteReview = async () => {
   try {
     const response = await fetch(
-      `http://localhost:5000/api/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
+      `${API_URL}/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
       {
         method: 'DELETE',
         headers: {
@@ -298,7 +299,7 @@ const handleDeleteReview = async () => {
 const handleToggleReaction = async ({ reviewId, type }) => {
   try {
     const response = await fetch(
-      `http://localhost:5000/api/player/courts/${route.params.id}/reviews/${reviewId}/reactions`,
+      `${API_URL}/player/courts/${route.params.id}/reviews/${reviewId}/reactions`,
       {
         method: 'POST',
         headers: {

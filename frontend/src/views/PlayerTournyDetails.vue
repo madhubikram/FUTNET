@@ -27,10 +27,10 @@
         <!-- Tournament Image -->
         <div class="relative w-full h-[40vh]">
           <img 
-            :src="tournament?.banner ? `http://localhost:5000${tournament.banner}` : '/placeholder-tournament.jpg'" 
-            class="w-full h-full object-cover md:object-cover object-center" 
-            :alt="tournament?.name"
-          >
+            :alt="tournament?.name || 'Tournament Banner'"
+            class="w-full h-64 object-cover rounded-t-lg"
+            :src="getAssetUrl(tournament?.banner) || '/placeholder-tournament.jpg'" 
+          />
           <div class="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black"></div>
         </div>
 
@@ -497,6 +497,7 @@ import {
 import ViewerTournamentBracket from '../components/tournaments/ViewerTournamentBracket.vue'
 import { useToast } from 'vue-toastification'
 import { useApi } from '@/composables/useApi'
+import { getAssetUrl } from '@/config/api'
 
 const route = useRoute()
 const toast = useToast()

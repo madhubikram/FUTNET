@@ -2,6 +2,7 @@
 
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+import API_URL, { getAssetUrl } from '@/config/api'
 
 export const useTournamentStore = defineStore('tournament', () => {
   const tournaments = ref([])
@@ -44,7 +45,7 @@ export const useTournamentStore = defineStore('tournament', () => {
       
       console.log('Fetching tournaments with token:', token);
       
-      const response = await fetch('http://localhost:5000/api/player/tournaments', {
+      const response = await fetch(`${API_URL}/player/tournaments`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -59,7 +60,7 @@ export const useTournamentStore = defineStore('tournament', () => {
 
       tournaments.value = data.map(tournament => ({
         ...tournament,
-        image: tournament.banner ? `http://localhost:5000${tournament.banner}` : '/placeholder-tournament.jpg'
+        image: tournament.banner ? getAssetUrl(tournament.banner) : '/placeholder-tournament.jpg'
       }));
 
       await fetchUserRegistrations();
@@ -77,7 +78,7 @@ export const useTournamentStore = defineStore('tournament', () => {
   const fetchUserRegistrations = async () => {
     try {
       // Update this endpoint as well
-      const response = await fetch('http://localhost:5000/api/player/tournaments/my-registrations', {
+      const response = await fetch(`${API_URL}/player/tournaments/my-registrations`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -107,7 +108,7 @@ export const useTournamentStore = defineStore('tournament', () => {
 
   const registerForTournament = async (tournamentId, teamInfo) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/tournaments/${tournamentId}/register`, {
+      const response = await fetch(`${API_URL}/tournaments/${tournamentId}/register`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

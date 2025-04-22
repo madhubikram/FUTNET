@@ -433,6 +433,7 @@ import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
 import { log } from '@/utils/logger';
 import { useApi } from '@/composables/useApi';
+import { getAssetUrl } from '@/config/api';
 
 const router = useRouter();
 const { fetchData } = useApi();
@@ -740,7 +741,7 @@ const fetchBookings = async () => {
         }
         
         // Otherwise, prefix with the API base URL
-        return `http://localhost:5000${img}`;
+        return getAssetUrl(img);
       })(),
       // Set payment method to 'free' if it was a free booking or not requiring prepayment
       paymentMethod: booking.paymentDetails?.method || 

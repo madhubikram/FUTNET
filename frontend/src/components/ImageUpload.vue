@@ -68,6 +68,7 @@
 <script setup>
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { ImageIcon, XIcon } from 'lucide-vue-next'
+import { getAssetUrl } from '@/config/api'
 
 const props = defineProps({
   modelValue: {
@@ -119,10 +120,9 @@ const previewUrls = computed(() => {
 
 // Function to get preview URL for a file
 const getPreviewUrl = (file) => {
-  // Check if file is a string (URL) or File object
   if (typeof file === 'string') {
-    // If it's already a URL, return it directly
-    return `http://localhost:5000${file}`;
+    // If it's a string, assume it's a URL path from the server
+    return getAssetUrl(file);
   }
 
   // For File objects, create object URL

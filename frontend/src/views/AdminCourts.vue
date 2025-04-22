@@ -448,6 +448,7 @@ import { useToast } from 'vue-toastification'
 import {
   PlusIcon, ImageIcon, XIcon, Loader2Icon
 } from 'lucide-vue-next'
+import API_URL from '@/config/api'
 
 const toast = useToast()
 
@@ -467,7 +468,7 @@ const togglePrepayment = async () => {
     requirePrepayment.value = newValue;
 
     const token = localStorage.getItem('token');
-    const response = await fetch('http://localhost:5000/api/courts/prepayment', {
+    const response = await fetch(`${API_URL}/courts/prepayment`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -703,7 +704,7 @@ const fetchCourts = async () => {
         const token = localStorage.getItem('token');
         
         // First try to fetch courts
-        const courtsResponse = await fetch('http://localhost:5000/api/courts', {
+        const courtsResponse = await fetch(`${API_URL}/courts`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -715,7 +716,7 @@ const fetchCourts = async () => {
         
         // Then try to fetch settings
         try {
-            const settingsResponse = await fetch('http://localhost:5000/api/courts/settings', {
+            const settingsResponse = await fetch(`${API_URL}/courts/settings`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -803,7 +804,7 @@ const editCourt = (court) => {
 const deleteCourt = async (courtId) => {
   if (!confirm('Are you sure you want to delete this court?')) return;
   try {
-    const response = await fetch(`http://localhost:5000/api/courts/${courtId}`, {
+    const response = await fetch(`${API_URL}/courts/${courtId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     });
@@ -879,7 +880,7 @@ const handleSubmit = async () => {
     };
 
     if (editingCourt.value) {
-      response = await fetch(`http://localhost:5000/api/courts/${editingCourt.value._id}`, {
+      response = await fetch(`${API_URL}/courts/${editingCourt.value._id}`, {
         method: 'PUT',
         headers: headers,
         body: formData
@@ -888,7 +889,7 @@ const handleSubmit = async () => {
       toast.success('Court updated successfully!');
       
     } else {
-      response = await fetch('http://localhost:5000/api/courts', {
+      response = await fetch(`${API_URL}/courts`, {
         method: 'POST',
         headers: headers,
         body: formData

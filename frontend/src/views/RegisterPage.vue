@@ -167,6 +167,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { BaseInput, BaseSelect } from '../components/base' // Import BaseSelect as well
 import ImageUpload from '../components/ImageUpload.vue'
+import API_URL from '@/config/api'
 
 const router = useRouter()
 const errors = ref({})
@@ -282,7 +283,7 @@ const handleSubmit = async () => {
       })
     }
 
-    const response = await fetch('http://localhost:5000/api/auth/register', {
+    const response = await fetch(`${API_URL}/auth/register`, {
       method: 'POST',
       body: submitData
     })

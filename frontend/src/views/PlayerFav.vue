@@ -46,6 +46,7 @@
   import PageLayout from '@/components/layout/PageLayout.vue'
   import FutsalCard from '@/components/features/FutsalCard.vue'
   import { HeartOffIcon, HomeIcon } from 'lucide-vue-next'
+  import API_URL, { getAssetUrl } from '@/config/api'
   
   const router = useRouter()
   const loading = ref(true)
@@ -66,7 +67,7 @@
       
       // Then fetch court details for each favorite
       const token = localStorage.getItem('token')
-      const response = await fetch('http://localhost:5000/api/courts', {
+      const response = await fetch(`${API_URL}/courts`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -167,7 +168,7 @@
               closing: '21:00'
             },
             isFavorite: true, // These are all favorites
-            images: court.images?.map(img => `http://localhost:5000${img}`) || [],
+            images: court.images?.map(img => getAssetUrl(img)) || [],
             prepaymentRequired: court.requirePrepayment || false,
             availableSlots: court.futsalId?.operatingHours ? 
               generateTimeSlots(court.futsalId.operatingHours.opening, court.futsalId.operatingHours.closing) :

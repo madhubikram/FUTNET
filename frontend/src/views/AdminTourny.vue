@@ -33,9 +33,9 @@
       v-for="tournament in tournaments"
       :key="tournament.id"
       :item-type="'Tournament'"
-      :image-src="tournament.banner
-                  ? `http://localhost:5000${tournament.banner}`
-                  : '/placeholder-tournament.jpg'"
+      :image-src="tournament.banner 
+        ? getAssetUrl(tournament.banner) 
+        : '/placeholder-tournament.jpg'"
       :image-alt="tournament.name"
       :status="tournament.status"
       :title="tournament.name"
@@ -424,7 +424,7 @@
       <div v-else-if="selectedTournament" class="space-y-8">
         <div v-if="selectedTournament.banner" class="aspect-video rounded-lg overflow-hidden">
           <img
-            :src="`http://localhost:5000${selectedTournament.banner}`"
+            :src="getAssetUrl(selectedTournament.banner)"
             class="w-full h-full object-cover"
             :alt="selectedTournament.name"
           />
@@ -584,10 +584,10 @@ import {
   Loader2Icon
 } from 'lucide-vue-next'
 import { useRouter } from 'vue-router';
+import API_URL, { getAssetUrl } from '@/config/api'; // Import API_URL and helper
 
 const toast = useToast()
 const router = useRouter();
-const API_URL = 'http://localhost:5000/api'; // RESTORED API_URL
 
 // State Management
 const showCreateTournamentModal = ref(false)

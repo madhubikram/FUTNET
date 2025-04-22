@@ -229,6 +229,7 @@ import FutsalCard from '@/components/features/FutsalCard.vue'
 import { FilterIcon, MapIcon, ArrowUpDownIcon, XIcon, SearchXIcon } from 'lucide-vue-next'
 import LoyaltyPointsDisplay from '@/components/features/LoyaltyPointsDisplay.vue'
 import NotificationBell from '@/components/features/NotificationBell.vue'
+import API_URL, { getAssetUrl } from '@/config/api'
 
 const error = ref(null);
 const router = useRouter();
@@ -249,7 +250,7 @@ const fetchUserDetails = async () => {
 
   try {
     // Corrected Endpoint
-    const response = await fetch('http://localhost:5000/api/profile', { 
+    const response = await fetch(`${API_URL}/profile`, { 
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -532,7 +533,7 @@ const fetchCourts = async () => {
     const favorites = JSON.parse(localStorage.getItem('favoriteCourts')) || []
 
     const token = localStorage.getItem('token');
-    const response = await fetch('http://localhost:5000/api/courts', {
+    const response = await fetch(`${API_URL}/courts`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -680,7 +681,7 @@ const fetchCourts = async () => {
           closing: '21:00'
         },
         isFavorite: favorites.includes(court._id),
-        images: court.images?.map(img => `http://localhost:5000${img}`) || [],
+        images: court.images?.map(img => getAssetUrl(img)) || [],
         prepaymentRequired: court.requirePrepayment || false,
         availableSlots: court.futsalId?.operatingHours ? 
     generateTimeSlots(court.futsalId.operatingHours.opening, court.futsalId.operatingHours.closing) :

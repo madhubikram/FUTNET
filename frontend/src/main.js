@@ -12,11 +12,11 @@ import VueApexCharts from "vue3-apexcharts"; // Use correct path based on instal
 
 // Import Axios
 import axios from 'axios'
+import API_URL from '@/config/api'
 
 // Configure Axios
-axios.defaults.baseURL = import.meta.env.PROD 
-  ? `${window.location.protocol}//${window.location.hostname}:5000`
-  : 'http://localhost:5000'
+axios.defaults.baseURL = API_URL
+axios.defaults.headers.common['Authorization'] = `Bearer ${localStorage.getItem('token')}`
 
 // Add auth token to every request
 axios.interceptors.request.use(config => {

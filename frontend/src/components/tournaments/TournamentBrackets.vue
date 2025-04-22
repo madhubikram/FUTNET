@@ -896,9 +896,11 @@
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue';
 import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send, CheckCircle, AlertTriangle, X } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
+import 'jquery'; // Import jQuery first
+import 'jquery-bracket'; // Then import jquery-bracket
+import API_URL from '@/config/api';
 
 // --- Configuration ---
-const API_URL = 'http://localhost:5000/api';
 const ZOOM_STEP = 10;
 const MIN_ZOOM = 50;
 const MAX_ZOOM = 150;

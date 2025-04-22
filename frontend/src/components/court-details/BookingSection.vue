@@ -218,6 +218,7 @@ import { useTimeFormatting } from '@/composables/useTimeFormatting'
 import { usePriceCalculation } from '@/composables/usePriceCalculation'
 import { useBooking } from '@/composables/useBooking'
 import { useLoyaltyPoints } from '@/composables/useLoyaltyPoints'
+import API_URL from '@/config/api'
 
 const { formatTime, formatTimeRange, formatDate } = useTimeFormatting()
 const { isTimeInRange, determineRate } = usePriceCalculation()
@@ -373,7 +374,7 @@ const fetchFreeSlots = async () => {
     console.log(`[BookingSection] Fetching free slots for date: ${selectedDate.value} and court: ${props.court?._id}`); // Log the date and court being fetched
     
     const response = await fetch(
-      `http://localhost:5000/api/bookings/free-slots${dateQueryParam}`, // Use combined query
+      `${API_URL}/bookings/free-slots${dateQueryParam}`, // Use combined query
       {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -426,7 +427,7 @@ const generateTimeSlots = async () => {
   try {
     console.log(`[BookingSection] Fetching bookings for court ${props.court._id} on ${selectedDate.value}...`);
     const response = await fetch(
-      `http://localhost:5000/api/courts/${props.court._id}/bookings?date=${selectedDate.value}`,
+      `${API_URL}/courts/${props.court._id}/bookings?date=${selectedDate.value}`,
       {
         headers: { 
           'Authorization': `Bearer ${token}`

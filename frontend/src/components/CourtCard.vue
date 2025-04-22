@@ -4,9 +4,7 @@
     <!-- Court Image Container with Better Aspect Ratio -->
     <div class="relative aspect-[16/9] overflow-hidden">
       <img 
-        :src="court.images && court.images.length > 0 
-          ? `http://localhost:5000${court.images[0]}` 
-          : '/placeholder-court.jpg'" 
+        :src="court.images && court.images.length > 0 ? getAssetUrl(court.images[0]) : '/placeholder-court.jpg'" 
         :alt="court.name"
         class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
       >
@@ -114,6 +112,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { InfoIcon, EditIcon, Trash2Icon } from 'lucide-vue-next'
+import { getAssetUrl } from '@/config/api'
 
 const router = useRouter()
 const props = defineProps({

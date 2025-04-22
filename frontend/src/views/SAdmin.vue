@@ -88,6 +88,7 @@ import { useRouter } from 'vue-router'
 import { BaseButton } from '@/components/base'
 import LoadingState from '@/components/states/LoadingState.vue'
 import EmptyState from '@/components/states/EmptyState.vue'
+import API_URL from '@/config/api'
 
 const router = useRouter()
 const pendingAdmins = ref([])
@@ -108,7 +109,7 @@ const fetchPendingAdmins = async () => {
     const token = localStorage.getItem('token')
     if (!token) throw new Error('No authentication token found')
 
-    const response = await fetch('http://localhost:5000/api/admin/pending-verifications', {
+    const response = await fetch(`${API_URL}/admin/pending-verifications`, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -132,7 +133,7 @@ const fetchPendingAdmins = async () => {
 
 const approveAdmin = async (adminId) => {
   try {
-    const response = await fetch(`http://localhost:5000/api/admin/verify/${adminId}`, {
+    const response = await fetch(`${API_URL}/admin/verify/${adminId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -150,7 +151,7 @@ const approveAdmin = async (adminId) => {
 
 const rejectAdmin = async (adminId) => {
   try {
-    const response = await fetch(`http://localhost:5000/api/admin/verify/${adminId}`, {
+    const response = await fetch(`${API_URL}/admin/verify/${adminId}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,

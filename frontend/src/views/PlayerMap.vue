@@ -108,6 +108,7 @@ import { Icon } from 'leaflet';
 import { LMap, LTileLayer, LMarker, LPopup, LTooltip } from "@vue-leaflet/vue-leaflet";
 import "leaflet/dist/leaflet.css";
 import { ArrowLeftIcon } from 'lucide-vue-next';
+import API_URL, { getAssetUrl } from '@/config/api';
 
 
 const router = useRouter();
@@ -203,7 +204,7 @@ const fetchFutsals = async () => {
     loading.value = true;
     const token = localStorage.getItem('token');
     
-    const response = await fetch('http://localhost:5000/api/courts', {
+    const response = await fetch(`${API_URL}/courts`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -292,7 +293,7 @@ const fetchFutsals = async () => {
           court.futsalId?.operatingHours?.opening, 
           court.futsalId?.operatingHours?.closing
         ),
-        images: court.images?.map(img => `http://localhost:5000${img}`) || []
+        images: court.images?.map(img => getAssetUrl(img)) || []
       });
     });
     

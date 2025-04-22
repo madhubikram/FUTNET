@@ -8,7 +8,7 @@
     <!-- Image Section -->
     <div class="relative aspect-[16/9] overflow-hidden">
       <img 
-        :src="tournament.banner ? `http://localhost:5000${tournament.banner}` : '/placeholder-tournament.jpg'"
+        :src="tournament.banner ? getAssetUrl(tournament.banner) : '/placeholder-tournament.jpg'"
         :alt="tournament.name"
         class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
       >

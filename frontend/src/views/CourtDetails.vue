@@ -27,9 +27,7 @@
             <!-- Image Gallery -->
             <div class="relative h-80">
               <img 
-                :src="court.images && court.images.length > 0 
-                  ? `http://localhost:5000${court.images[0]}` 
-                  : '/placeholder-court.jpg'"
+                :src="court.images && court.images.length > 0 ? getAssetUrl(court.images[0]) : '/placeholder-court.jpg'"
                 :alt="court.name"
                 class="w-full h-full object-cover"
               >
@@ -95,6 +93,7 @@
   import { useRoute, useRouter } from 'vue-router'
   import { CheckIcon, ArrowLeftIcon } from 'lucide-vue-next'
   import RatingsAndReviews from '@/components/RatingsAndReviews.vue'
+  import API_URL, { getAssetUrl } from '@/config/api'
   // NOTE: Using a proper JWT decoding library (like jwt-decode) is recommended.
 
   const route = useRoute()
@@ -132,7 +131,7 @@
         error.value = null;
         const courtId = route.params.id;
         
-        const response = await fetch(`http://localhost:5000/api/courts/${courtId}`, {
+        const response = await fetch(`${API_URL}/courts/${courtId}`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
@@ -161,7 +160,7 @@ const loadCourtDetails = async () => {
         
         console.log('Attempting to fetch court:', courtId);
         
-        const response = await fetch(`http://localhost:5000/api/courts/${courtId}`, {
+        const response = await fetch(`${API_URL}/courts/${courtId}`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`,
                 'Accept': 'application/json'
@@ -215,7 +214,7 @@ onMounted(() => {
   
   const handleReviewSubmit = async (review) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/courts/${route.params.id}/reviews`, {
+      const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -246,7 +245,7 @@ onMounted(() => {
   const handleSubmitReply = async ({ reviewId, text }) => {
     console.log(`Submitting reply for review ${reviewId}:`, text);
     try {
-       const response = await fetch(`/api/courts/${route.params.id}/reviews/${reviewId}/replies`, {
+       const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews/${reviewId}/replies`, {
           method: 'POST',
           headers: {
              'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -281,7 +280,7 @@ onMounted(() => {
   const handleUpdateReply = async ({ reviewId, replyId, text }) => {
     console.log(`Updating reply ${replyId} for review ${reviewId}:`, text);
     try {
-      const response = await fetch(`/api/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
+      const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -309,7 +308,7 @@ onMounted(() => {
   const handleDeleteReply = async ({ reviewId, replyId }) => {
     console.log(`[Frontend handleDeleteReply] Initiating delete for review ${reviewId}, reply ${replyId}`);
     try {
-      const response = await fetch(`/api/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
+      const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

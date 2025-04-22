@@ -312,6 +312,7 @@ import {
   ThumbsUpIcon, ThumbsDownIcon, Loader2Icon,  
 } from 'lucide-vue-next'
 import { useTimeFormatting } from '@/composables/useTimeFormatting'
+import API_URL from '@/config/api'
 
 const { formatDate: formatReviewDate } = useTimeFormatting()
 
@@ -505,7 +506,7 @@ const toggleReaction = async (reviewId, type) => {
 
   try {
     const response = await fetch(
-      `http://localhost:5000/api/player/courts/${props.court._id}/reviews/${reviewId}/reactions`,
+      `${API_URL}/player/courts/${props.court._id}/reviews/${reviewId}/reactions`,
       {
         method: 'POST',
         headers: {
