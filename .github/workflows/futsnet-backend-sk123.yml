@@ -7,7 +7,7 @@ on:
   push:
     branches:
       # !!! IMPORTANT: Change this to your main deployment branch, e.g., main or master !!!
-      - bug/endpoints
+      - main
     # Only trigger builds for changes within the backend directory
     paths:
       - 'backend/**'
