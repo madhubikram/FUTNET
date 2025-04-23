@@ -70,11 +70,8 @@ jobs:
 
       - name: Login to Azure
         uses: azure/login@v2
-        with:
-          # These secret names should be automatically handled by Azure if User-assigned identity was set up correctly
-          client-id: ${{ secrets.AZURE_CLIENT_ID }} # Standard name, check GitHub secrets if different
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }} # Standard name
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }} # Standard name
+        with: {}
+         
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
