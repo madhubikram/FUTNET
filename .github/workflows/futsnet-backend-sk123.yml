@@ -11,7 +11,7 @@ on:
     # Only trigger builds for changes within the backend directory
     paths:
       - 'backend/**'
-      - '.github/workflows/futnet-backend-sk123.yml' # Trigger if workflow itself changes
+      - '.github/workflows/futsnet-backend-sk123.yml' # Trigger if workflow itself changes
   workflow_dispatch:
 
 jobs:
