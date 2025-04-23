@@ -73,22 +73,51 @@ if (!fs.existsSync(tournamentsUploadsDir)) {
 
 const app = express();
 
-// Security Middleware
-app.use(cors({
-    origin:  [
-        'http://localhost:5173',
-        'http://localhost:4173',
-        'http://192.168.1.70:5173',
-        'http://192.168.1.70:4173',
-        'https://localhost:5173',
-        'https://localhost:4173',
-        'https://192.168.1.70:5173',
-        'https://192.168.1.70:4173'
-      ],
+// --- CORS Configuration ---
+// Define allowed origins based on environment
+const developmentOrigins = [
+    'http://localhost:5173',
+    'http://localhost:4173',
+    'http://192.168.1.70:5173', // Example local IP
+    'http://192.168.1.70:4173',
+    'https://localhost:5173',   // If using HTTPS locally
+    'https://localhost:4173',
+    'https://192.168.1.70:5173',
+    'https://192.168.1.70:4173'
+];
+
+// Read allowed origins from environment variable for production
+// Example: ALLOWED_ORIGINS=https://your-frontend.azurewebsites.net,https://another-domain.com
+const productionOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').filter(Boolean); // Split comma-separated string and remove empty entries
+
+const allowedOrigins = process.env.NODE_ENV === 'production' ? productionOrigins : developmentOrigins;
+
+if (process.env.NODE_ENV === 'production' && productionOrigins.length === 0) {
+    console.warn('WARNING: NODE_ENV is production, but ALLOWED_ORIGINS environment variable is not set or empty. CORS might block your frontend.');
+}
+
+console.log('[CORS] Allowed Origins:', allowedOrigins);
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+
+        // Check if the origin is in the allowed list
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true); // Origin is allowed
+        } else {
+            console.warn(`[CORS] Blocked origin: ${origin}`);
+            callback(new Error('Not allowed by CORS')); // Origin is not allowed
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With']
-}));
+};
+
+app.use(cors(corsOptions));
+// --- End CORS Configuration ---
 
 // Body Parser Middleware
 app.use(express.json());
