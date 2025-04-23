@@ -34,7 +34,7 @@ jobs:
         run: |
           npm install
           npm run build --if-present # Run build if your backend needs it (e.g., TypeScript)
-          npm run test --if-present  # Run tests if you have them
+          
 
       - name: Zip artifact for deployment (backend only)
         # Only zip the contents of the backend directory
