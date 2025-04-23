@@ -219,10 +219,28 @@ const props = defineProps({
 
 const emit = defineEmits(['book', 'toggleFavorite'])
 
+// Format Distance
+const formattedDistance = computed(() => {
+  const dist = props.futsal.distance; // Get the calculated distance (or null)
+  if (dist !== null && dist !== undefined && !isNaN(dist)) {
+    // If distance is a valid number, format it
+    return `${dist.toFixed(1)} km`;
+  }
+  // If distance is null/undefined/NaN, check if coordinates were available
+  if (props.futsal.coordinates) {
+     // Coordinates exist, but calculation failed or user location missing
+     return 'N/A';
+  }
+  // No coordinates provided for the futsal
+  return 'Unknown';
+});
+
 // Log availability information for debugging
 onMounted(() => {
   if (props.futsal) {
-    console.log(`[${props.futsal.futsalName} / ${props.futsal.courtName}] Availability Debug:`, {
+    console.log(`[${props.futsal.futsalName} / ${props.futsal.courtName}] Availability & Location Debug:`, {
+      distanceProp: props.futsal.distance,
+      coordinatesProp: props.futsal.coordinates,
       hasAvailableSlots: props.futsal.availableSlots && Array.isArray(props.futsal.availableSlots),
       totalSlots: props.futsal.availableSlots ? props.futsal.availableSlots.length : 0,
       operatingHours: {
@@ -254,160 +272,89 @@ const formatTimeRange = (startTime, endTime) => {
   return `${formattedStartTime} - ${formattedEndTime}`
 }
 
-// Format time function
-const formatTime = (time) => {
-  if (!time) return '';
-  
-  try {
-    // Get hours and minutes
-    const [hours, minutes] = time.split(':').map(Number);
-    
-    // Convert to 12-hour format
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const hours12 = hours % 12 || 12; // Convert 0 to 12
-    
-    // Format with leading zeros and return
-    return `${hours12}:${minutes.toString().padStart(2, '0')} ${period}`;
-  } catch (error) {
-    console.error('Error formatting time:', error, time);
-    return time; // Return as-is if there's an error
-  }
+// Format time for display (e.g., Opens at 9AM)
+const formatTimeForDisplay = (timeString) => {
+  if (!timeString) return 'N/A';
+  return new Date(`1970-01-01T${timeString}`).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    // minute: '2-digit',
+    hour12: true
+  }).replace(' ', ''); // Remove space before AM/PM
 };
 
-// Example of dynamic current rate (could be more complex logic)
-const getCurrentPrice = computed(() => {
-  // Get current time
-  const now = new Date();
-  const currentTime = now.toTimeString().slice(0, 5); // Format: HH:mm
-
-  // Check if we're in peak hours
-  if (props.futsal.peakHours?.start && props.futsal.peakHours?.end) {
-    const isPeakHour = isTimeInRange(currentTime, props.futsal.peakHours.start, props.futsal.peakHours.end);
-    if (isPeakHour) {
-      return props.futsal.peakPrice;
-    }
-  }
-
-  // Check if we're in off-peak hours
-  if (props.futsal.offPeakHours?.start && props.futsal.offPeakHours?.end) {
-    const isOffPeakHour = isTimeInRange(currentTime, props.futsal.offPeakHours.start, props.futsal.offPeakHours.end);
-    if (isOffPeakHour) {
-      return props.futsal.offPeakPrice;
-    }
-  }
-
-  // If not in peak or off-peak hours, return regular price
-  return props.futsal.regularPrice;
-});
 
 const isWithinOperatingHours = computed(() => {
+  if (!props.futsal.operatingHours?.opening || !props.futsal.operatingHours?.closing) {
+    console.log(`[${props.futsal.futsalName}] Missing operating hours, cannot check if open.`);
+    return false; // Can't determine if missing
+  }
   const now = new Date();
-  const currentTime = now.toTimeString().slice(0, 5); // Format: HH:mm
-  
-  // First check if we have direct operatingHours
-  if (props.futsal.operatingHours) {
-    const openingTime = props.futsal.operatingHours.opening;
-    const closingTime = props.futsal.operatingHours.closing;
-    
-    if (openingTime && closingTime) {
-      console.log(`[${props.futsal.futsalName}] Real operating hours: ${openingTime}-${closingTime}`);
-      console.log(`Checking if current time (${currentTime}) is within range`);
-      const result = isTimeInRange(currentTime, openingTime, closingTime);
-      console.log(`[${props.futsal.futsalName}] Operating hours check result: ${result}`);
-      return result;
-    }
+  const currentTime = now.getHours() * 60 + now.getMinutes();
+
+  const openingTime = timeToMinutes(props.futsal.operatingHours.opening);
+  const closingTime = timeToMinutes(props.futsal.operatingHours.closing);
+
+  if (isNaN(openingTime) || isNaN(closingTime)) {
+      console.error(`[${props.futsal.futsalName}] Invalid time format in operating hours`, props.futsal.operatingHours);
+      return false;
   }
-  
-  // Fallback to checking if current time is within any time range (peak or off-peak)
-  if (props.futsal.peakHours?.start && props.futsal.peakHours?.end) {
-    const isPeakHour = isTimeInRange(currentTime, props.futsal.peakHours.start, props.futsal.peakHours.end);
-    if (isPeakHour) return true;
+
+  let isOpen = false;
+  if (openingTime <= closingTime) {
+    // Normal day range (e.g., 9 AM to 9 PM)
+    isOpen = currentTime >= openingTime && currentTime < closingTime;
+  } else {
+    // Overnight range (e.g., 8 PM to 6 AM)
+    isOpen = currentTime >= openingTime || currentTime < closingTime;
   }
-  
-  if (props.futsal.offPeakHours?.start && props.futsal.offPeakHours?.end) {
-    const isOffPeakHour = isTimeInRange(currentTime, props.futsal.offPeakHours.start, props.futsal.offPeakHours.end);
-    if (isOffPeakHour) return true;
-  }
-  
-  return false;
+
+  console.log(`[${props.futsal.futsalName}] Time Check: Now=${currentTime}, Open=${openingTime}, Close=${closingTime}, IsOpen=${isOpen}`);
+  return isOpen;
 });
 
-const formatTimeForDisplay = (time) => {
-  // If no time is provided, try to find it from operatingHours
-  if (!time) {
-    // Get opening time from operatingHours
-    let openingTime = props.futsal.operatingHours?.opening;
-    
-    console.log(`[${props.futsal.futsalName}] Getting opening time:`, {
-      providedTime: time,
-      operatingHours: props.futsal.operatingHours || 'undefined',
-      openingTime
-    });
-
-    if (!openingTime) {
-      console.log(`[${props.futsal.futsalName}] No opening time found`);
-      return 'N/A';
-    }
-    
-    return formatTime(openingTime);
-  }
-  
-  return formatTime(time);
+// Helper to convert HH:MM to minutes
+const timeToMinutes = (timeString) => {
+    if (!timeString || typeof timeString !== 'string') return NaN;
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return hours * 60 + minutes;
 };
 
-const isTimeInRange = (currentTime, start, end) => {
-  if (!start || !end) {
-    console.log('Missing start or end time');
-    return false;
+
+const getCurrentPrice = computed(() => {
+  const now = new Date();
+  const currentTime = now.toTimeString().slice(0, 5); // HH:mm format
+
+  if (props.futsal.peakHours?.start && props.futsal.peakHours?.end && 
+      isTimeInRange(currentTime, props.futsal.peakHours.start, props.futsal.peakHours.end)) {
+    return props.futsal.peakPrice || props.futsal.regularPrice || 'N/A';
   }
   
-  try {
-    const timeToMinutes = (time) => {
-      const [hours, minutes] = time.split(':').map(Number);
-      return hours * 60 + minutes;
-    };
-
-    const current = timeToMinutes(currentTime);
-    const startTime = timeToMinutes(start);
-    const endTime = timeToMinutes(end);
-    
-    console.log(`Time range check: ${current} in [${startTime}, ${endTime}]`);
-
-    // Handle cases where operating hours span midnight
-    if (startTime > endTime) {
-      // e.g., 22:00 to 02:00 - check if current time is after start OR before end
-      return current >= startTime || current <= endTime;
-    } else {
-      // Normal case - check if current time is between start and end
-      return current >= startTime && current <= endTime;
-    }
-  } catch (error) {
-    console.error('Error in time range check:', error);
-    return false;
-  }
-};
-
-// Format distance display
-const formattedDistance = computed(() => {
-  if (props.futsal.distance === '?' || props.futsal.distance === null || props.futsal.distance === undefined) {
-    return 'N/A';
+  if (props.futsal.offPeakHours?.start && props.futsal.offPeakHours?.end && 
+      isTimeInRange(currentTime, props.futsal.offPeakHours.start, props.futsal.offPeakHours.end)) {
+    return props.futsal.offPeakPrice || props.futsal.regularPrice || 'N/A';
   }
   
-  const distance = Number(props.futsal.distance);
-  if (isNaN(distance)) {
-    return 'N/A';
-  }
-  
-  return `${distance.toFixed(1)} km`;
+  return props.futsal.regularPrice || 'N/A';
 });
+
+// Helper function used by getCurrentPrice
+const isTimeInRange = (currentTime, startTime, endTime) => {
+    if (!startTime || !endTime) return false;
+    const currentMinutes = timeToMinutes(currentTime);
+    const startMinutes = timeToMinutes(startTime);
+    const endMinutes = timeToMinutes(endTime);
+
+    if (startMinutes <= endMinutes) { // Normal range
+        return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+    } else { // Overnight range
+        return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+    }
+};
+
 
 // Navigate to futsal details page
 const navigateToDetails = () => {
-  console.log('Navigating to court details:', props.futsal.id)
-  router.push({
-    name: 'playerCourtDetails',
-    params: { id: props.futsal.id.toString() }
-  })
+  router.push({ name: 'playerCourtDetails', params: { id: props.futsal.id } })
 }
 
 // Emit booking event

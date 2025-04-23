@@ -51,13 +51,21 @@
           </div>
         </div>
 
+        <!-- Warning for no free slots -->
+        <div v-if="!requiresPrepayment && bookingDetails.freeBookingsRemaining <= 0" class="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
+          <p class="text-yellow-400 text-sm flex items-center">
+            <span class="mr-2">⚠️</span>
+            <span>You've used all your free booking slots for today. Please use Khalti or Points payment method.</span>
+          </p>
+        </div>
+
         <!-- Payment Required Info (No Prepayment Needed by Court) -->
          <div v-if="!requiresPrepayment" class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
           <p class="text-blue-400 text-sm mb-2">
             This court does not require prepayment. You can:
           </p>
           <ul class="text-sm text-gray-300 list-disc pl-5 space-y-1">
-            <li>Choose <span class="font-semibold">"Pay Physically at Venue"</span> to confirm now and pay later.</li>
+            <li v-if="bookingDetails.freeBookingsRemaining > 0">Choose <span class="font-semibold">"Pay Physically at Venue"</span> to confirm now and pay later.</li>
             <li class="text-purple-300">Optionally prepay with Khalti or loyalty points to earn 15 bonus points!</li>
           </ul>
         </div>
@@ -124,20 +132,21 @@
             Prepay with {{ bookingDetails.totalPointsCost }} Points
           </button>
            <button 
+            v-if="bookingDetails.freeBookingsRemaining > 0"
             @click="onConfirmBooking('offline')" 
             :disabled="isProcessing"
             class="modal-button tertiary flex items-center">
             <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4 mr-1" />
-            <span v-if="bookingDetails.freeBookingsRemaining > 0" class="flex items-center">
+            <span class="flex items-center">
               <span class="bg-blue-500 text-white text-xs font-bold rounded px-1 mr-2">Free Slot</span>
               Pay Physically at Venue
             </span>
-            <span v-else>Pay Physically at Venue</span>
           </button>
         </template>
 
       </div>
     </template>
+
   </BaseModal>
 </template>
 

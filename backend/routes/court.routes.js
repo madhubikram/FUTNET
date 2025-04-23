@@ -309,12 +309,22 @@ router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
             return res.status(404).json({ message: 'Court not found' });
         }
 
-        // Ensure the user owns the futsal this court belongs to
-        if (court.futsalId.toString() !== req.user.futsal.toString()) {
+        // Ensure the user owns the futsal this court belongs to (Safer Check)
+        const userFutsalId = req.user.futsal?._id || req.user.futsal; // Handle object or ID
+        if (!userFutsalId || !court.futsalId || court.futsalId.toString() !== userFutsalId.toString()) {
+            console.error('[AUTH CHECK FAILED] Comparing Court Futsal ID:', court.futsalId?.toString(), 'with User Futsal ID:', userFutsalId?.toString());
             return res.status(403).json({ message: 'User not authorized to update this court' });
         }
 
-        // ... (parseBooleans, parseNestedObject functions remain the same) ...
+        // Parse boolean values from the nested facilities object
+        const parseBooleans = (obj) => {
+            if (!obj) return {}; // Handle cases where facilities might not be sent
+            const result = {};
+            for (const [key, value] of Object.entries(obj)) {
+                result[key] = value === 'true';
+            }
+            return result;
+        };
 
         const updateData = {
             ...req.body,

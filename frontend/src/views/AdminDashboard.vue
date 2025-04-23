@@ -265,9 +265,12 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
             <p>No upcoming tournaments scheduled</p>
-            <button class="mt-4 px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-colors">
-              Create Tournament
-            </button>
+            <router-link 
+              :to="{ name: 'adminTournaments' }"
+              class="mt-4 inline-block px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-colors"
+            >
+              Manage Tournaments
+            </router-link>
           </div>
         </div>
       </div>

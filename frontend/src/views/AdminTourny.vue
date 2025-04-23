@@ -1080,28 +1080,26 @@ const deleteTournament = async (tournamentToDelete) => {
 };
 
 const navigateToBracket = (tournament) => {
-  // Log the received tournament data
-  console.log('[Frontend Log] navigateToBracket called for: ',
-    {
-      id: tournament._id,
-      name: tournament.name,
-      status: tournament.status,
-      bracketExists: !!tournament.bracket?.generated,
-      isBracketGenerated: tournament.bracket?.generated,
-      minTeams: tournament.minTeams,
-      registeredTeams: tournament.registeredTeams
-    });
+  console.log('[Frontend Log] navigateToBracket called for: ', tournament);
 
-  if (tournament.bracket?.generated) {
-    // Correct route name based on router/index.js
-    router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
-  } else {
-    // Optional: Show a message if bracket not generated
-    // Use your preferred notification system (e.g., toast)
-    console.warn('Bracket not generated yet for this tournament.');
-    // Example using a simple alert:
-    // alert('The bracket for this tournament has not been generated yet.');
+  // 1. Check if cancelled
+  if (tournament.status === 'Cancelled') {
+    toast.error('Cannot view bracket: Tournament is cancelled.');
+    return; // Stop execution
   }
+
+  // 2. Check minimum teams
+  // Ensure minTeams field exists and is a number
+  const minTeamsRequired = typeof tournament.minTeams === 'number' ? tournament.minTeams : 4; // Use default if needed
+  const registered = typeof tournament.registeredTeams === 'number' ? tournament.registeredTeams : 0;
+
+  if (registered < minTeamsRequired) {
+    toast.error(`Cannot view bracket: Only ${registered} teams registered (minimum ${minTeamsRequired} required).`);
+    return; // Stop execution
+  }
+
+  // 3. If all checks pass, navigate
+  router.push({ name: 'adminTournamentBracket', params: { id: tournament.id } });
 };
 
 const navigateToTeams = (tournament) => {

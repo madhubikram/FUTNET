@@ -48,6 +48,9 @@ router.delete('/:bookingId', auth, bookingController.adminDeleteBooking);
 // Get all bookings for the logged-in user
 router.get('/', auth, bookingController.getUserBookings);
 
+// Get booking statistics for the logged-in user
+router.get('/stats', auth, bookingController.getUserBookingStats);
+
 // Check court availability
 router.get('/availability', auth, bookingController.checkAvailability);
 

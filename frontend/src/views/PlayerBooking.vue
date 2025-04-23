@@ -558,11 +558,13 @@ const cancelBooking = async (bookingId) => {
 
   try {
     loading.value = true; // Indicate loading state
-    const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
-      method: 'DELETE',
+    const response = await fetch(`${API_URL}/api/bookings/${bookingId}/cancel`, {
+      method: 'PATCH',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      }
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ reason: 'Cancelled by player' })
     });
 
     if (response.ok) {

@@ -328,11 +328,9 @@ const proceedToBooking = () => {
 
   const courtRequiresPrepayment = props.court?.requirePrepayment ?? false;
   
-  // Check if user has enough free slots if this is a court without prepayment
-  if (!courtRequiresPrepayment && selectedTimeSlots.value.length > freeBookingsRemaining.value) {
-    alert(`You only have ${freeBookingsRemaining.value} free booking slots available. Please remove some time slots or use a different payment method.`);
-    return;
-  }
+  // Don't block proceeding to payment completely - just set a flag to indicate 
+  // whether free slots are available and can be used
+  const hasFreeSlots = !courtRequiresPrepayment && freeBookingsRemaining.value > 0;
   
   // Simplified: Payment is required ONLY if court mandates it.
   const requiresPayment = courtRequiresPrepayment;
@@ -347,7 +345,8 @@ const proceedToBooking = () => {
     totalPointsCost: totalPointsCost.value,
     calculatedRequiresPayment: requiresPayment,
     calculatedIsFreeBooking: isFreeBooking,
-    freeBookingsRemaining: freeBookingsRemaining.value
+    freeBookingsRemaining: freeBookingsRemaining.value,
+    hasFreeSlots
   });
   
   const detailsToEmit = {
@@ -364,7 +363,8 @@ const proceedToBooking = () => {
     availablePoints: loyaltyPoints.value,
     // Pass free slots information to the booking process
     freeBookingsRemaining: freeBookingsRemaining.value,
-    usingFreeSlots: !courtRequiresPrepayment && freeBookingsRemaining.value > 0
+    usingFreeSlots: hasFreeSlots, // Only set to true if free slots are actually available
+    hasFreeSlots: hasFreeSlots   // New flag to indicate if free slots are available
   };
 
   console.log(`[${context}] Emitting proceed-booking with details:`, JSON.stringify(detailsToEmit, null, 2));

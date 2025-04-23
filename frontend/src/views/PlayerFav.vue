@@ -47,10 +47,44 @@
   import FutsalCard from '@/components/features/FutsalCard.vue'
   import { HeartOffIcon, HomeIcon } from 'lucide-vue-next'
   import API_URL, { getAssetUrl } from '@/config/api'
+  import { calculateDistance } from '@/utils/geometry.js'
   
   const router = useRouter()
   const loading = ref(true)
   const favoriteCourts = ref([])
+  const userLocation = ref(null)
+  const locationError = ref(null)
+  
+  // Get user location on mount
+  onMounted(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          userLocation.value = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          }
+          console.log('User location obtained:', userLocation.value)
+          // Re-fetch/process now that we have location
+          fetchFavoriteCourts()
+        },
+        (error) => {
+          console.error('Error getting user location:', error)
+          locationError.value = `Error: ${error.message}. Please enable location services.`
+          // Fetch courts even without location, distance will be N/A
+          fetchFavoriteCourts()
+        },
+        {
+          enableHighAccuracy: false, // Lower accuracy is often faster and sufficient
+          timeout: 10000,          // 10 seconds timeout
+          maximumAge: 600000       // Allow cached location up to 10 minutes old
+        }
+      )
+    } else {
+      locationError.value = 'Geolocation is not supported by this browser.'
+      fetchFavoriteCourts() // Fetch courts without location
+    }
+  })
   
   // Fetch favorite courts from local storage and backend
   const fetchFavoriteCourts = async () => {
@@ -62,6 +96,7 @@
       
       if (favorites.length === 0) {
         favoriteCourts.value = []
+        loading.value = false // Stop loading if no favorites
         return
       }
       
@@ -138,13 +173,35 @@
             });
           }
   
+          // --- Location & Distance Calculation ---
+          const futsalCoords = court.futsalId?.coordinates
+          const userCoords = userLocation.value
+          let calculatedDistance = null
+  
+          if (userCoords && futsalCoords?.lat && futsalCoords?.lng) {
+             try {
+               calculatedDistance = calculateDistance(
+                 userCoords.latitude,
+                 userCoords.longitude,
+                 futsalCoords.lat,
+                 futsalCoords.lng
+               )
+               console.log(`Distance to ${court.futsalId?.name}: ${calculatedDistance?.toFixed(1)} km`);
+            } catch (e) {
+                console.error("Error calculating distance: ", e);
+            }
+          } else {
+               console.log(`Cannot calculate distance for ${court.futsalId?.name}. User Location: ${!!userCoords}, Futsal Coords: ${!!futsalCoords}`);
+          }
+  
           return {
             id: court._id,
             futsalName: court.futsalId?.name || 'Unknown Futsal',
             courtName: court.name,
             location: formattedLocation,
+            coordinates: futsalCoords ?? null,
             rating: court.averageRating || 0,
-            distance: '2.5', // This could be calculated if you have user location
+            distance: calculatedDistance,
             courtSide: court.courtSide,
             regularPrice: court.priceHourly,
             currentRate: currentRate,
@@ -196,7 +253,13 @@
     const startTime = timeToMinutes(start)
     const endTime = timeToMinutes(end)
     
-    return current >= startTime && current <= endTime
+    // Handle overnight ranges if necessary (e.g., end time is earlier than start time)
+    if (startTime <= endTime) {
+        return current >= startTime && current <= endTime;
+    } else {
+        // Overnight range (e.g., 10 PM to 6 AM)
+        return current >= startTime || current <= endTime;
+    }
   }
   
   // Helper function to generate time slots
@@ -297,8 +360,4 @@
       futsal.isFavorite = isCurrentlyFavorite;
     }
   }
-  
-  onMounted(() => {
-    fetchFavoriteCourts()
-  })
   </script>

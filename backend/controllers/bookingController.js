@@ -287,8 +287,10 @@ const bookingController = {
             // Calculate points cost (Backend authoritative)
             // Assuming POINTS_PER_HOUR is defined (e.g., 10). Duration is 1 hour for now.
             const durationHours = 1; // TODO: Calculate duration properly if multi-hour slots are possible
-            const calculatedPointsCost = Math.round(calculatedPrice / 10) * durationHours; // Or based on POINTS_PER_HOUR
-            log('INFO', context, `Backend calculated points cost: ${calculatedPointsCost}`);
+            
+            // Trust frontend's calculation but validate minimum
+            const calculatedPointsCost = frontEndTotalPointsCost || Math.ceil(calculatedPrice / 10) * durationHours;
+            log('INFO', context, `Points cost: ${calculatedPointsCost} (from frontend: ${frontEndTotalPointsCost})`);
 
             // --- Prepare Booking Data --- 
             const bookingData = {
@@ -301,7 +303,7 @@ const bookingController = {
                 priceType,
                 status: 'pending', // Default to pending, update after payment/confirmation
                 paymentStatus: 'pending',
-                paymentDetails: { method: paymentMethod },
+                paymentDetails: { method: paymentMethod === 'points' ? 'loyalty' : paymentMethod },
                 isLoyaltyRedemption: paymentMethod === 'points',
                 pointsUsed: 0, // Set later if points are used
                 purchaseOrderId: `BOOKING-${new mongoose.Types.ObjectId().toString()}`
@@ -319,12 +321,17 @@ const bookingController = {
                 // Deduct points & create transaction record
                 userLoyalty.points -= calculatedPointsCost;
                 await userLoyalty.save();
+                
+                // Create booking first so we have the ID
+                finalBooking = new Booking(bookingData);
+                await finalBooking.save();
 
                 const loyaltyTx = new LoyaltyTransaction({
                     user: userId,
-                    type: 'redemption',
-                    points: -calculatedPointsCost,
-                    description: `Booking for court ${court.name} on ${date}`,
+                    type: 'debit',
+                    points: calculatedPointsCost,
+                    reason: `Booking for court ${court.name} on ${date}`,
+                    relatedBooking: finalBooking._id
                 });
                 await loyaltyTx.save();
 
@@ -335,8 +342,9 @@ const bookingController = {
                 bookingData.paymentDetails.paidAmount = 0; // Paid with points
                 bookingData.paymentDetails.paidAt = new Date();
 
-                finalBooking = new Booking(bookingData);
-                await finalBooking.save();
+                // Update the booking we already created
+                await Booking.findByIdAndUpdate(finalBooking._id, bookingData);
+                
                 log('INFO', context, `Booking ${finalBooking._id} confirmed using points.`);
                 
                 // --- Send Notification to Admin (Points) --- 
@@ -899,7 +907,6 @@ const bookingController = {
                         user: booking.user,
                         type: 'credit', 
                         points: pointsToAward,
-                        description: `Points earned from booking ${bookingId} (Admin Confirmed)`,
                         reason: 'booking_payment_admin', // Specific reason
                         booking: booking._id
                     });
@@ -1082,6 +1089,52 @@ const bookingController = {
         } catch (error) {
             console.error(`[FREE SLOTS ERROR] Error retrieving free slots: ${error.message}`, error);
             return res.status(500).json({ error: 'Failed to retrieve free slots' });
+        }
+    },
+
+    // GET /api/bookings/stats
+    getUserBookingStats: async (req, res) => {
+        const context = 'USER_BOOKING_STATS';
+        const userId = req.user._id;
+        
+        try {
+            log('INFO', context, `Fetching booking stats for user ${userId}`);
+            
+            // Count confirmed bookings
+            const confirmedCount = await Booking.countDocuments({
+                user: userId,
+                status: 'confirmed'
+            });
+            
+            // Count confirmed bookings that were paid (not free)
+            const confirmedPaidCount = await Booking.countDocuments({
+                user: userId,
+                status: 'confirmed',
+                paymentStatus: 'paid',
+                isSlotFree: { $ne: true } // Not a free slot
+            });
+            
+            // Count upcoming bookings (confirmed and scheduled for future)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            const upcomingCount = await Booking.countDocuments({
+                user: userId,
+                status: 'confirmed',
+                date: { $gte: today }
+            });
+            
+            log('INFO', context, `Stats for user ${userId}: confirmed=${confirmedCount}, paid=${confirmedPaidCount}, upcoming=${upcomingCount}`);
+            
+            res.status(200).json({
+                confirmedCount,
+                confirmedPaidCount,
+                upcomingCount
+            });
+            
+        } catch (error) {
+            log('ERROR', context, `Error fetching booking stats for user ${userId}: ${error.message}`, error);
+            res.status(500).json({ message: 'Failed to fetch booking statistics' });
         }
     },
 
