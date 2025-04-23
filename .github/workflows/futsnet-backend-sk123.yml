@@ -1,24 +1,17 @@
-# Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
-# More GitHub Actions for Azure: https://github.com/Azure/actions
-
 name: Build and deploy Node.js app to Azure Web App - futnet-backend-sk123
 
 on:
   push:
     branches:
-      # !!! IMPORTANT: Ensure this is your main deployment branch !!!
       - main
-    # Only trigger builds for changes within the backend directory or this workflow file
     paths:
       - 'backend/**'
-      - '.github/workflows/futsnet-backend-sk123.yml' # Ensure this filename matches exactly
+      - '.github/workflows/futsnet-backend-sk123.yml'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read # Required for actions/checkout
 
     steps:
       - uses: actions/checkout@v4
@@ -29,14 +22,12 @@ jobs:
           node-version: '20.x'
 
       - name: npm install and build in backend directory
-        # Use working-directory to run these commands inside backend/
         working-directory: ./backend
         run: |
           npm install
-          npm run build --if-present # Run build if your backend needs it (e.g., TypeScript)
+          npm run build --if-present
 
       - name: Zip artifact for deployment (backend only)
-        # Only zip the contents of the backend directory
         run: |
           cd backend
           zip ../release.zip ./* -r
@@ -46,7 +37,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: release.zip # Upload the zip created from the backend directory
+          path: release.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -54,25 +45,12 @@ jobs:
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    permissions:
-      id-token: write # Required for OIDC login
 
     steps:
       - name: Download artifact from build job
         uses: actions/download-artifact@v4
         with:
           name: node-app
-          # Artifact is downloaded into the root of the runner workspace
-
-      # No unzip step needed if deploying the zip directly
-
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          # Use secrets for explicit OIDC login with User-assigned identity
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
@@ -80,4 +58,5 @@ jobs:
         with:
           app-name: 'futnet-backend-sk123'
           slot-name: 'Production'
-          package: release.zip # Deploy the zip artifact directly
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: release.zip
