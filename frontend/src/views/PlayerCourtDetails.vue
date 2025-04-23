@@ -332,11 +332,15 @@ const handleProceedBooking = (details) => {
   showBookingModal.value = true
 }
 
-const handleConfirmBooking = async ({ paymentMethod }) => {
+const handleConfirmBooking = async ({ paymentMethod, usingFreeSlots }) => {
   const context = 'FRONTEND_BOOKING_SUBMIT';
   try {
     isProcessingBooking.value = true;
-    log('INFO', context, `Starting booking confirmation process with method: ${paymentMethod}`, { bookingDetails: bookingDetails.value, courtRequiresPrepayment: court.value?.requirePrepayment });
+    log('INFO', context, `Starting booking confirmation process with method: ${paymentMethod}`, { 
+      bookingDetails: bookingDetails.value, 
+      courtRequiresPrepayment: court.value?.requirePrepayment,
+      usingFreeSlots
+    });
 
     // Use the raw date string (YYYY-MM-DD) directly from bookingDetails
     const dateToSend = bookingDetails.value.date;
@@ -389,7 +393,10 @@ const handleConfirmBooking = async ({ paymentMethod }) => {
         name: localStorage.getItem('username') || '',
         email: localStorage.getItem('email') || '',
         phone: localStorage.getItem('phone') || ''
-      }
+      },
+      // Add specific flag for free slot usage
+      isSlotFree: paymentMethod === 'offline' && (usingFreeSlots || bookingDetails.value.usingFreeSlots),
+      freeBookingsRemaining: bookingDetails.value.freeBookingsRemaining
     };
 
     log('INFO', context, 'Sending booking request to backend.', bookingData);
@@ -461,7 +468,10 @@ const handleConfirmBooking = async ({ paymentMethod }) => {
         alert('Booking processed successfully!'); // Use toast
         showBookingModal.value = false;
         bookingDetails.value = null;
+        
+        // Ensure the booking section is fully refreshed
         bookingSectionRef.value?.refreshBookingData(); // Refresh slots
+        
         router.push('/my-bookings'); // Navigate to bookings page
       }
 

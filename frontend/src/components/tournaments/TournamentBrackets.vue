@@ -1503,6 +1503,7 @@ export default {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('Authentication is required. Please log in.');
 
+        // Change the endpoint back to the standard route as it is already configured to return bracket details for admins
         const response = await fetch(`${API_URL}/api/tournaments/${id}`, {
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
         });
@@ -1514,11 +1515,26 @@ export default {
 
         const data = await response.json();
         console.log('Fetched tournament data:', data);
-        tournamentName.value = data.name || 'Tournament';
+        
+        // Extract tournament data from the nested structure
+        const tournamentData = data.tournament || data;
+        
+        console.log('Bracket data structure:', tournamentData.bracket ? {
+          roundsExist: Array.isArray(tournamentData.bracket.rounds),
+          roundsLength: tournamentData.bracket.rounds ? tournamentData.bracket.rounds.length : 0,
+          roundsStructure: tournamentData.bracket.rounds ? 
+            tournamentData.bracket.rounds.map(r => ({
+              round: r.round,
+              matchesCount: r.matches ? r.matches.length : 0
+            })) : 'No rounds array'
+        } : 'No bracket data');
+        
+        tournamentName.value = tournamentData.name || 'Tournament';
 
         // Process Registered Teams
-        if (data.registeredTeamsDetails && data.registeredTeamsDetails.length > 0) {
-            teams.value = data.registeredTeamsDetails.map(teamDetail => ({
+        const registeredTeams = data.registeredTeamsDetails || [];
+        if (registeredTeams.length > 0) {
+            teams.value = registeredTeams.map(teamDetail => ({
                 id: teamDetail._id || `team-${Math.random()}`,
                 name: teamDetail.teamName || 'Unnamed Team'
             }));
@@ -1529,16 +1545,16 @@ export default {
         }
 
         // Process Bracket Data
-        if (data.bracket && data.bracket.rounds) {
-            console.log("Processing bracket data:", data.bracket);
+        if (tournamentData.bracket && tournamentData.bracket.rounds) {
+            console.log("Processing bracket data:", tournamentData.bracket);
             const processedRounds = [];
             let foundByeBye = false; // Flag to detect Bye vs Bye
             
             // Handle nested rounds structure - the API returns rounds as objects with 'round' property and 'matches' array
-            if (Array.isArray(data.bracket.rounds)) {
+            if (Array.isArray(tournamentData.bracket.rounds)) {
                 // Check if rounds is an array of round objects (each with round number and matches array)
                 // This is how the data comes from the backend - we need to handle it properly
-                for (const roundData of data.bracket.rounds) {
+                for (const roundData of tournamentData.bracket.rounds) {
                     if (roundData && typeof roundData === 'object' && roundData.round && Array.isArray(roundData.matches)) {
                         // Create a round object with proper structure
                         const roundObj = {
@@ -1665,10 +1681,10 @@ export default {
                     console.log('Bracket loaded and propagated from fetched data.');
                     
                     // Load Stats if available
-                    if (data.stats) {
-                        if (data.stats.topScorer) tournamentStats.topScorer = data.stats.topScorer;
-                        if (data.stats.mvp) tournamentStats.mvp = data.stats.mvp;
-                        if (data.stats.playerOfTournament) tournamentStats.playerOfTournament = data.stats.playerOfTournament;
+                    if (tournamentData.stats) {
+                        if (tournamentData.stats.topScorer) tournamentStats.topScorer = tournamentData.stats.topScorer;
+                        if (tournamentData.stats.mvp) tournamentStats.mvp = tournamentData.stats.mvp;
+                        if (tournamentData.stats.playerOfTournament) tournamentStats.playerOfTournament = tournamentData.stats.playerOfTournament;
                     }
                     
                     // Update tournament positions & Calculate goals using nextTick
@@ -1688,7 +1704,7 @@ export default {
                     }
                 }
             } else {
-                console.error("Invalid bracket.rounds structure:", data.bracket.rounds);
+                console.error("Invalid bracket.rounds structure:", tournamentData.bracket.rounds);
                 if (teams.value.length >= 2) {
                     console.log('Invalid bracket structure but enough teams. Generating new one.');
                     generateBracket();
@@ -1739,17 +1755,26 @@ export default {
         loading.value = true;
         backendDataWarning.value = null;
         
-        // Prepare data to send
-        const bracketData = {
+        // Prepare data to send - Ensure the bracket structure is properly formatted for the backend
+        // Deep clone and prepare the structure to avoid proxy issues
+        const formattedBracketData = {
           bracket: {
-            teams: teams.value,
-            rounds: rounds.value,
+            teams: JSON.parse(JSON.stringify(teams.value)),
+            rounds: JSON.parse(JSON.stringify(rounds.value)),
             generated: true
           },
-          stats: tournamentStats
+          stats: JSON.parse(JSON.stringify(tournamentStats))
         };
         
         console.log(`Saving tournament bracket changes for tournament: ${route.params.id}`);
+        console.log('Data being sent to save:', {
+          teamsCount: formattedBracketData.bracket.teams.length,
+          roundsCount: formattedBracketData.bracket.rounds.length,
+          roundsStructure: formattedBracketData.bracket.rounds.map(r => ({
+            round: r.round,
+            matchesCount: r.matches.length
+          }))
+        });
         
         // Make API call to update bracket
         const response = await fetch(`${API_URL}/api/tournaments/${route.params.id}/update-bracket`, {
@@ -1758,7 +1783,7 @@ export default {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           },
-          body: JSON.stringify(bracketData)
+          body: JSON.stringify(formattedBracketData)
         });
         
         if (!response.ok) {
@@ -1787,14 +1812,14 @@ export default {
         
         loading.value = true;
         
-        // Prepare data to send
-        const bracketData = {
+        // Prepare data to send - use deep clone to avoid proxy issues
+        const formattedBracketData = {
           bracket: {
-            teams: teams.value,
-            rounds: rounds.value,
+            teams: JSON.parse(JSON.stringify(teams.value)),
+            rounds: JSON.parse(JSON.stringify(rounds.value)),
             generated: true
           },
-          stats: tournamentStats,
+          stats: JSON.parse(JSON.stringify(tournamentStats)),
           isPublished: true
         };
         
@@ -1807,7 +1832,7 @@ export default {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           },
-          body: JSON.stringify(bracketData)
+          body: JSON.stringify(formattedBracketData)
         });
         
         if (!response.ok) {

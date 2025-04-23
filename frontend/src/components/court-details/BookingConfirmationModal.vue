@@ -51,47 +51,27 @@
           </div>
         </div>
 
-        <!-- Free Booking Info -->
-        <div v-if="bookingDetails.isFreeBooking" class="bg-green-500/10 border border-green-500/20 rounded-lg p-4 mt-4">
-          <div class="flex items-center gap-2">
-            <CheckCircleIcon class="w-5 h-5 text-green-400" />
-            <p class="text-green-400">This booking qualifies for a free slot! You can either confirm it as free or choose to prepay and earn loyalty points.</p>
-          </div>
-          <div class="mt-2 text-xs text-purple-300">
-            <span class="font-medium">💰 Bonus:</span> Prepaying even for free slots earns you 15 loyalty points!
-          </div>
-        </div>
-
         <!-- Payment Required Info (No Prepayment Needed by Court) -->
-         <div v-if="!requiresPrepayment && bookingDetails.requiresPayment" class="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-          <p class="text-yellow-400 text-sm mb-2">
-            Payment required. You can choose to:
+         <div v-if="!requiresPrepayment" class="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4">
+          <p class="text-blue-400 text-sm mb-2">
+            This court does not require prepayment. You can:
           </p>
           <ul class="text-sm text-gray-300 list-disc pl-5 space-y-1">
-            <li>Pay physically at the venue (no bonus points)</li>
-            <li class="text-purple-300">Prepay with Khalti or loyalty points and earn 15 bonus points!</li>
+            <li>Choose <span class="font-semibold">"Pay Physically at Venue"</span> to confirm now and pay later.</li>
+            <li class="text-purple-300">Optionally prepay with Khalti or loyalty points to earn 15 bonus points!</li>
           </ul>
         </div>
 
         <!-- Prepayment Required Info -->
         <div v-if="requiresPrepayment" class="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
           <p class="text-yellow-400 text-sm mb-2">
-            This court requires prepayment. Please choose a payment method below:
+            This court requires prepayment. Please choose a payment method below.
           </p>
           <ul class="text-sm text-gray-300 list-disc pl-5">
             <li class="text-purple-300">Prepayment earns you 15 bonus loyalty points!</li>
           </ul>
         </div>
 
-        <!-- REMOVE Old Payment Buttons -->
-        <!-- 
-         <div v-if="!requiresPrepayment && bookingDetails.requiresPayment" class="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4">
-            ...
-              <button>Pay with eSewa</button>
-              <button>Pay with Khalti</button>
-            ...
-         </div>
-        -->
       </div>
     </template>
 
@@ -105,108 +85,57 @@
           Cancel
         </button>
         
-        <!-- Conditional Buttons Based on Booking State -->
+        <!-- Buttons Based ONLY on requiresPrepayment -->
 
-        <!-- 1. Free Booking -->
-<!-- Free Booking Button -->
-    <button
-      v-if="bookingDetails.isFreeBooking"
-      @click="onConfirmBooking('free')" 
-      :disabled="isProcessing"
-      class="px-4 py-1.5 bg-green-500 text-white text-sm font-medium rounded-md hover:bg-green-600 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-sm"
-    >
-      <Loader2Icon v-if="isProcessing" class="animate-spin w-3.5 h-3.5" />
-      <span>Confirm Booking</span>
-    </button>
-
-    <!-- Optional Prepayment Buttons for Free Bookings -->
-    <template v-if="bookingDetails.isFreeBooking">
-      <button 
-        @click="onConfirmBooking('khalti')" 
-        :disabled="isProcessing"
-        class="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-sm"
-      >
-        <Loader2Icon v-if="isProcessing" class="animate-spin w-3.5 h-3.5" />
-        <span>Pay with Khalti</span>
-      </button>
-      
-      <button 
-        @click="onConfirmBooking('points')" 
-        :disabled="isProcessing || bookingDetails.availablePoints < bookingDetails.totalPointsCost || bookingDetails.totalPointsCost <= 0"
-        class="px-4 py-1.5 bg-purple-600 text-white text-sm font-medium rounded-md hover:bg-purple-700 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 shadow-sm"
-      >
-        <Loader2Icon v-if="isProcessing" class="animate-spin w-3.5 h-3.5" />
-        <span>Pay with Points</span>
-      </button>
-    </template>
-
-        <!-- 2. Court Requires Prepayment -->
+        <!-- 1. Court Requires Prepayment -->
         <template v-if="requiresPrepayment">
           <button 
             @click="onConfirmBooking('khalti')" 
             :disabled="isProcessing"
-            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
+            class="modal-button primary">
             <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
             Pay with Khalti
           </button>
           <button 
             @click="onConfirmBooking('points')" 
             :disabled="isProcessing || bookingDetails.availablePoints < bookingDetails.totalPointsCost || bookingDetails.totalPointsCost <= 0"
-            class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
+            class="modal-button secondary">
             <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
             <BadgeCentIcon class="w-4 h-4 mr-1" />
             Pay with {{ bookingDetails.totalPointsCost }} Points
           </button>
         </template>
         
-        <!-- 3. Court DOES NOT Require Prepayment, BUT Payment IS Required (Used Free Slots) -->
-        <template v-if="!requiresPrepayment && bookingDetails.requiresPayment">
+        <!-- 2. Court DOES NOT Require Prepayment -->
+        <template v-else>
            <button 
             @click="onConfirmBooking('khalti')" 
             :disabled="isProcessing"
-            class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
+            class="modal-button primary">
             <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
-            Pay with Khalti (Prepay)
+            Prepay with Khalti
           </button>
           <button 
             @click="onConfirmBooking('points')" 
             :disabled="isProcessing || bookingDetails.availablePoints < bookingDetails.totalPointsCost || bookingDetails.totalPointsCost <= 0"
-            class="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
+            class="modal-button secondary">
             <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
              <BadgeCentIcon class="w-4 h-4 mr-1" />
-            Pay with {{ bookingDetails.totalPointsCost }} Points (Prepay)
+            Prepay with {{ bookingDetails.totalPointsCost }} Points
           </button>
            <button 
-            @click="onConfirmBooking('physical')" 
+            @click="onConfirmBooking('offline')" 
             :disabled="isProcessing"
-            class="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4" />
-            Pay Physically at Venue
+            class="modal-button tertiary flex items-center">
+            <Loader2Icon v-if="isProcessing" class="animate-spin w-4 h-4 mr-1" />
+            <span v-if="bookingDetails.freeBookingsRemaining > 0" class="flex items-center">
+              <span class="bg-blue-500 text-white text-xs font-bold rounded px-1 mr-2">Free Slot</span>
+              Pay Physically at Venue
+            </span>
+            <span v-else>Pay Physically at Venue</span>
           </button>
         </template>
 
-        <!-- REMOVE OLD Buttons -->
-        <!-- 
-        <button
-          v-if="requiresPrepayment || bookingDetails.requiresPayment" 
-          @click="onConfirmBooking" 
-          ...
-        >
-          Pay with Khalti
-        </button>
-        <button
-          v-else 
-          @click="onConfirmBooking" 
-          ...
-        >
-          Confirm Booking (Free)
-        </button> 
-        -->
       </div>
     </template>
   </BaseModal>
@@ -214,7 +143,7 @@
 
 <script setup>
 import BaseModal from '@/components/BaseModal.vue'
-import { Loader2Icon, CheckCircleIcon, BadgeCentIcon } from 'lucide-vue-next'
+import { Loader2Icon, BadgeCentIcon } from 'lucide-vue-next'
 import { useTimeFormatting } from '@/composables/useTimeFormatting'
 const { formatTime, formatDate } = useTimeFormatting()
 
@@ -255,8 +184,6 @@ const props = defineProps({
       slots: [], 
       totalAmount: 0, 
       totalPointsCost: 0,
-      isFreeBooking: false,
-      requiresPayment: false,
       availablePoints: 0
     })
   },
@@ -275,16 +202,34 @@ const emit = defineEmits(['close', 'confirm-booking'])
 // Event handlers
 const onClose = () => emit('close')
 const onConfirmBooking = (paymentMethod) => {
-  // Enhanced logging for debugging the payment flow
-  console.log('[BookingConfirmationModal] Emitting confirm-booking with payload:', { 
+  // Create payload with all necessary information
+  const payload = { 
     paymentMethod,
-    isFreeBooking: props.bookingDetails.isFreeBooking,
-    requiresPayment: props.bookingDetails.requiresPayment,
     requiresPrepayment: props.requiresPrepayment,
     availablePoints: props.bookingDetails.availablePoints,
-    totalPointsCost: props.bookingDetails.totalPointsCost
-  });
-  emit('confirm-booking', { paymentMethod });
+    totalPointsCost: props.bookingDetails.totalPointsCost,
+    // Important: Send usingFreeSlots flag specifically for offline payments
+    usingFreeSlots: paymentMethod === 'offline' ? true : false
+  };
+  
+  console.log('[BookingConfirmationModal] Emitting confirm-booking with payload:', payload);
+  emit('confirm-booking', payload);
 }
 
 </script>
+
+<style scoped>
+/* Add generic button styles if needed */
+.modal-button {
+    @apply px-6 py-2 rounded-lg text-white font-medium hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-opacity;
+}
+.modal-button.primary {
+    @apply bg-blue-600;
+}
+.modal-button.secondary {
+    @apply bg-purple-600;
+}
+.modal-button.tertiary {
+    @apply bg-gray-600;
+}
+</style>

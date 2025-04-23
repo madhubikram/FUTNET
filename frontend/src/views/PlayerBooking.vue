@@ -114,8 +114,8 @@
                 </div>
                 <div class="md:text-right">
                   <p class="text-lg md:text-xl font-semibold text-green-400">Rs. {{ booking.price }}</p>
-                  <p class="text-xs capitalize" :class="getPaymentStatusColor(booking.paymentStatus)">
-                     Payment: {{ getPaymentStatusText(booking.paymentStatus) }}
+                  <p class="text-xs capitalize" :class="getPaymentStatusColor(booking.paymentStatus, booking.paymentDetails?.method)">
+                     Payment: {{ getPaymentStatusText(booking.paymentStatus, booking.paymentDetails?.method) }}
                   </p>
                 </div>
               </div>
@@ -210,8 +210,8 @@
                 </div>
                 <div class="md:text-right">
                   <p class="text-lg font-semibold text-gray-300">Rs. {{ booking.price }}</p>
-                  <p class="text-xs text-gray-500">
-                    {{ booking.paymentMethod === 'free' ? 'Free Booking' : (booking.paymentStatus || 'N/A') }}
+                  <p class="text-xs capitalize" :class="getPaymentStatusColor(booking.paymentStatus, booking.paymentDetails?.method)">
+                     Payment: {{ getPaymentStatusText(booking.paymentStatus, booking.paymentDetails?.method) }}
                   </p>
                 </div>
               </div>
@@ -315,7 +315,7 @@
                 Rs. {{ selectedBooking.price }}
               </span>
               <span class="text-xs ml-1 capitalize">
-                 {{ getPaymentStatusText(selectedBooking.paymentStatus) }}
+                 {{ getPaymentStatusText(selectedBooking.paymentStatus, selectedBooking.paymentDetails?.method) }}
               </span>
             </div>
           </div>
@@ -653,30 +653,34 @@ const getStatusBgColor = (status) => {
   }
 };
 
-const getPaymentStatusColor = (status) => {
+const getPaymentStatusColor = (status, method) => {
   switch (status) {
     case 'unpaid':
-      return 'text-yellow-400';
+      return method === 'offline' ? 'text-blue-400' : 'text-yellow-400';
     case 'pending':
       return 'text-yellow-400';
     case 'paid':
       return 'text-green-400';
     case 'completed':
       return 'text-green-400';
+    case 'failed':
+    case 'cancelled':
+      return 'text-red-400';
+    case 'refunded':
+      return 'text-orange-400';
     default:
       return 'text-gray-400';
   }
 };
 
-const getPaymentStatusText = (status) => {
-  switch (status) {
-    case 'paid': return '(Paid)';
-    case 'unpaid': return '(No Prepayment)';
-    case 'pending': return '(Pending)';
-    case 'failed': return '(Failed)';
-    case 'refunded': return '(Refunded)';
-    default: return '(N/A)';
-  }
+const getPaymentStatusText = (status, method) => {
+  if (status === 'paid') return `Paid ${method ? '(' + method + ')' : ''}`;
+  if (status === 'unpaid' && method === 'offline') return 'Pay at Venue';
+  if (status === 'unpaid') return 'Unpaid';
+  if (status === 'pending') return 'Pending';
+  if (status === 'failed') return 'Failed';
+  if (status === 'refunded') return 'Refunded';
+  return status || 'N/A';
 };
 
 const showBookingDetails = (booking) => {

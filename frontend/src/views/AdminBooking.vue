@@ -265,21 +265,26 @@
                  </button>
                   <!-- Action Menu - Adjusted position for better screen edge handling -->
                   <transition enter-active-class="transition ease-out duration-150" enter-from-class="transform opacity-0 scale-90" enter-to-class="transform opacity-100 scale-100" leave-active-class="transition ease-in duration-100" leave-from-class="transform opacity-100 scale-100" leave-to-class="transform opacity-0 scale-90">
-                    <div v-if="activeActionMenu===booking._id" :id="'action-menu-'+booking._id" class="absolute right-8 lg:right-full lg:left-auto top-full lg:top-1/2 lg:-translate-y-1/2 mt-2 lg:mt-0 lg:mr-3 w-52 origin-top-right lg:origin-right bg-gray-700/90 backdrop-blur-md rounded-lg shadow-xl ring-1 ring-black/10 focus:outline-none z-10 border border-gray-600/50" role="menu" aria-orientation="vertical" @click.stop>
-                      <div class="py-1.5" role="none"> <!-- Increased padding -->
-                        <!-- Action items styling defined in CSS -->
-                        <template v-if="booking.status==='pending' && !booking.isSlotFree && !isBookingInPast(booking)"><button @click="updateBookingStatus(booking._id, 'confirmed')" class="action-menu-item"><CheckCircle class="action-menu-icon text-green-400"/>Confirm</button></template>
+                    <div v-if="activeActionMenu===booking._id" :id="'action-menu-'+booking._id" class="action-menu-container" role="menu" aria-orientation="vertical" @click.stop>
+                      <div class="py-1.5" role="none"> 
+                        <!-- Confirm Booking -->
+                        <template v-if="booking.status==='pending' && !booking.isSlotFree && !isBookingInPast(booking)">
+                          <button @click="updateBookingStatus(booking._id, 'confirmed')" class="action-menu-item"><CheckCircle class="action-menu-icon text-green-400"/>Confirm</button>
+                        </template>
                         
-                        <template v-if="booking.paymentStatus==='pending' || booking.paymentStatus==='unpaid'"><button @click="updatePaymentStatus(booking._id, 'paid')" class="action-menu-item"><CreditCard class="action-menu-icon text-yellow-400"/>Mark Paid</button></template>
+                        <!-- Mark Paid -->
+                        <template v-if="booking.paymentStatus==='pending' || booking.paymentStatus==='unpaid'">
+                          <button @click="updatePaymentStatus(booking._id, 'paid')" class="action-menu-item"><CreditCard class="action-menu-icon text-yellow-400"/>Mark Paid</button>
+                        </template>
                         
-                        <!-- NEW: Mark Unpaid option -->
-                        <template v-if="booking.paymentStatus === 'paid'">
+                        <!-- Mark Unpaid (Conditionally Hidden) -->
+                        <template v-if="booking.paymentStatus === 'paid' && booking.paymentDetails?.method !== 'khalti' && booking.paymentDetails?.method !== 'points'">
                           <button @click="updatePaymentStatus(booking._id, 'unpaid')" class="action-menu-item">
                             <ArrowLeftRight class="action-menu-icon text-orange-400"/>Mark Unpaid
                           </button>
                         </template>
                         
-                        <!-- Conditionally disable Reschedule/Cancel -->
+                        <!-- Reschedule/Cancel (Conditionally Enabled) -->
                         <template v-if="['pending', 'confirmed'].includes(booking.status)">
                           <button 
                             @click="showRescheduleModal(booking)" 
@@ -297,8 +302,10 @@
                           </button>
                         </template>
 
-                        <div class="my-1.5 border-t border-gray-600/60" v-if="((['pending','confirmed'].includes(booking.status) && !isBookingInPast(booking)) || booking.paymentStatus!=='cancelled')"></div>
+                        <!-- Separator -->
+                        <div class="my-1.5 border-t border-gray-600/60" v-if="hasCancelOrRescheduleOptions(booking) || hasPaymentOptions(booking)"></div>
                         
+                        <!-- Delete -->
                         <button @click="deleteBooking(booking._id)" class="action-menu-item text-red-400 hover:!bg-red-500/20 hover:!text-red-300"><Trash2 class="action-menu-icon"/>Delete</button>
                       </div>
                     </div>
@@ -490,45 +497,82 @@ const toggleSelectAll = () => {
 // Updated Bulk Action Handlers
 const handleBulkMarkPaid = async () => {
   if (selectedCount.value === 0 || isProcessingBulkAction.value) return;
-  const ids = Array.from(selectedBookingIds.value);
-  console.log('Bulk Mark Paid:', ids);
-  isProcessingBulkAction.value = true;
-  try {
-    const response = await axios.patch('/api/bookings/admin/bulk-status', 
-      { 
-        ids: ids, 
-        paymentStatus: 'paid' 
-      },
-      { withCredentials: true }
-    );
-    toast.success(`${response.data.updatedCount || 0} booking(s) marked as paid.`);
-    await fetchData(); // Refresh data
-    selectedBookingIds.value.clear(); // Clear selection
-  } catch (error) {
-    console.error('Bulk Mark Paid Error:', error);
-    toast.error(error.response?.data?.message || 'Failed to mark bookings as paid.');
-  } finally {
-    isProcessingBulkAction.value = false;
+  if (confirm(`Are you sure you want to mark ${selectedCount.value} booking(s) as paid?`)) {
+    const ids = Array.from(selectedBookingIds.value);
+    isProcessingBulkAction.value = true;
+    let successCount = 0;
+    let failCount = 0;
+    
+    try {
+      // Process each booking one by one
+      for (const id of ids) {
+        try {
+          await axios.patch(
+            `/api/bookings/${id}/payment`, 
+            { paymentStatus: 'paid' }, 
+            { withCredentials: true }
+          );
+          successCount++;
+        } catch (err) {
+          console.error(`Error marking booking ${id} as paid:`, err);
+          failCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`${successCount} booking(s) marked as paid.`);
+      }
+      if (failCount > 0) {
+        toast.warning(`${failCount} booking(s) could not be marked as paid.`);
+      }
+      
+      await fetchData(); // Refresh data
+      selectedBookingIds.value.clear(); // Clear selection
+    } catch (error) {
+      console.error('Bulk Mark Paid Error:', error);
+      toast.error(error.response?.data?.message || 'Failed to mark bookings as paid.');
+    } finally {
+      isProcessingBulkAction.value = false;
+    }
   }
 };
 
 const handleBulkCancel = async () => {
   if (selectedCount.value === 0 || isProcessingBulkAction.value) return;
-  const ids = Array.from(selectedBookingIds.value);
-  console.log('Bulk Cancel:', ids);
-  if (confirm(`Are you sure you want to cancel ${ids.length} selected booking(s)?`)) {
+  if (confirm(`Are you sure you want to cancel ${selectedCount.value} selected booking(s)?`)) {
+    const ids = Array.from(selectedBookingIds.value);
     isProcessingBulkAction.value = true;
+    let successCount = 0;
+    let failCount = 0;
+    
     try {
-        const response = await axios.patch('/api/bookings/admin/bulk-cancel', 
-          { ids: ids }, 
-          { withCredentials: true }
-        );
-        toast.success(`${response.data.updatedCount || 0} booking(s) cancelled.`);
-        await fetchData(); // Refresh data
-        selectedBookingIds.value.clear(); // Clear selection
+      // Process each booking one by one
+      for (const id of ids) {
+        try {
+          await axios.patch(
+            `/api/bookings/${id}/cancel`, 
+            { reason: 'Bulk cancellation by admin' }, 
+            { withCredentials: true }
+          );
+          successCount++;
+        } catch (err) {
+          console.error(`Error cancelling booking ${id}:`, err);
+          failCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`${successCount} booking(s) cancelled.`);
+      }
+      if (failCount > 0) {
+        toast.warning(`${failCount} booking(s) could not be cancelled.`);
+      }
+      
+      await fetchData(); // Refresh data
+      selectedBookingIds.value.clear(); // Clear selection
     } catch (error) {
-        console.error('Bulk Cancel Error:', error);
-        toast.error(error.response?.data?.message || 'Failed to cancel bookings.');
+      console.error('Bulk Cancel Error:', error);
+      toast.error(error.response?.data?.message || 'Failed to cancel bookings.');
     } finally {
       isProcessingBulkAction.value = false;
     }
@@ -537,22 +581,39 @@ const handleBulkCancel = async () => {
 
 const handleBulkDelete = async () => {
   if (selectedCount.value === 0 || isProcessingBulkAction.value) return;
-  const ids = Array.from(selectedBookingIds.value);
-  console.log('Bulk Delete:', ids);
-  if (confirm(`Are you sure you want to permanently delete ${ids.length} selected booking(s)? This also deletes associated timeslots and cannot be undone.`)) {
+  if (confirm(`Are you sure you want to permanently delete ${selectedCount.value} selected booking(s)? This cannot be undone.`)) {
+    const ids = Array.from(selectedBookingIds.value);
     isProcessingBulkAction.value = true;
+    let successCount = 0;
+    let failCount = 0;
+    
     try {
-        // Using POST for bulk delete to avoid URL length issues with many IDs
-        const response = await axios.post('/api/bookings/admin/bulk-delete', 
-          { ids: ids }, 
-          { withCredentials: true }
-        );
-        toast.success(`${response.data.deletedCount || 0} booking(s) deleted.`);
-        await fetchData(); // Refresh data
-        selectedBookingIds.value.clear(); // Clear selection
+      // Process each booking one by one
+      for (const id of ids) {
+        try {
+          await axios.delete(
+            `/api/bookings/${id}`, 
+            { withCredentials: true }
+          );
+          successCount++;
+        } catch (err) {
+          console.error(`Error deleting booking ${id}:`, err);
+          failCount++;
+        }
+      }
+      
+      if (successCount > 0) {
+        toast.success(`${successCount} booking(s) deleted.`);
+      }
+      if (failCount > 0) {
+        toast.warning(`${failCount} booking(s) could not be deleted.`);
+      }
+      
+      await fetchData(); // Refresh data
+      selectedBookingIds.value.clear(); // Clear selection
     } catch (error) {
-        console.error('Bulk Delete Error:', error);
-        toast.error(error.response?.data?.message || 'Failed to delete bookings.');
+      console.error('Bulk Delete Error:', error);
+      toast.error(error.response?.data?.message || 'Failed to delete bookings.');
     } finally {
       isProcessingBulkAction.value = false;
     }
@@ -632,20 +693,48 @@ const closeActionMenu = () => { activeActionMenu.value = null; };
 
 const updateBookingStatus = async (id, status) => {
   isSubmitting.value = true; closeActionMenu();
-  try { await axios.patch(`/api/bookings/admin/${id}/status`, { status }, { withCredentials: true }); toast.success(`Booking confirmed`); await fetchData(); }
+  try { 
+    // Use standard REST endpoint for updating status
+    await axios.patch(
+      `/api/bookings/${id}`, 
+      { status: status }, 
+      { withCredentials: true }
+    ); 
+    toast.success(`Booking ${status}`); 
+    await fetchData(); 
+  }
   catch (error) { console.error('Status Update Error:', error); toast.error(error.response?.data?.message || 'Failed update.'); } finally { isSubmitting.value = false; }
 };
+
 const updatePaymentStatus = async (id, status) => {
     isSubmitting.value = true; closeActionMenu();
-    try { await axios.patch(`/api/bookings/admin/${id}/payment`, { paymentStatus: status }, { withCredentials: true }); toast.success(`Payment marked as ${status}`); await fetchData(); }
+    try { 
+      // Use standard REST endpoint for updating payment
+      await axios.patch(
+        `/api/bookings/${id}/payment`, 
+        { paymentStatus: status }, 
+        { withCredentials: true }
+      ); 
+      toast.success(`Payment marked as ${status}`); 
+      await fetchData(); 
+    }
     catch (error) { console.error('Payment Update Error:', error); toast.error(error.response?.data?.message || 'Failed update.'); } finally { isSubmitting.value = false; }
 };
+
 const deleteBooking = async (id) => {
   closeActionMenu(); if (window.confirm('Delete booking?')) { isSubmitting.value = true; console.log(`Delete: ${id}`);
-    try { await axios.delete(`/api/bookings/admin/${id}`, { withCredentials: true }); toast.success('Booking deleted'); await fetchData(); }
+    try { 
+      // Try standard REST delete endpoint
+      await axios.delete(`/api/bookings/${id}`, 
+        { withCredentials: true }
+      ); 
+      toast.success('Booking deleted'); 
+      await fetchData(); 
+    }
     catch (error) { console.error('Delete Error:', error); toast.error(error.response?.data?.message || 'Failed delete.'); } finally { isSubmitting.value = false; }
   } else { console.log('Delete cancelled.'); }
 };
+
 const showRescheduleModal = (booking) => {
   if (!booking || !booking._id) { console.error("Invalid data"); toast.error("Cannot reschedule."); return; }
   selectedBooking.value = { ...booking };
@@ -653,44 +742,61 @@ const showRescheduleModal = (booking) => {
   rescheduleData.startTime = booking.startTime; rescheduleData.endTime = booking.endTime;
   modalType.value = 'reschedule'; showModal.value = true; closeActionMenu();
 };
+
 const cancelBooking = async (id) => {
   if (!id) { console.error("Invalid ID"); toast.error("Cannot cancel."); return; }
   selectedBooking.value = bookings.value.find(b => b._id === id);
   if (!selectedBooking.value) { console.error(`Booking ${id} not found`); toast.error("Not found."); return; }
   cancelReason.value = ''; modalType.value = 'cancel'; showModal.value = true; closeActionMenu();
 };
+
 const confirmCancel = async () => {
   if (!selectedBooking.value) return; 
   isSubmitting.value = true;
   try { 
-    // --- FIX: Use the bulk-status endpoint for single cancellation ---
+    // Use standard REST endpoint for cancellation
     await axios.patch(
-      `/api/bookings/admin/bulk-status`, // Correct endpoint
-      { 
-        ids: [selectedBooking.value._id], // Send ID in an array
-        status: 'cancelled' 
-        // Reason is handled by the bulk endpoint internally, so removed from here
-      }, 
+      `/api/bookings/${selectedBooking.value._id}/cancel`, 
+      { reason: cancelReason.value }, 
       { withCredentials: true }
     );
-    // --- End Fix ---
     toast.success('Booking cancelled successfully'); 
     await fetchData(); 
     closeModal(); 
   } catch (error) { 
     console.error('Cancel Error:', error);
-    // Use a more specific error message if possible
     const errorMessage = error.response?.data?.message || 'Failed to cancel booking.'; 
     toast.error(errorMessage); 
   } finally { 
     isSubmitting.value = false; 
   }
 };
+
 const confirmReschedule = async () => {
-  if (!selectedBooking.value || !rescheduleData.date || !rescheduleData.startTime || !rescheduleData.endTime) { toast.warning('Select date/time.'); return; } isSubmitting.value = true;
-  try { const fmtDate = new Date(rescheduleData.date).toISOString().split('T')[0]; await axios.patch(`/api/bookings/admin/${selectedBooking.value._id}/reschedule`, { date: fmtDate, startTime: rescheduleData.startTime, endTime: rescheduleData.endTime }, { withCredentials: true }); toast.success('Rescheduled'); await fetchData(); closeModal(); }
+  if (!selectedBooking.value || !rescheduleData.date || !rescheduleData.startTime || !rescheduleData.endTime) { 
+    toast.warning('Select date/time.'); 
+    return; 
+  } 
+  isSubmitting.value = true;
+  try { 
+    const fmtDate = new Date(rescheduleData.date).toISOString().split('T')[0]; 
+    // Use standard REST endpoint for rescheduling
+    await axios.patch(
+      `/api/bookings/${selectedBooking.value._id}/reschedule`, 
+      { 
+        date: fmtDate, 
+        startTime: rescheduleData.startTime, 
+        endTime: rescheduleData.endTime 
+      }, 
+      { withCredentials: true }
+    ); 
+    toast.success('Rescheduled'); 
+    await fetchData(); 
+    closeModal(); 
+  }
   catch (error) { console.error('Reschedule Error:', error); toast.error(error.response?.data?.message || 'Reschedule failed.'); } finally { isSubmitting.value = false; }
 };
+
 const closeModal = () => { showModal.value = false; setTimeout(() => { selectedBooking.value = null; modalType.value = null; cancelReason.value = ''; Object.assign(rescheduleData,{date:'',startTime:'',endTime:''}); }, 300); };
 const formatFullDate=(dStr)=>{try{return new Date(dStr).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'})||'N/A'}catch{return 'Invalid'}};
 const calculateDuration=(s,e)=>{try{const sd=new Date(`1970-01-01T${s}:00Z`),ed=new Date(`1970-01-01T${e}:00Z`);let d=(ed-sd)/(1e3*60);if(d<0)d+=1440;const h=Math.floor(d/60),m=d%60;return `${h>0?h+'h ':''}${m>0?m+'m':''}`.trim()||'0m'}catch{return 'N/A'}};
@@ -756,6 +862,17 @@ const prevPage = () => {
     fetchData();
   }
 };
+
+// Helper computed properties for v-if conditions in the template (optional but cleaner)
+const hasCancelOrRescheduleOptions = (booking) => {
+  return ['pending', 'confirmed'].includes(booking.status) && !isBookingInPast(booking);
+};
+
+const hasPaymentOptions = (booking) => {
+  const canMarkPaid = booking.paymentStatus === 'pending' || booking.paymentStatus === 'unpaid';
+  const canMarkUnpaid = booking.paymentStatus === 'paid' && booking.paymentDetails?.method !== 'khalti' && booking.paymentDetails?.method !== 'points';
+  return canMarkPaid || canMarkUnpaid;
+};
 </script>
 
 <style scoped>
@@ -808,5 +925,9 @@ input[type="date"]::-webkit-calendar-picker-indicator { @apply opacity-60 cursor
 /* Style for checkboxes (optional, Tailwind plugin handles focus well) */
 input[type="checkbox"] {
   /* Add custom styles if desired */
+}
+
+.action-menu-container {
+  @apply absolute right-8 lg:right-full lg:left-auto top-full lg:top-1/2 lg:-translate-y-1/2 mt-2 lg:mt-0 lg:mr-3 w-52 origin-top-right lg:origin-right bg-gray-700/90 backdrop-blur-md rounded-lg shadow-xl ring-1 ring-black/10 focus:outline-none z-10 border border-gray-600/50;
 }
 </style>

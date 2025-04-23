@@ -16,7 +16,7 @@ const { createNotification } = require('../utils/notification.service');
 const { initiatePaymentFlow } = require('../controllers/payment.controller'); // <-- Import payment initiation
 const log = require('../utils/khalti.service').log; // <-- Use shared logger
 const { FreeSlots, FREE_SLOT_LIMIT_PER_DAY } = require('../models/freeSlots.model'); // <-- Import FreeSlots model
-const bookingController = require('../controllers/bookingController'); // Import booking controller
+const bookingController = require('../controllers/bookingController.js'); // Import booking controller with .js extension
 
 const POINTS_PER_HOUR = 10; // Define the points constant
 
@@ -27,8 +27,22 @@ router.get('/admin/all', auth, bookingController.getAllBookings);
 // Get bookings for a specific court (Admin only)
 router.get('/court/:courtId', auth, bookingController.getAdminCourtBookings);
 
-// Update booking status (Admin only)
-router.put('/:bookingId/status', auth, bookingController.updateBookingStatus);
+// Admin: Update general booking status (e.g., confirm)
+// Note: The frontend currently calls PATCH /api/bookings/:id for this
+router.patch('/:bookingId/status', auth, bookingController.updateBookingStatus);
+
+// Admin: Update payment status
+router.patch('/:bookingId/payment', auth, bookingController.updatePaymentStatus);
+
+// Admin: Cancel a booking
+router.patch('/:bookingId/cancel', auth, bookingController.cancelBooking);
+
+// Admin: Reschedule a booking
+router.patch('/:bookingId/reschedule', auth, bookingController.rescheduleBooking);
+
+// Admin: Permanently DELETE a booking
+// This REPLACES the previous DELETE route which pointed to cancelBooking
+router.delete('/:bookingId', auth, bookingController.adminDeleteBooking);
 
 // --- Player/General Routes SECOND (Less Specific / Parameterized) ---
 // Get all bookings for the logged-in user
@@ -46,14 +60,10 @@ router.get('/:bookingId', auth, bookingController.getBookingById);
 // Create a new booking
 router.post('/', auth, bookingController.createBooking);
 
-// Cancel a booking (Player or Admin)
-router.delete('/:bookingId', auth, bookingController.cancelBooking);
-
-// Delete booking history (Player only)
+// User: Delete booking from their history (NOT permanent delete)
 router.post('/:bookingId/delete', auth, bookingController.deleteBookingHistory);
 
 // --- Debug Routes ---
 router.post('/debug/create-test', auth, bookingController.createTestBooking);
-
 
 module.exports = router;

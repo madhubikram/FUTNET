@@ -65,8 +65,11 @@ const authMiddleware = async (req, res, next) => {
     
     // Attach user and token to request
     req.user = user;
+    // Also add userId directly to req.user for convenience and consistency
+    req.user.userId = user._id.toString();
     req.token = token;
     console.log(`[AUTH] Authentication successful for user: ${user._id}`);
+    console.log(`[AUTH] req.user set with userId=${req.user.userId}, _id=${req.user._id}`);
     next();
 
   } catch (error) {
