@@ -67,7 +67,7 @@
       
       // Then fetch court details for each favorite
       const token = localStorage.getItem('token')
-      const response = await fetch(`${API_URL}/courts`, {
+      const response = await fetch(`${API_URL}/api/courts`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -267,18 +267,35 @@
   }
   
   // Toggle favorite (remove from favorites)
-  const toggleFavorite = (futsal) => {
-    // Get current favorites
-    const favorites = JSON.parse(localStorage.getItem('favoriteCourts')) || []
-    
-    // Remove the court from favorites
-    const updatedFavorites = favorites.filter(id => id !== futsal.id)
-    
-    // Update localStorage
-    localStorage.setItem('favoriteCourts', JSON.stringify(updatedFavorites))
-    
-    // Update UI
-    favoriteCourts.value = favoriteCourts.value.filter(court => court.id !== futsal.id)
+  const toggleFavorite = async (futsal) => {
+    const isCurrentlyFavorite = futsal.isFavorite;
+    // Optimistic UI update
+    futsal.isFavorite = !isCurrentlyFavorite;
+
+    try {
+      const response = await fetch(`${API_URL}/api/profile/favorites/${futsal.id}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to toggle favorite')
+      }
+
+      // Update localStorage
+      const favorites = JSON.parse(localStorage.getItem('favoriteCourts')) || []
+      const updatedFavorites = favorites.filter(id => id !== futsal.id)
+      localStorage.setItem('favoriteCourts', JSON.stringify(updatedFavorites))
+      
+      // Update UI
+      favoriteCourts.value = favoriteCourts.value.filter(court => court.id !== futsal.id)
+    } catch (error) {
+      console.error('Error toggling favorite:', error)
+      // Revert UI update
+      futsal.isFavorite = isCurrentlyFavorite;
+    }
   }
   
   onMounted(() => {

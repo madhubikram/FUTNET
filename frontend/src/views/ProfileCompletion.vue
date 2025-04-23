@@ -166,7 +166,7 @@ const handleSubmit = async () => {
 
   isSubmitting.value = true
   try {
-    const response = await fetch(`${API_URL}/futsal/profile`, {
+    const response = await fetch(`${API_URL}/api/futsal/profile`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`,

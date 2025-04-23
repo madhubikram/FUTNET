@@ -711,7 +711,7 @@ const fetchTournaments = async () => {
     const token = localStorage.getItem('token');
     console.log('Fetching with token:', token);
 
-    const response = await fetch(`${API_URL}/tournaments`, {
+    const response = await fetch(`${API_URL}/api/tournaments`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -774,7 +774,7 @@ const refreshTournaments = async () => {
         // Process tournaments in parallel
         const token = localStorage.getItem('token');
         const refreshPromises = activeTournaments.map(tournament => 
-          fetch(`${API_URL}/tournaments/${tournament._id}/refresh-status`, {
+          fetch(`${API_URL}/api/tournaments/${tournament._id}/refresh-status`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -939,8 +939,8 @@ const handleCreateTournament = async () => {
     }
 
     const url = editingTournamentId.value
-      ? `${API_URL}/tournaments/${editingTournamentId.value}`
-      : `${API_URL}/tournaments`;
+      ? `${API_URL}/api/tournaments/${editingTournamentId.value}`
+      : `${API_URL}/api/tournaments`;
 
     const method = editingTournamentId.value ? 'PUT' : 'POST';
 
@@ -991,8 +991,8 @@ const viewTournament = async (tournamentFromList) => {
   try {
     // Fetch fresh details from the backend using fetch
     const token = localStorage.getItem('token');
-    console.log(`[Frontend Log] Fetching details from GET ${API_URL}/tournaments/${tournamentFromList._id}`);
-    const response = await fetch(`${API_URL}/tournaments/${tournamentFromList._id}`, {
+    console.log(`[Frontend Log] Fetching details from GET ${API_URL}/api/tournaments/${tournamentFromList._id}`);
+    const response = await fetch(`${API_URL}/api/tournaments/${tournamentFromList._id}`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -1062,7 +1062,7 @@ const deleteTournament = async (tournamentToDelete) => {
   }
 
   try {
-    const response = await fetch(`${API_URL}/tournaments/${tournamentToDelete._id}`, {
+    const response = await fetch(`${API_URL}/api/tournaments/${tournamentToDelete._id}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token')}`

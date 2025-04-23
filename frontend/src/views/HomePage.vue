@@ -250,7 +250,7 @@ const fetchUserDetails = async () => {
 
   try {
     // Corrected Endpoint
-    const response = await fetch(`${API_URL}/profile`, { 
+    const response = await fetch(`${API_URL}/api/profile`, { 
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -533,7 +533,7 @@ const fetchCourts = async () => {
     const favorites = JSON.parse(localStorage.getItem('favoriteCourts')) || []
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/courts`, {
+    const response = await fetch(`${API_URL}/api/courts`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

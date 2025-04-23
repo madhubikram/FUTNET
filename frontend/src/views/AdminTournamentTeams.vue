@@ -158,7 +158,7 @@ const fetchTournamentAndTeams = async () => {
     console.log(`Fetching details for tournament: ${props.id}`);
     
     // Fetch tournament details (which includes bracket generation check on backend)
-    const tournamentResponse = await fetch(`${API_URL}/tournaments/${props.id}`, {
+    const tournamentResponse = await fetch(`${API_URL}/api/tournaments/${props.id}`, {
        headers: { 'Authorization': `Bearer ${token}` },
     });
     if (!tournamentResponse.ok) {
@@ -174,7 +174,7 @@ const fetchTournamentAndTeams = async () => {
 
     // Fetch registered teams details
     console.log(`Attempting to fetch registrations for tournament ${props.id}`);
-    const teamsResponse = await fetch(`${API_URL}/tournaments/${props.id}/registrations`, {
+    const teamsResponse = await fetch(`${API_URL}/api/tournaments/${props.id}/registrations`, {
       headers: { 'Authorization': `Bearer ${token}` },
     });
     

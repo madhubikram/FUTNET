@@ -13,7 +13,7 @@ export function useLoyaltyPoints() {
     const fetchPoints = async () => {
         try {
           loading.value = true;
-          const response = await api.fetchData('/loyalty/points');
+          const response = await api.fetchData('/api/loyalty/points');
           points.value = response.points || 0;
           return response;
         } catch (err) {
@@ -28,7 +28,7 @@ export function useLoyaltyPoints() {
       const fetchHistory = async () => {
         try {
           loading.value = true;
-          const response = await api.fetchData('/loyalty/history');
+          const response = await api.fetchData('/api/loyalty/history');
           history.value = response || [];
           return response;
         } catch (err) {

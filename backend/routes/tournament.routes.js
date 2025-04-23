@@ -42,11 +42,11 @@ try {
         tournamentController.getTournaments
     );
 
-    // Get single tournament
+    // Get single tournament details for Admin (includes bracket generation, etc.)
     router.get('/:id',
         auth,
         isFutsalAdmin,
-        tournamentController.getTournament
+        tournamentController.getTournamentDetailsForAdmin
     );
 
     // Update tournament

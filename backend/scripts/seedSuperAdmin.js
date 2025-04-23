@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('../models/user.model');
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 const superAdminCredentials = {
   firstName: 'Super',

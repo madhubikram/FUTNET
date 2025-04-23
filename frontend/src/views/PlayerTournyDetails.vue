@@ -623,7 +623,7 @@ const fetchTournamentDetails = async () => {
     error.value = null;
     log('INFO', context, `Fetching details for tournament ${route.params.id}`);
     
-    tournament.value = await fetchData(`/player/tournaments/${route.params.id}`);
+    tournament.value = await fetchData(`/api/player/tournaments/${route.params.id}`);
     
     log('INFO', context, `Successfully fetched tournament details for ${route.params.id}`);
     console.log('Fetched tournament:', tournament.value);
@@ -686,7 +686,7 @@ const handleRegistration = async () => {
 
     // --- Call Backend Registration Endpoint using fetchData --- 
     try {
-      const responseData = await fetchData(`/player/tournaments/${tournament.value._id}/register`, {
+      const responseData = await fetchData(`/api/player/tournaments/${tournament.value._id}/register`, {
           method: 'POST',
           body: JSON.stringify(registrationData)
       });
@@ -779,7 +779,7 @@ const fetchBracketData = async () => {
     bracketError.value = null;
     log('INFO', context, `Fetching bracket for tournament ${route.params.id}`);
     
-    const data = await fetchData(`/player/tournaments/${route.params.id}/bracket`);
+    const data = await fetchData(`/api/player/tournaments/${route.params.id}/bracket`);
     
     if (tournament.value && data) {
       bracketData.value = {

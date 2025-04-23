@@ -115,6 +115,7 @@ const router = useRouter();
 const map = ref(null);
 const futsals = ref([]);
 const loading = ref(true);
+const locationError = ref(null);
 const attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 // Futsal marker icon
@@ -158,14 +159,14 @@ const getUserLocation = () => {
     // Show loading state indicator (optional)
     
     navigator.geolocation.getCurrentPosition(
-      // Success callback
       (position) => {
         userLocation.value = {
           lat: position.coords.latitude,
           lng: position.coords.longitude
         };
-        
-        console.log('Got user location:', userLocation.value);
+        locationError.value = null; // Clear any previous error
+        console.log('Got user location (reactive value may update async): ', userLocation.value); // Log the ref
+        console.log('Actual position object received from browser:', position); // Log the raw position object
         
         // If map is available, pan to the user's location
         if (map.value) {
@@ -175,12 +176,10 @@ const getUserLocation = () => {
           );
         }
       },
-      // Error callback
       (error) => {
         console.error('Error getting location:', error);
         alert('Could not access your location. Please check your browser permissions.');
       },
-      // Options
       {
         enableHighAccuracy: true,
         timeout: 5000,
@@ -204,7 +203,7 @@ const fetchFutsals = async () => {
     loading.value = true;
     const token = localStorage.getItem('token');
     
-    const response = await fetch(`${API_URL}/courts`, {
+    const response = await fetch(`${API_URL}/api/courts`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }

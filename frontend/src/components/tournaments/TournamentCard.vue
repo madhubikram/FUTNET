@@ -100,6 +100,7 @@ import {
   CalendarIcon, MapPinIcon, UsersIcon, WalletIcon, 
   UserPlusIcon, BuildingIcon 
 } from 'lucide-vue-next'
+import { getAssetUrl } from '@/config/api'
 
 const props = defineProps({
   tournament: {

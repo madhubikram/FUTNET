@@ -896,8 +896,7 @@
 import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue';
 import { Trophy, Calendar, Clock, Shield, ZoomIn, ZoomOut, Star, Award, User, ChevronRight, Loader2Icon, ArrowLeftIcon, Save, Send, CheckCircle, AlertTriangle, X } from 'lucide-vue-next';
 import { useRoute, useRouter } from 'vue-router';
-import 'jquery'; // Import jQuery first
-import 'jquery-bracket'; // Then import jquery-bracket
+import { loadBracketAssets } from '@/utils/bracketSetup';
 import API_URL from '@/config/api';
 
 // --- Configuration ---
@@ -1504,7 +1503,7 @@ export default {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('Authentication is required. Please log in.');
 
-        const response = await fetch(`${API_URL}/tournaments/${id}`, {
+        const response = await fetch(`${API_URL}/api/tournaments/${id}`, {
           headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }
         });
 
@@ -1753,7 +1752,7 @@ export default {
         console.log(`Saving tournament bracket changes for tournament: ${route.params.id}`);
         
         // Make API call to update bracket
-        const response = await fetch(`${API_URL}/tournaments/${route.params.id}/update-bracket`, {
+        const response = await fetch(`${API_URL}/api/tournaments/${route.params.id}/update-bracket`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1802,7 +1801,7 @@ export default {
         console.log(`Publishing tournament: ${route.params.id}`);
         
         // Make API call to publish tournament
-        const response = await fetch(`${API_URL}/tournaments/${route.params.id}/publish`, {
+        const response = await fetch(`${API_URL}/api/tournaments/${route.params.id}/publish`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1888,7 +1887,10 @@ export default {
     };
 
     // --- Lifecycle Hooks & Watchers ---
-    onMounted(() => {
+    onMounted(async () => {
+      // Load jquery-bracket assets first (CSS and JS)
+      await loadBracketAssets();
+      
       const tournamentId = route.params.id;
       if (tournamentId) { fetchTournamentBracket(tournamentId); }
       else { teamInputRef.value?.focus(); }

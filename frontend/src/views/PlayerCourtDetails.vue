@@ -186,7 +186,7 @@ const fetchCourtDetails = async () => {
     error.value = null;
     log('INFO', context, `Fetching details for court ${route.params.id}`);
 
-    const data = await fetchData(`/player/courts/${route.params.id}`);
+    const data = await fetchData(`/api/player/courts/${route.params.id}`);
 
     // Improve duplicate review filtering with more strict comparison
     const uniqueReviews = Array.from(new Map(
@@ -214,7 +214,7 @@ const fetchCourtDetails = async () => {
 const handleSubmitReview = async (reviewData) => {
   try {
     const response = await fetch(
-      `${API_URL}/player/courts/${route.params.id}/reviews`,
+      `${API_URL}/api/player/courts/${route.params.id}/reviews`,
       {
         method: 'POST',
         headers: {
@@ -249,7 +249,7 @@ const handleUpdateReview = async (reviewData) => {
 
   try {
     const response = await fetch(
-      `${API_URL}/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
+      `${API_URL}/api/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
       {
         method: 'PUT',
         headers: {
@@ -271,7 +271,7 @@ const handleUpdateReview = async (reviewData) => {
 const handleDeleteReview = async () => {
   try {
     const response = await fetch(
-      `${API_URL}/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
+      `${API_URL}/api/player/courts/${route.params.id}/reviews/${userReview.value._id}`,
       {
         method: 'DELETE',
         headers: {
@@ -299,7 +299,7 @@ const handleDeleteReview = async () => {
 const handleToggleReaction = async ({ reviewId, type }) => {
   try {
     const response = await fetch(
-      `${API_URL}/player/courts/${route.params.id}/reviews/${reviewId}/reactions`,
+      `${API_URL}/api/player/courts/${route.params.id}/reviews/${reviewId}/reactions`,
       {
         method: 'POST',
         headers: {
@@ -397,7 +397,7 @@ const handleConfirmBooking = async ({ paymentMethod }) => {
     // --- Call Backend Booking Endpoint using fetchData --- 
     try {
       // Use fetchData for the POST request
-      const responseData = await fetchData('/bookings', {
+      const responseData = await fetchData('/api/bookings', {
           method: 'POST',
           body: JSON.stringify(bookingData)
           // Headers handled by useApi

@@ -102,7 +102,7 @@ onMounted(async () => {
 
   try {
     // Use fetchData for the POST request
-    const responseData = await fetchData('/payments/khalti/verify', {
+    const responseData = await fetchData('/api/payments/khalti/verify', {
         method: 'POST',
         body: JSON.stringify({ pidx })
         // Headers (Auth, Content-Type) are handled by useApi

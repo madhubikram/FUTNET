@@ -357,7 +357,7 @@
       error.value = null;
       
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/profile`, {
+      const response = await fetch(`${API_URL}/api/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -401,7 +401,7 @@
       
       // Get loyalty points
       try {
-        const loyaltyResponse = await fetch(`${API_URL}/loyalty/points`, {
+        const loyaltyResponse = await fetch(`${API_URL}/api/loyalty/points`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -415,7 +415,7 @@
       
       // Get booking count - only confirmed paid bookings
       try {
-        const bookingsResponse = await fetch(`${API_URL}/bookings/stats`, {
+        const bookingsResponse = await fetch(`${API_URL}/api/bookings/stats`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -430,7 +430,7 @@
       
       // Get tournaments count from tournament history
       try {
-        const tournamentsResponse = await fetch(`${API_URL}/tournaments/history`, {
+        const tournamentsResponse = await fetch(`${API_URL}/api/tournaments/history`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -443,7 +443,7 @@
           
           try {
             // Try to get registered tournaments from the user profile or another endpoint
-            const userTournamentsResponse = await fetch(`${API_URL}/profile/tournaments`, {
+            const userTournamentsResponse = await fetch(`${API_URL}/api/profile/tournaments`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -469,7 +469,7 @@
       // Get tournaments count from player's registrations
       try {
         // Use the my-registrations endpoint from the tournament player routes that we found in the code
-        const tournamentsResponse = await fetch(`${API_URL}/player/tournaments/my-registrations`, {
+        const tournamentsResponse = await fetch(`${API_URL}/api/player/tournaments/my-registrations`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -483,7 +483,7 @@
           
           try {
             // Try to get all tournaments and filter registered ones
-            const allTournamentsResponse = await fetch(`${API_URL}/player/tournaments`, {
+            const allTournamentsResponse = await fetch(`${API_URL}/api/player/tournaments`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -525,7 +525,7 @@
     isSubmitting.value = true;
     
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/profile`, {
+    const response = await fetch(`${API_URL}/api/profile`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,

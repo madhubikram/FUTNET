@@ -584,7 +584,7 @@ const fetchData = async () => {
       queryParams.append('limit', itemsPerPage.value);
       
       console.log('Fetching data with params:', queryParams.toString());
-      const response = await axios.get(`/api/bookings/admin?${queryParams.toString()}`);
+      const response = await axios.get(`/api/bookings/admin/all?${queryParams.toString()}`);
       console.log('API Response:', response.data);
       
       // Ensure bookings is always an array

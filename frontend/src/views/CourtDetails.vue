@@ -131,7 +131,7 @@
         error.value = null;
         const courtId = route.params.id;
         
-        const response = await fetch(`${API_URL}/courts/${courtId}`, {
+        const response = await fetch(`${API_URL}/api/courts/${courtId}`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`
             }
@@ -160,7 +160,7 @@ const loadCourtDetails = async () => {
         
         console.log('Attempting to fetch court:', courtId);
         
-        const response = await fetch(`${API_URL}/courts/${courtId}`, {
+        const response = await fetch(`${API_URL}/api/courts/${courtId}`, {
             headers: {
                 'Authorization': `Bearer ${localStorage.getItem('token')}`,
                 'Accept': 'application/json'
@@ -214,7 +214,7 @@ onMounted(() => {
   
   const handleReviewSubmit = async (review) => {
     try {
-      const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews`, {
+      const response = await fetch(`${API_URL}/api/courts/${route.params.id}/reviews`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -245,7 +245,7 @@ onMounted(() => {
   const handleSubmitReply = async ({ reviewId, text }) => {
     console.log(`Submitting reply for review ${reviewId}:`, text);
     try {
-       const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews/${reviewId}/replies`, {
+       const response = await fetch(`${API_URL}/api/courts/${route.params.id}/reviews/${reviewId}/replies`, {
           method: 'POST',
           headers: {
              'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -280,7 +280,7 @@ onMounted(() => {
   const handleUpdateReply = async ({ reviewId, replyId, text }) => {
     console.log(`Updating reply ${replyId} for review ${reviewId}:`, text);
     try {
-      const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
+      const response = await fetch(`${API_URL}/api/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,
@@ -308,7 +308,7 @@ onMounted(() => {
   const handleDeleteReply = async ({ reviewId, replyId }) => {
     console.log(`[Frontend handleDeleteReply] Initiating delete for review ${reviewId}, reply ${replyId}`);
     try {
-      const response = await fetch(`${API_URL}/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
+      const response = await fetch(`${API_URL}/api/courts/${route.params.id}/reviews/${reviewId}/replies/${replyId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

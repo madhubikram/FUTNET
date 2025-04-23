@@ -374,7 +374,7 @@ const fetchFreeSlots = async () => {
     console.log(`[BookingSection] Fetching free slots for date: ${selectedDate.value} and court: ${props.court?._id}`); // Log the date and court being fetched
     
     const response = await fetch(
-      `${API_URL}/bookings/free-slots${dateQueryParam}`, // Use combined query
+      `${API_URL}/api/bookings/free-slots${dateQueryParam}`, // Use combined query
       {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -427,7 +427,7 @@ const generateTimeSlots = async () => {
   try {
     console.log(`[BookingSection] Fetching bookings for court ${props.court._id} on ${selectedDate.value}...`);
     const response = await fetch(
-      `${API_URL}/courts/${props.court._id}/bookings?date=${selectedDate.value}`,
+      `${API_URL}/api/courts/${props.court._id}/bookings?date=${selectedDate.value}`,
       {
         headers: { 
           'Authorization': `Bearer ${token}`

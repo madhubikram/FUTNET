@@ -432,11 +432,13 @@ import BaseModal from '@/components/base/BaseModal.vue';
 import { useRouter } from 'vue-router';
 import { useToast } from 'vue-toastification';
 import { log } from '@/utils/logger';
-import { useApi } from '@/composables/useApi';
+import API_URL from '@/config/api';
 import { getAssetUrl } from '@/config/api';
+import { useApi } from '@/composables/useApi';
 
-const router = useRouter();
 const { fetchData } = useApi();
+const router = useRouter();
+const toast = useToast();
 
 const { formatDate, formatTime } = useTimeFormatting();
 
@@ -448,9 +450,6 @@ const showModal = ref(false);
 const selectedBooking = ref(null);
 const showReviewModal = ref(false);
 const bookingToReview = ref(null);
-
-// Init toast
-const toast = useToast();
 
 // Computed properties
 const ongoingBookings = computed(() => {
@@ -555,33 +554,39 @@ const bookAgain = (booking) => {
 };
 
 const cancelBooking = async (bookingId) => {
+  if (!confirm("Are you sure you want to cancel this booking?")) return;
+
   try {
-    if (!confirm('Are you sure you want to cancel this booking?')) {
-      return;
-    }
-    
-    await fetchData(`/bookings/${bookingId}/cancel`, {
-      method: 'POST'
-    });
-    
-    log('INFO', 'BOOKING', `Booking ${bookingId} cancelled successfully`);
-    
-    // Find and update the booking in our list
-    const index = bookings.value.findIndex(b => b._id === bookingId);
-    if (index !== -1) {
-      bookings.value[index].status = 'cancelled';
-      // Close modal if the cancelled booking was being viewed
-      if (selectedBooking.value && selectedBooking.value._id === bookingId) {
-        showModal.value = false;
+    loading.value = true; // Indicate loading state
+    const response = await fetch(`${API_URL}/api/bookings/${bookingId}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
       }
+    });
+
+    if (response.ok) {
+      log('INFO', 'BOOKING', `Booking ${bookingId} cancelled successfully`);
+      // Find and update the booking in our list
+      const index = bookings.value.findIndex(b => b._id === bookingId);
+      if (index !== -1) {
+        bookings.value[index].status = 'cancelled';
+        // Close modal if the cancelled booking was being viewed
+        if (selectedBooking.value && selectedBooking.value._id === bookingId) {
+          showModal.value = false;
+        }
+      }
+      // Show success message
+      toast.success('Booking cancelled successfully');
+    } else {
+      console.error('Error cancelling booking:', response.statusText);
+      toast.error('Failed to cancel booking. Please try again.');
     }
-    
-    // Show success message
-    toast.success('Booking cancelled successfully');
-    
   } catch (error) {
     console.error('Error cancelling booking:', error);
     toast.error('Failed to cancel booking. Please try again.');
+  } finally {
+    loading.value = false;
   }
 };
 
@@ -694,7 +699,7 @@ const fetchBookings = async () => {
     loading.value = true;
     log('INFO', 'BOOKINGS', 'Starting to fetch bookings...');
     
-    const data = await fetchData('/bookings');
+    const data = await fetchData('/api/bookings');
     log('INFO', 'BOOKINGS', `Fetched ${data?.length || 0} bookings from API`);
     
     if (data && data.length > 0) {

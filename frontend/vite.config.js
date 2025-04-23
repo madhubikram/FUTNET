@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import { VitePWA } from 'vite-plugin-pwa'
+import { viteCommonjs } from '@originjs/vite-plugin-commonjs'
 
 
 // https://vite.dev/config/
@@ -22,6 +23,7 @@ export default defineConfig({
   },
   base: '/',
   plugins: [
+    viteCommonjs(),
     vue(),
     vueJsx(),
     vueDevTools(),
@@ -92,6 +94,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
-  
+  optimizeDeps: {
+    include: ['jquery'],
+    exclude: ['jquery-bracket']
+  },
+  build: {
+    commonjsOptions: {
+      include: [/jquery-bracket/, /node_modules/]
+    }
+  }
 })
 

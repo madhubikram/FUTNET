@@ -468,7 +468,7 @@ const togglePrepayment = async () => {
     requirePrepayment.value = newValue;
 
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_URL}/courts/prepayment`, {
+    const response = await fetch(`${API_URL}/api/courts/prepayment`, {
       method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -704,7 +704,7 @@ const fetchCourts = async () => {
         const token = localStorage.getItem('token');
         
         // First try to fetch courts
-        const courtsResponse = await fetch(`${API_URL}/courts`, {
+        const courtsResponse = await fetch(`${API_URL}/api/courts`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
@@ -716,7 +716,7 @@ const fetchCourts = async () => {
         
         // Then try to fetch settings
         try {
-            const settingsResponse = await fetch(`${API_URL}/courts/settings`, {
+            const settingsResponse = await fetch(`${API_URL}/api/courts/settings`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             
@@ -804,7 +804,7 @@ const editCourt = (court) => {
 const deleteCourt = async (courtId) => {
   if (!confirm('Are you sure you want to delete this court?')) return;
   try {
-    const response = await fetch(`${API_URL}/courts/${courtId}`, {
+    const response = await fetch(`${API_URL}/api/courts/${courtId}`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
     });
@@ -880,7 +880,7 @@ const handleSubmit = async () => {
     };
 
     if (editingCourt.value) {
-      response = await fetch(`${API_URL}/courts/${editingCourt.value._id}`, {
+      response = await fetch(`${API_URL}/api/courts/${editingCourt.value._id}`, {
         method: 'PUT',
         headers: headers,
         body: formData
@@ -889,7 +889,7 @@ const handleSubmit = async () => {
       toast.success('Court updated successfully!');
       
     } else {
-      response = await fetch(`${API_URL}/courts`, {
+      response = await fetch(`${API_URL}/api/courts`, {
         method: 'POST',
         headers: headers,
         body: formData

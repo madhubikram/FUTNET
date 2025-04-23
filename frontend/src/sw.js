@@ -13,14 +13,16 @@ console.log('[Service Worker] Hello from custom service worker!');
 // The self.__WB_MANIFEST variable will be injected by vite-plugin-pwa
 precacheAndRoute(self.__WB_MANIFEST || []);
 
-// Example Runtime Caching (similar to your vite.config.js, but managed here if preferred)
+// Cache images specifically from the /uploads path
 registerRoute(
-  ({ request }) => request.destination === 'image',
+  ({ request, url }) => 
+    request.destination === 'image' && 
+    url.pathname.startsWith('/uploads'), // Only match /uploads/... paths
   new CacheFirst({
-    cacheName: 'images-custom',
+    cacheName: 'images-uploads', // Use a specific cache name
     plugins: [
       new ExpirationPlugin({
-        maxEntries: 60,
+        maxEntries: 100, // Increase entries if needed
         maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
       }),
     ],

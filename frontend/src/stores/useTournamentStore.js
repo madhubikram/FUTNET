@@ -45,7 +45,7 @@ export const useTournamentStore = defineStore('tournament', () => {
       
       console.log('Fetching tournaments with token:', token);
       
-      const response = await fetch(`${API_URL}/player/tournaments`, {
+      const response = await fetch(`${API_URL}/api/player/tournaments`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -78,7 +78,7 @@ export const useTournamentStore = defineStore('tournament', () => {
   const fetchUserRegistrations = async () => {
     try {
       // Update this endpoint as well
-      const response = await fetch(`${API_URL}/player/tournaments/my-registrations`, {
+      const response = await fetch(`${API_URL}/api/player/tournaments/my-registrations`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -108,7 +108,7 @@ export const useTournamentStore = defineStore('tournament', () => {
 
   const registerForTournament = async (tournamentId, teamInfo) => {
     try {
-      const response = await fetch(`${API_URL}/tournaments/${tournamentId}/register`, {
+      const response = await fetch(`${API_URL}/api/tournaments/${tournamentId}/register`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`,

@@ -506,7 +506,7 @@ const toggleReaction = async (reviewId, type) => {
 
   try {
     const response = await fetch(
-      `${API_URL}/player/courts/${props.court._id}/reviews/${reviewId}/reactions`,
+      `${API_URL}/api/player/courts/${props.court._id}/reviews/${reviewId}/reactions`,
       {
         method: 'POST',
         headers: {

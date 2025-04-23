@@ -11,12 +11,14 @@
     "test:e2e": "playwright test",
     "lint": "eslint . --fix",
     "format": "prettier --write src/",
-    "postinstall": "node scripts/copyAssets.js"
+    "postinstall": "node scripts/copyAssets.cjs"
   },
   "dependencies": {
     "@vue-leaflet/vue-leaflet": "^0.10.1",
     "apexcharts": "^4.5.0",
     "D": "^1.0.0",
+    "jquery": "^3.7.1",
+    "jquery-bracket": "^0.11.1",
     "leaflet": "^1.9.4",
     "leaflet-compass": "^1.5.6",
     "lucide-vue-next": "^0.474.0",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.18.0",
+    "@originjs/vite-plugin-commonjs": "^1.0.3",
     "@playwright/test": "^1.49.1",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vitejs/plugin-vue-jsx": "^4.1.1",
