@@ -1,15 +1,25 @@
+console.log("--- server.js started ---");
+
+console.log("Requiring path...");
 const path = require('path');
+console.log("Requiring express...");
 const express = require('express');
+console.log("Requiring mongoose...");
 const mongoose = require('mongoose');
+console.log("Requiring cors...");
 const cors = require('cors');
+console.log("Requiring fs...");
 const fs = require('fs');
+console.log("Requiring node-cron...");
 const cron = require('node-cron');
 
-// --- Load Environment Variables FIRST --- 
+console.log("--- Before dotenv config ---");
 require('dotenv').config();
-// --- End Environment Variable Loading ---
+console.log("--- After dotenv config ---");
+console.log("MONGODB_URI check:", process.env.MONGODB_URI ? "Exists" : "MISSING!");
+console.log("JWT_SECRET check:", process.env.JWT_SECRET ? "Exists" : "MISSING!");
 
-// --- Check Essential Env Vars --- 
+console.log("--- Checking Essential Env Vars --- ");
 if (!process.env.MONGODB_URI || !process.env.JWT_SECRET) {
     console.error("FATAL ERROR: MONGODB_URI and JWT_SECRET must be defined in .env");
     process.exit(1); // Exit if critical variables are missing
@@ -22,44 +32,68 @@ if (!process.env.KHALTI_SECRET_KEY || !process.env.KHALTI_API_URL || !process.en
 if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) {
     console.warn("WARNING: VAPID keys not set. Push notifications will be disabled.");
 }
+console.log("--- Env Var Checks Passed --- ");
 
-require('./models/booking.model'); 
+console.log("Requiring booking.model...");
+require('./models/booking.model');
+console.log("Requiring loyalty.model...");
 require('./models/loyalty.model');
 
-// Import routes
+console.log("--- Importing Routes --- ");
+console.log("Requiring playerTournamentRoutes...");
 const playerTournamentRoutes = require('./routes/tournament.player.routes');
+console.log("Requiring playerCourtRoutes...");
 const playerCourtRoutes = require('./routes/playerCourt.routes');
+console.log("Requiring authRoutes...");
 const authRoutes = require('./routes/auth.routes');
+console.log("Requiring protectedRoutes...");
 const protectedRoutes = require('./routes/protected.routes');
+console.log("Requiring futsalRoutes...");
 const futsalRoutes = require('./routes/futsal.routes');
+console.log("Requiring courtRoutes...");
 const courtRoutes = require('./routes/court.routes');
+console.log("Requiring tournamentRoutes...");
 const tournamentRoutes = require(path.join(__dirname, 'routes', 'tournament.routes.js'));
+console.log("Requiring authMiddleware...");
 const authMiddleware = require('./middleware/auth.middleware');
+console.log("Requiring loyaltyMiddleware...");
 const validateLoyaltyTransaction = require('./middleware/loyalty.middleware');
+console.log("Requiring loyaltyRoutes...");
 const loyaltyRoutes = require('./routes/loyalty.routes');
+console.log("Requiring bookingRoutes...");
 const bookingRoutes = require('./routes/booking.routes');
+console.log("Requiring notificationRoutes...");
 const notificationRoutes = require('./routes/notification.routes.js');
+console.log("Requiring tournamentStatus util...");
 const { updateTournamentStatuses } = require('./utils/tournamentStatus');
+console.log("Requiring paymentRoutes...");
 const paymentRoutes = require('./routes/payment.routes');
+console.log("Requiring dashboardRoutes...");
 const dashboardRoutes = require('./routes/dashboard.routes');
+console.log("--- Routes Imported --- ");
 
-// Import services and models needed for cron jobs
+console.log("--- Importing Services/Models for Cron --- ");
+console.log("Requiring notification.service...");
 const { createNotification } = require('./utils/notification.service');
+console.log("Requiring booking.model (again?)... Check if needed"); // Note: Already required above
 const Booking = require('./models/booking.model');
+console.log("Requiring tournament.model...");
 const Tournament = require('./models/tournament.model');
+console.log("Requiring user.model...");
 const User = require('./models/user.model');
+console.log("Requiring notification.model...");
 const Notification = require('./models/notification.model');
+console.log("--- Cron Services/Models Imported --- ");
 
-// Import the new booking service
-const { sendBookingReminderIfNotSent } = require('./utils/booking.service'); 
+console.log("Requiring booking.service util...");
+const { sendBookingReminderIfNotSent } = require('./utils/booking.service');
 
-console.log('Starting server...');
+console.log('--- Starting server setup ---');
 
-// Create uploads directories if they don't exist
+console.log('Creating uploads directories...');
 const uploadDir = path.join(__dirname, 'uploads');
 const courtsUploadsDir = path.join(uploadDir, 'courts');
 const tournamentsUploadsDir = path.join(uploadDir, 'tournaments');
-
 
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
@@ -70,9 +104,13 @@ if (!fs.existsSync(courtsUploadsDir)) {
 if (!fs.existsSync(tournamentsUploadsDir)) {
     fs.mkdirSync(tournamentsUploadsDir, { recursive: true });
 }
+console.log('Uploads directories ensured.');
 
+console.log('Creating express app...');
 const app = express();
+console.log('Express app created.');
 
+console.log('Applying CORS middleware...');
 // --- CORS Configuration ---
 // Define allowed origins based on environment
 const developmentOrigins = [
@@ -117,11 +155,12 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-// --- End CORS Configuration ---
+console.log('CORS middleware applied.');
 
-// Body Parser Middleware
+console.log('Applying body parser middleware...');
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+console.log('Body parser middleware applied.');
 
 // Debug middleware in development only
 if (process.env.NODE_ENV !== 'production') {
@@ -131,9 +170,11 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-// Static file serving
+console.log('Applying static file serving...');
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+console.log('Static file serving applied.');
 
+console.log('Applying API routes...');
 // API Routes
 app.use('/api/courts', courtRoutes);
 app.use('/api/player/courts', playerCourtRoutes);
@@ -149,7 +190,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api', protectedRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-
+console.log('API routes applied.');
 
 // Test Routes (development only)
 if (process.env.NODE_ENV !== 'production') {
@@ -252,6 +293,7 @@ if (process.env.NODE_ENV !== 'production') {
     // --- End Debug Endpoint ---
 }
 
+console.log('Applying global error handler...');
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error('Global error handler:', err);
@@ -290,22 +332,25 @@ app.use((err, req, res, next) => {
         error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
     });
 });
+console.log('Global error handler applied.');
 
 const PORT = process.env.PORT || 5000;
+console.log(`PORT variable set to: ${PORT}`);
 
-// MongoDB Connection and Server Start
+console.log('--- Attempting MongoDB Connection ---');
 mongoose.connect(process.env.MONGODB_URI)
     .then(() => {
-        console.log('Connected to MongoDB');
+        console.log('--- MongoDB Connection Successful ---');
         
-        // Start the server (only once)
+        console.log(`--- Starting server listening on port ${PORT} ---`);
         app.listen(PORT, () => {
-            console.log(`Server running on port ${PORT}`);
+            console.log(`****** Server running on port ${PORT} ******`); // Make this stand out
             if (process.env.NODE_ENV !== 'production') {
                 console.log(`Debug routes available at: http://localhost:${PORT}/debug/routes`);
             }
         });
 
+        console.log('--- Setting up Cron Jobs ---');
         // --- Cron Jobs Setup --- 
         console.log('[Cron] Setting up scheduled tasks...');
 
@@ -422,8 +467,15 @@ mongoose.connect(process.env.MONGODB_URI)
         console.log('[Init] Performing initial tournament status update...');
         updateTournamentStatuses();
 
+        console.log('--- Cron Jobs Setup Complete ---');
+
     })
-    .catch((err) => console.error('MongoDB connection error:', err));
+    .catch((err) => {
+        console.error('###### MongoDB connection error ######:', err);
+        process.exit(1); // Exit if DB connection fails
+    });
+
+console.log('--- End of main script execution (before async ops complete) ---');
 
 // Monitor pending admin registrations
 mongoose.connection.on('connected', async () => {
