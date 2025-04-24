@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'backend/**'
-      - '.github/workflows/futsnet-backend-sk123.yml'
+      - "backend/**"
+      - ".github/workflows/futsnet-backend-sk123.yml"
   workflow_dispatch:
 
 jobs:
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node.js version
         uses: actions/setup-node@v3
         with:
-          node-version: '20.x'
+          node-version: "20.x"
 
       - name: npm install and build in backend directory
         working-directory: ./backend
@@ -42,9 +42,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    environment:
-      name: 'Production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
+    permissions:
+      id-token: write # Required for OIDC login
 
     steps:
       - name: Download artifact from build job
@@ -52,11 +51,10 @@ jobs:
         with:
           name: node-app
 
-      - name: 'Deploy to Azure Web App'
+      - name: "Deploy to Azure Web App"
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'futnet-backend-sk123'
-          slot-name: 'Production'
+          app-name: "futnet-backend-sk123"
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: release.zip
