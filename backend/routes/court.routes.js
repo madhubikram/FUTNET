@@ -8,7 +8,7 @@ const Booking = require('../models/booking.model');
 const mongoose = require('mongoose');
 const { startOfDay, endOfDay } = require('date-fns'); // Import date-fns helpers
 const playerCourtController = require('../controllers/playerCourt.controller');
-const { uploadToBlob } = require('../utils/blobUpload'); // <<< ADD IMPORT
+const { uploadToBlob, deleteBlob } = require('../utils/blobUpload'); // <<< ADD IMPORT
 
 const verifyMongoose = (req, res, next) => {
     if (!mongoose.connection.readyState) {
@@ -460,7 +460,28 @@ router.delete('/:id', auth, async (req, res) => {
         const TimeSlot = require('../models/timeSlot.model');
         await TimeSlot.deleteMany({ court: courtId });
         
-        // Now delete the court
+        // Get the court details *before* deleting to access image URLs
+        const courtToDelete = await Court.findById(courtId);
+        if (!courtToDelete) {
+            // Should ideally not happen if findByIdAndDelete worked, but good practice
+            console.warn(`Court ${courtId} not found before attempting blob deletion.`);
+        } else {
+            // Delete associated images from Blob Storage
+            if (courtToDelete.images && courtToDelete.images.length > 0) {
+                console.log(`Attempting to delete ${courtToDelete.images.length} blobs for court ${courtId}...`);
+                for (const imageUrl of courtToDelete.images) {
+                    try {
+                        await deleteBlob('uploads', imageUrl); // Assuming container name is 'uploads'
+                    } catch (blobError) {
+                        console.error(`Error deleting blob ${imageUrl} for court ${courtId}:`, blobError);
+                        // Decide if you want to stop deletion or just log the error and continue
+                    }
+                }
+                console.log(`Finished attempting blob deletions for court ${courtId}.`);
+            }
+        }
+        
+        // Now delete the court document from MongoDB
         await Court.findByIdAndDelete(courtId);
         
         res.json({ 
