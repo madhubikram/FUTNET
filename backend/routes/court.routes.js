@@ -8,6 +8,7 @@ const Booking = require('../models/booking.model');
 const mongoose = require('mongoose');
 const { startOfDay, endOfDay } = require('date-fns'); // Import date-fns helpers
 const playerCourtController = require('../controllers/playerCourt.controller');
+const { uploadToBlob } = require('../utils/blobUpload'); // <<< ADD IMPORT
 
 const verifyMongoose = (req, res, next) => {
     if (!mongoose.connection.readyState) {
@@ -19,15 +20,7 @@ const verifyMongoose = (req, res, next) => {
 };
 
 // Configure multer for image upload
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, path.join(__dirname, '../uploads/courts'))
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1E9)}`;
-        cb(null, uniqueSuffix + path.extname(file.originalname))
-    }
-});
+const storage = multer.memoryStorage();
 
 const upload = multer({ 
     storage: storage,
@@ -130,6 +123,28 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
             return result;
         };
 
+        // <<< START BLOB UPLOAD >>>
+        const courtImageUrls = [];
+        if (req.files && req.files.length > 0) {
+            console.log(`Attempting to upload ${req.files.length} court images...`);
+            try {
+                for (const file of req.files) {
+                    // Use a path prefix like court-images/<futsalId>/ (req.user.futsal)
+                    const blobPathPrefix = `court-images/${req.user.futsal}/`; 
+                    const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, blobPathPrefix);
+                    courtImageUrls.push(blobUrl);
+                    console.log(`Uploaded court image: ${blobUrl}`);
+                }
+            } catch (uploadError) {
+                console.error('Error uploading court images to blob storage:', uploadError);
+                return res.status(500).json({
+                    message: 'Failed to upload court images',
+                    error: uploadError.message
+                });
+            }
+        }
+        // <<< END BLOB UPLOAD >>>
+
         const courtData = {
             name: req.body.name,
             futsalId: req.user.futsal,
@@ -142,9 +157,8 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
             status: req.body.status || 'Active',
             hasPeakHours: req.body.hasPeakHours === 'true',
             hasOffPeakHours: req.body.hasOffPeakHours === 'true',
-            // Access the nested facilities object directly
             facilities: parseBooleans(req.body.facilities),
-            images: req.files ? req.files.map(file => `/uploads/courts/${file.filename}`) : [],
+            images: courtImageUrls,
         };
 
         // Conditionally add peak hours data using nested access
@@ -363,13 +377,36 @@ router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
         }
 
         // Handle image updates
+        // <<< START BLOB UPLOAD >>>
         if (req.files && req.files.length > 0) {
-            // Optionally delete old images first if needed
-            updateData.images = req.files.map(file => `/uploads/courts/${file.filename}`);
+            console.log(`Attempting to upload ${req.files.length} new court images for update...`);
+            const courtImageUrls = [];
+            // Optional: Add logic here to delete old blobs from Azure storage 
+            // based on URLs stored in court.images before uploading new ones.
+            try {
+                for (const file of req.files) {
+                    const blobPathPrefix = `court-images/${court.futsalId}/`; // Use existing futsal ID
+                    const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, blobPathPrefix);
+                    courtImageUrls.push(blobUrl);
+                    console.log(`Uploaded new court image: ${blobUrl}`);
+                }
+                updateData.images = courtImageUrls; // Replace existing images with new Blob URLs
+            } catch (uploadError) {
+                console.error('Error uploading new court images to blob storage:', uploadError);
+                // Decide if update should fail
+                return res.status(500).json({
+                    message: 'Failed to upload new court images',
+                    error: uploadError.message
+                });
+            }
         } else {
-            // If no new files are uploaded, keep existing images (remove this line if you want to clear images)
-            // delete updateData.images; 
+            // If no new files are uploaded, the existing updateData.images (if sent in req.body)
+            // or the original court.images will be used by findByIdAndUpdate.
+            // If you want to explicitly prevent clearing images if none are sent, 
+            // ensure updateData.images is not set or removed here.
+            // delete updateData.images; // Uncomment this if you DON'T want an empty req.files array to clear images
         }
+        // <<< END BLOB UPLOAD >>>
 
         console.log('Court data being updated:', updateData);
 

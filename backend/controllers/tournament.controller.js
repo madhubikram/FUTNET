@@ -8,6 +8,7 @@ const { createNotification } = require('../utils/notification.service');
 const moment = require('moment');
 const { generateSingleEliminationBracket } = require('../utils/bracketGenerator'); // Import generator
 const mongoose = require('mongoose'); // Import mongoose for ObjectId validation
+const { uploadToBlob, deleteBlob } = require('../utils/blobUpload'); // <<< UPDATE IMPORT
 
 // --- Define Controller Object Early ---
 const tournamentController = {};
@@ -38,9 +39,29 @@ const createTournament = async (req, res) => {
                 third: req.body['prizes.third'] ? Number(req.body['prizes.third']) : 0
             };
 
+            // <<< START BLOB UPLOAD >>>
+            let bannerUrl = null;
+            if (req.file) {
+                console.log(`Attempting to upload tournament banner...`);
+                try {
+                    // Use a path prefix like tournament-banners/<futsalId>/
+                    const blobPathPrefix = `tournament-banners/${req.user.futsal}/`; 
+                    bannerUrl = await uploadToBlob('uploads', req.file.buffer, req.file.originalname, blobPathPrefix);
+                    console.log(`Uploaded tournament banner: ${bannerUrl}`);
+                } catch (uploadError) {
+                    console.error('Error uploading tournament banner to blob storage:', uploadError);
+                    // Decide if creation should fail
+                    return res.status(500).json({
+                        message: 'Failed to upload tournament banner',
+                        error: uploadError.message
+                    });
+                }
+            }
+            // <<< END BLOB UPLOAD >>>
+
             const tournamentData = {
                 ...req.body, // Spread other fields
-                banner: req.file ? `/uploads/tournaments/${req.file.filename}` : null,
+                banner: bannerUrl, // <<< ADD THIS LINE (Use Blob URL)
                 futsalId: req.user.futsal,
                 prizes: prizes, // Assign the parsed prizes object
                 registrationDeadlineTime: req.body.registrationDeadlineTime, // Explicitly include if needed
@@ -394,15 +415,34 @@ const updateTournament = async (req, res) => {
 
         // Handle file upload
         if (req.file) {
-            // Delete old banner if it exists
-            if (tournament.banner) {
-                const oldBannerPath = path.join(__dirname, '..', tournament.banner);
-                console.log(`Deleting old banner: ${oldBannerPath}`);
-                await deleteFile(oldBannerPath).catch(err => console.error("Non-fatal: Error deleting old banner", err));
+            let newBannerUrl = null;
+            try {
+                // Upload new banner first
+                const blobPathPrefix = `tournament-banners/${tournament.futsalId}/`;
+                newBannerUrl = await uploadToBlob('uploads', req.file.buffer, req.file.originalname, blobPathPrefix);
+                console.log(`New banner uploaded: ${newBannerUrl}`);
+                
+                // If upload succeeds, delete the old banner from Blob Storage
+                if (tournament.banner) {
+                    console.log(`Deleting old banner from Blob Storage: ${tournament.banner}`);
+                    await deleteBlob('uploads', tournament.banner);
+                }
+                
+                // Set the new banner URL in the update data
+                updateData.banner = newBannerUrl;
+
+            } catch (uploadOrDeleteError) {
+                console.error('Error during banner update (upload/delete):', uploadOrDeleteError);
+                // If upload failed, don't delete old one. Decide if update should fail.
+                // If delete failed after successful upload, maybe just log it.
+                return res.status(500).json({
+                    message: 'Failed to update tournament banner',
+                    error: uploadOrDeleteError.message
+                });
             }
-            updateData.banner = `/uploads/tournaments/${req.file.filename}`;
-            console.log(`New banner uploaded: ${updateData.banner}`);
         }
+        // If no new file is uploaded (req.file is null), updateData.banner will not be set,
+        // so the existing tournament.banner will remain unchanged by Object.assign.
 
         // Update the tournament fields
         Object.assign(tournament, updateData);

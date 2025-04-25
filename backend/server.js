@@ -170,9 +170,9 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-console.log('Applying static file serving...');
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-console.log('Static file serving applied.');
+// console.log('Applying static file serving...');
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads'))); // <<< COMMENT OUT or DELETE THIS LINE
+// console.log('Static file serving applied.');
 
 console.log('Applying API routes...');
 // API Routes

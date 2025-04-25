@@ -1,9 +1,10 @@
 const User = require('../models/user.model'); 
 const jwt = require('jsonwebtoken');     
+const { uploadToBlob } = require('../utils/blobUpload');
 
 const register = async (req, res) => {  
   console.log('Registration request received:', req.body); 
-  console.log('Files received:', req.files); 
+  console.log('Files received:', req.files ? `${req.files.length} files` : 'No files');
   console.log('Contact number in request:', req.body.contactNumber);
 
   try {
@@ -64,8 +65,28 @@ const register = async (req, res) => {
         }
         return res.status(400).json({ message: errorMessage });
       }
-           // Handle uploaded files
-           const documentPaths = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+           // Handle uploaded files - Upload to Blob Storage
+           const documentUrls = []; // Store Blob URLs here
+           if (req.files && req.files.length > 0) {
+             console.log(`Attempting to upload ${req.files.length} documents...`);
+             try {
+               for (const file of req.files) {
+                 // Construct a path prefix including the user ID (or temp ID if needed)
+                 // NOTE: We don't have user._id yet, so use username or a temp identifier
+                 const blobPathPrefix = `user-documents/${username}/`; 
+                 const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, blobPathPrefix);
+                 documentUrls.push(blobUrl);
+                 console.log(`Uploaded document for ${username}: ${blobUrl}`);
+               }
+             } catch (uploadError) {
+               console.error('Error uploading documents to blob storage:', uploadError);
+               // Decide if registration should fail if upload fails
+               return res.status(500).json({
+                 message: 'Failed to upload documents',
+                 error: uploadError.message
+               });
+             }
+           }
 
            // Create user data object
            const userData = {
@@ -76,7 +97,7 @@ const register = async (req, res) => {
                password,
                role,
                contactNumber,
-               documents: documentPaths
+               documents: documentUrls
            };
      
            // Add futsal admin specific fields
