@@ -129,8 +129,13 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
             console.log(`Attempting to upload ${req.files.length} court images...`);
             try {
                 for (const file of req.files) {
-                    // Use a path prefix like court-images/<futsalId>/ (req.user.futsal)
-                    const blobPathPrefix = `court-images/${req.user.futsal}/`; 
+                    // Use a path prefix like court-images/<futsalId>/ 
+                    // FIX: Use the _id from the populated futsal object
+                    const blobPathPrefix = `court-images/${req.user.futsal?._id}/`; 
+                    if (!req.user.futsal?._id) {
+                         console.error("FATAL: Futsal ID not found on req.user during court image upload.");
+                         throw new Error("Futsal ID missing for blob path.");
+                    }
                     const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, blobPathPrefix);
                     courtImageUrls.push(blobUrl);
                     console.log(`Uploaded court image: ${blobUrl}`);
@@ -381,11 +386,28 @@ router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
         if (req.files && req.files.length > 0) {
             console.log(`Attempting to upload ${req.files.length} new court images for update...`);
             const courtImageUrls = [];
-            // Optional: Add logic here to delete old blobs from Azure storage 
-            // based on URLs stored in court.images before uploading new ones.
+            
+            // --- START: Delete old blobs before uploading new ones ---
+            if (court.images && court.images.length > 0) {
+                console.log(`Deleting ${court.images.length} old blobs for court ${court._id}...`);
+                for (const imageUrl of court.images) {
+                    try {
+                        // Ensure deleteBlob is imported at the top
+                        await deleteBlob('uploads', imageUrl); 
+                        console.log(`Deleted old blob: ${imageUrl}`);
+                    } catch (blobDeleteError) {
+                        // Log error but continue trying to delete others and upload new ones
+                        console.error(`Error deleting old blob ${imageUrl} during update for court ${court._id}:`, blobDeleteError);
+                    }
+                }
+                console.log(`Finished deleting old blobs for court ${court._id}.`);
+            }
+            // --- END: Delete old blobs ---
+
             try {
                 for (const file of req.files) {
-                    const blobPathPrefix = `court-images/${court.futsalId}/`; // Use existing futsal ID
+                    // This part looked correct, using court.futsalId
+                    const blobPathPrefix = `court-images/${court.futsalId}/`; // Use existing futsal ID 
                     const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, blobPathPrefix);
                     courtImageUrls.push(blobUrl);
                     console.log(`Uploaded new court image: ${blobUrl}`);
