@@ -45,7 +45,11 @@ const createTournament = async (req, res) => {
                 console.log(`Attempting to upload tournament banner...`);
                 try {
                     // Use a path prefix like tournament-banners/<futsalId>/
-                    const blobPathPrefix = `tournament-banners/${req.user.futsal}/`; 
+                    const blobPathPrefix = `tournament-banners/${req.user.futsal?._id}/`; 
+                    if (!req.user.futsal?._id) {
+                         console.error("FATAL: Futsal ID not found on req.user during tournament banner upload.");
+                         throw new Error("Futsal ID missing for blob path.");
+                    }
                     bannerUrl = await uploadToBlob('uploads', req.file.buffer, req.file.originalname, blobPathPrefix);
                     console.log(`Uploaded tournament banner: ${bannerUrl}`);
                 } catch (uploadError) {
@@ -498,17 +502,19 @@ const deleteTournament = async (req, res) => {
         // Step 3: Delete the tournament itself
         await Tournament.findByIdAndDelete(req.params.id);
 
-        // Step 4: Delete the associated banner image if it exists
-        if (tournament.banner && tournament.banner.startsWith('/uploads/')) {
-            const bannerPath = path.join(__dirname, '..', tournament.banner);
+        // Step 4: Delete the associated banner image from Blob Storage if it exists
+        if (tournament.banner) { // Check if a banner URL exists
+            console.log(`Attempting to delete blob for tournament banner: ${tournament.banner}`);
             try {
-                await deleteFile(bannerPath);
-                console.log(`Deleted banner image: ${bannerPath}`);
-            } catch (unlinkErr) {
-                if (unlinkErr.code !== 'ENOENT') { // Ignore error if file doesn't exist
-                    console.error(`Error deleting banner image ${bannerPath}:`, unlinkErr);
-                }
+                 // Ensure deleteBlob is imported at the top
+                await deleteBlob('uploads', tournament.banner); 
+                console.log(`Deleted tournament banner blob: ${tournament.banner}`);
+            } catch (blobDeleteError) {
+                // Log error but continue with tournament deletion
+                console.error(`Error deleting banner blob ${tournament.banner} for tournament ${req.params.id}:`, blobDeleteError);
             }
+        } else {
+             console.log(`No banner URL found for tournament ${req.params.id}, skipping blob deletion.`);
         }
 
         // Optional Step 5: Clean up related data (registrations)

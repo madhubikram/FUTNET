@@ -4,6 +4,7 @@
 
   <!-- Example Button to Trigger Subscription (for testing/user action) -->
   <div v-if="isAuthenticated && !isSubscribed && showSubscribeButton" class="subscribe-prompt">
+    <button @click="dismissPrompt" class="close-button" aria-label="Close">&times;</button>
     <p>Enable notifications to stay updated!</p>
     <button @click="handleSubscribe" :disabled="!canSubscribe">Enable Notifications</button>
     <p v-if="subscriptionError" class="error">{{ subscriptionError }}</p>
@@ -65,6 +66,11 @@ const handleSubscribe = async () => {
   showSubscribeButton.value = !isSubscribed.value; 
 };
 
+// Function to dismiss the prompt
+const dismissPrompt = () => {
+  showSubscribeButton.value = false;
+};
+
 </script>
 
 <style scoped>
@@ -73,31 +79,62 @@ const handleSubscribe = async () => {
   position: fixed;
   bottom: 20px;
   left: 20px;
-  background-color: #f0f0f0;
+  background-color: #2c3e50; /* Darker background */
+  color: #ecf0f1; /* Lighter text */
   padding: 15px;
   border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
   z-index: 1000;
   max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px; /* Add gap between elements */
 }
+
+.subscribe-prompt .close-button {
+  position: absolute;
+  top: 5px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #bdc3c7; /* Lighter gray for close button */
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.subscribe-prompt .close-button:hover {
+  color: #ecf0f1; /* White on hover */
+}
+
 .subscribe-prompt p {
-  margin: 0 0 10px 0;
+  margin: 0;
+  font-size: 0.95em;
 }
-.subscribe-prompt button {
+
+.subscribe-prompt button:not(.close-button) { /* Target only the main button */
   padding: 8px 15px;
-  background-color: #4CAF50;
+  background-color: #27ae60; /* Greener */
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  transition: background-color 0.2s ease;
 }
-.subscribe-prompt button:disabled {
-    background-color: #ccc;
+
+.subscribe-prompt button:not(.close-button):hover {
+  background-color: #2ecc71;
+}
+
+.subscribe-prompt button:disabled:not(.close-button) {
+    background-color: #7f8c8d; /* Gray when disabled */
     cursor: not-allowed;
 }
+
 .subscribe-prompt .error {
-  color: red;
+  color: #e74c3c; /* Red for errors */
   font-size: 0.9em;
-  margin-top: 10px;
+  margin-top: 5px; /* Adjust margin */
 }
 </style>
