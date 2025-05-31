@@ -1094,7 +1094,7 @@ const navigateToBracket = (tournament) => {
   }
 
   // 3. If all checks pass, navigate
-  router.push({ name: 'adminTournamentBracket', params: { id: tournament.id } });
+  router.push({ name: 'adminTournamentBracket', params: { id: tournament._id } });
 };
 
 const navigateToTeams = (tournament) => {
