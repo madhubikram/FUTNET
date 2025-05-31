@@ -126,6 +126,11 @@
         <AlertTriangleIcon class="inline-block w-4 h-4 mr-1" />
         You've used all your free slots. Payment will be required for additional bookings.
       </div>
+      <div v-else-if="selectedTimeSlots.length > freeBookingsRemaining" class="mt-4 text-sm text-yellow-400">
+        <AlertTriangleIcon class="inline-block w-4 h-4 mr-1" />
+        You've selected {{ selectedTimeSlots.length }} slots but have only {{ freeBookingsRemaining }} free slots available.
+        To use "Pay at Venue", please select {{ freeBookingsRemaining }} or fewer slots.
+      </div>
     </div>
 
     <!-- Selected Slots Summary -->
@@ -316,15 +321,19 @@ const proceedToBooking = () => {
 
   const courtRequiresPrepayment = props.court?.requirePrepayment ?? false;
   
-  // Don't block proceeding to payment completely - just set a flag to indicate 
-  // whether free slots are available and can be used
-  const hasFreeSlots = !courtRequiresPrepayment && freeBookingsRemaining.value > 0;
+  // Check if the number of selected slots exceeds free slots
+  const exceededFreeSlots = selectedTimeSlots.value.length > freeBookingsRemaining.value;
+  
+  // Only allow free slots if court doesn't require prepayment, free slots are available,
+  // AND the number of selected slots doesn't exceed free slots remaining
+  const hasFreeSlots = !courtRequiresPrepayment && 
+                        freeBookingsRemaining.value > 0 && 
+                        !exceededFreeSlots;
   
   // Simplified: Payment is required ONLY if court mandates it.
   const requiresPayment = courtRequiresPrepayment;
   // Booking is considered "free" only in the sense that no *prepayment* is needed if court allows it.
-  // The actual price is still charged later.
-  const isFreeBooking = !courtRequiresPrepayment; // This flag now means "Can book without prepayment"
+  const isFreeBooking = !courtRequiresPrepayment; 
 
   console.log(`[${context}] Debug Values Before Emit: `, {
     courtRequiresPrepayment,
@@ -334,7 +343,8 @@ const proceedToBooking = () => {
     calculatedRequiresPayment: requiresPayment,
     calculatedIsFreeBooking: isFreeBooking,
     freeBookingsRemaining: freeBookingsRemaining.value,
-    hasFreeSlots
+    hasFreeSlots,
+    exceededFreeSlots
   });
   
   const detailsToEmit = {
@@ -351,8 +361,8 @@ const proceedToBooking = () => {
     availablePoints: loyaltyPoints.value,
     // Pass free slots information to the booking process
     freeBookingsRemaining: freeBookingsRemaining.value,
-    usingFreeSlots: hasFreeSlots, // Only set to true if free slots are actually available
-    hasFreeSlots: hasFreeSlots   // New flag to indicate if free slots are available
+    usingFreeSlots: hasFreeSlots, // Only set to true if free slots are actually available AND not exceeded
+    hasFreeSlots: hasFreeSlots    // New flag to indicate if free slots are available AND not exceeded
   };
 
   console.log(`[${context}] Emitting proceed-booking with details:`, JSON.stringify(detailsToEmit, null, 2));
