@@ -7,27 +7,27 @@ const User = require('../models/user.model');
 const TimeSlot = require('../models/timeSlot.model');
 const { getOrCreateTimeSlot } = require('../utils/timeSlotHelper');
 const { startOfDay, endOfDay } = require('date-fns');
-const log = require('../utils/khalti.service').log; // Assuming shared logger
+const log = require('../utils/khalti.service').log; 
 const { createNotification } = require('../utils/notification.service');
 const { isTimeInRange } = require('../utils/timeUtils');
 const LoyaltyTransaction = require('../models/loyaltyTransaction.model');
-const { initiatePaymentFlow } = require('./payment.controller'); // Correct path if in same dir, adjust if needed
+const { initiatePaymentFlow } = require('./payment.controller'); 
 const { FreeSlots, FREE_SLOT_LIMIT_PER_DAY } = require('../models/freeSlots.model');
 
-const POINTS_PER_HOUR = 10; // Example value, adjust as needed
+const POINTS_PER_HOUR = 10;
 
 // Helper function to decrement free slots for a user on a specific date and court
 const decrementFreeSlots = async (userId, courtId, date) => {
   try {
     console.log(`\n[FREE SLOTS TRACKING] Decrementing free slots for user ${userId} on court ${courtId} for date ${date}`);
     
-    // Ensure we have a valid date object
+
     let bookingDate;
     if (typeof date === 'string') {
       const [year, month, day] = date.split('-').map(Number);
       bookingDate = new Date(Date.UTC(year, month - 1, day));
     } else if (date instanceof Date) {
-      // Ensure we use date in UTC
+
       bookingDate = new Date(Date.UTC(
         date.getFullYear(),
         date.getMonth(),
@@ -40,7 +40,7 @@ const decrementFreeSlots = async (userId, courtId, date) => {
     const formattedDate = bookingDate.toISOString().split('T')[0];
     console.log(`[FREE SLOTS TRACKING] Formatted booking date for DB query: ${formattedDate}`);
     
-    // Check if record already exists first
+
     const existingRecord = await FreeSlots.findOne({
       user: userId,
       court: courtId,
@@ -205,14 +205,11 @@ const bookingController = {
                 return res.status(400).json({ message: 'Court ID, date, start time, and end time are required.' });
             }
 
-            // Find Court & Validate
             court = await Court.findById(courtId).populate('futsalId', 'operatingHours name'); // Populate name for notification
             if (!court) {
                 log('WARN', context, `Court not found: ${courtId}`);
                 return res.status(404).json({ message: 'Court not found' });
             }
-
-            // Validate Date Format & Ensure UTC Midnight
             let bookingDateUTC;
             try {
                 const [year, month, day] = date.split('-').map(Number);
@@ -223,7 +220,6 @@ const bookingController = {
                 return res.status(400).json({ message: 'Invalid date format. Use YYYY-MM-DD.' });
             }
 
-            // Validate Time against Operating Hours (if futsalId is populated)
             if (court.futsalId?.operatingHours) {
                  try {
                     if (!isTimeInRange(startTime, court.futsalId.operatingHours.opening, court.futsalId.operatingHours.closing) ||
@@ -233,15 +229,12 @@ const bookingController = {
                     }
                 } catch(timeError) {
                     log('ERROR', context, `Error checking operating hours: ${timeError.message}`);
-                    // Decide if you want to proceed or return an error if time validation fails
                      return res.status(500).json({ message: 'Could not verify operating hours.' });
                 }
             } else {
                  log('WARN', context, `Futsal operating hours not found for court ${courtId}. Skipping check.`);
             }
 
-
-            // Check Availability (Simplified - assumes 1 hour slots for now)
             const checkStartDate = bookingDateUTC;
             const checkEndDate = new Date(bookingDateUTC.getTime() + 24 * 60 * 60 * 1000); // Next day midnight UTC
 
@@ -249,7 +242,7 @@ const bookingController = {
                 court: courtId,
                 date: { $gte: checkStartDate, $lt: checkEndDate },
                 startTime: startTime,
-                // endTime: endTime, // Might be too strict if only checking start time overlap
+
                 status: { $nin: ['cancelled', 'failed'] } // Consider pending bookings as unavailable
             });
 
@@ -378,16 +371,12 @@ const bookingController = {
                 if (calculatedPrice <= 0) {
                     log('INFO', context, 'Booking price is zero or less, confirming directly without Khalti.');
                     bookingData.status = 'confirmed';
-                    bookingData.paymentStatus = 'paid'; // Considered paid as price is 0
-                    bookingData.paymentDetails.method = 'khalti'; // Still record method
+                    bookingData.paymentStatus = 'paid'; 
                     bookingData.paymentDetails.paidAmount = 0;
                     bookingData.paymentDetails.paidAt = new Date();
-                    
                     finalBooking = new Booking(bookingData);
                     await finalBooking.save();
                     log('INFO', context, `Booking ${finalBooking._id} confirmed directly (Price <= 0).`);
-
-                    // --- Send Notification to Admin (Khalti - Free) --- 
                     try {
                         if (court?.futsalId) {
                             const futsalAdmin = await User.findOne({ futsal: court.futsalId._id, role: 'futsalAdmin' });
@@ -409,24 +398,17 @@ const bookingController = {
                     } catch (notifyError) {
                         log('ERROR', context, `Failed to send booking creation notification: ${notifyError.message}`, notifyError);
                     }
-                    // --- End Notification Logic (Khalti - Free) --- 
-
                      res.status(201).json({ booking: finalBooking, message: 'Booking confirmed (Price Zero).' });
                 } else {
-                    // Price > 0, proceed with Khalti payment initiation
                     log('INFO', context, `Price is ${calculatedPrice}. Creating pending booking and initiating Khalti flow.`);
-                    // Create pending booking first
                     bookingData.status = 'pending';
                     bookingData.paymentStatus = 'pending';
                     bookingData.paymentDetails.method = 'khalti';
-                     // Set reservation expiry (e.g., 15 minutes from now)
                     bookingData.reservationExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
                     
                     finalBooking = new Booking(bookingData);
                     await finalBooking.save();
                     log('INFO', context, `Pending booking ${finalBooking._id} created. Expiry: ${bookingData.reservationExpiresAt}`);
-
-                    // Initiate Khalti Payment with CORRECT arguments
                     const paymentInitiationResult = await initiatePaymentFlow(
                         'booking',                  // itemType
                         finalBooking._id.toString(), // itemId (The ID of the booking just created)

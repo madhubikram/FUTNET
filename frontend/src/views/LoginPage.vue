@@ -81,14 +81,13 @@ const { form, errors, validate } = useForm({
   password: { required: true }
 })
 
-const { login, isLoading, error: authError } = useAuth() // Rename error from useAuth to authError to avoid confusion
+const { login, isLoading, error: authError } = useAuth()
 const { notifications, removeNotification } = useNotification()
 
 // Form submission
 const handleSubmit = async () => {
   if (!validate()) return
 
-  // Clear any previous auth error before attempting login again
   authError.value = '';
 
   try {
@@ -98,7 +97,6 @@ const handleSubmit = async () => {
     })
   } catch {
     // Error is already handled and notification shown in useAuth
-    // The authError ref is updated in useAuth, which we will use to display in input
   }
 }
 </script>

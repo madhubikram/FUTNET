@@ -92,11 +92,6 @@ const updateTournamentStatuses = async () => {
       };
       
       for (const tournament of allTournaments) {
-        // Reduced verbose logging per tournament
-        // console.log(`\n[Status Update] Processing tournament: "${tournament.name}" (${tournament._id})`);
-        // console.log(`[Status Update]   Current status: ${tournament.status}`);
-        
-        // Extract all relevant date and time components
         const regDeadlineDate = tournament.registrationDeadline;
         const regDeadlineTime = tournament.registrationDeadlineTime || '23:59';
         const startDate = tournament.startDate;
@@ -109,15 +104,10 @@ const updateTournamentStatuses = async () => {
 
         const endTime = tournament.endTime || '23:59'; // Default to end of day for end date
         
-        // Create full date-time objects by combining date and time
         const fullRegDeadline = combineDateAndTime(regDeadlineDate, regDeadlineTime);
         const fullStartDate = combineDateAndTime(startDate, startTime);
         const fullEndDate = combineDateAndTime(endDate, endTime);
         
-        // Minimal essential date logging
-        // console.log(`[Status Update]   Full start date: ${fullStartDate?.toISOString() || 'undefined'}`);
-        // console.log(`[Status Update]   Full end date: ${fullEndDate?.toISOString() || 'undefined'}`);
-        // console.log(`[Status Update]   Current time: ${now.toISOString()}`);
         
         // Check if the tournament is already cancelled - don't modify its status
         if (tournament.status === 'Cancelled (Low Teams)') {
@@ -211,9 +201,6 @@ const updateTournamentStatuses = async () => {
           // console.log(`[Status Update]   No status change needed. Status remains: ${tournament.status}`); // Reduced noise
         }
       }
-  
-      // console.log('\n[Status Update] Tournament statuses update completed summary:'); // Less verbose
-      // console.log(` - Reg Closed: ${statusChanges.registrationClosed}, Ongoing: ${statusChanges.upcomingToOngoing}, Completed: ${statusChanges.ongoingToCompleted}`);
       
       return statusChanges;
     } catch (error) {

@@ -9,26 +9,24 @@ const User = require('../models/user.model');
 const TimeSlot = require('../models/timeSlot.model');
 const { getOrCreateTimeSlot } = require('../utils/timeSlotHelper');
 const { startOfDay, endOfDay } = require('date-fns');
-const { isTimeInRange } = require('../utils/timeUtils'); // Assuming helper exists here
+const { isTimeInRange } = require('../utils/timeUtils');
 const LoyaltyTransaction = require('../models/loyaltyTransaction.model');
-const moment = require('moment'); // Import moment for duration calculation
+const moment = require('moment'); 
 const { createNotification } = require('../utils/notification.service');
-const { initiatePaymentFlow } = require('../controllers/payment.controller'); // <-- Import payment initiation
-const log = require('../utils/khalti.service').log; // <-- Use shared logger
-const { FreeSlots, FREE_SLOT_LIMIT_PER_DAY } = require('../models/freeSlots.model'); // <-- Import FreeSlots model
-const bookingController = require('../controllers/bookingController.js'); // Import booking controller with .js extension
+const { initiatePaymentFlow } = require('../controllers/payment.controller'); 
+const log = require('../utils/khalti.service').log; 
+const { FreeSlots, FREE_SLOT_LIMIT_PER_DAY } = require('../models/freeSlots.model'); 
+const bookingController = require('../controllers/bookingController.js');
 
-const POINTS_PER_HOUR = 10; // Define the points constant
+const POINTS_PER_HOUR = 10; 
 
-// --- Admin Routes FIRST (More Specific) ---
-// Get all bookings (Admin only)
+
 router.get('/admin/all', auth, bookingController.getAllBookings);
 
 // Get bookings for a specific court (Admin only)
 router.get('/court/:courtId', auth, bookingController.getAdminCourtBookings);
 
 // Admin: Update general booking status (e.g., confirm)
-// Note: The frontend currently calls PATCH /api/bookings/:id for this
 router.patch('/:bookingId/status', auth, bookingController.updateBookingStatus);
 
 // Admin: Update payment status
@@ -44,8 +42,7 @@ router.patch('/:bookingId/reschedule', auth, bookingController.rescheduleBooking
 // This REPLACES the previous DELETE route which pointed to cancelBooking
 router.delete('/:bookingId', auth, bookingController.adminDeleteBooking);
 
-// --- Player/General Routes SECOND (Less Specific / Parameterized) ---
-// Get all bookings for the logged-in user
+
 router.get('/', auth, bookingController.getUserBookings);
 
 // Get booking statistics for the logged-in user

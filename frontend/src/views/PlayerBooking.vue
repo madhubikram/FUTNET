@@ -676,6 +676,7 @@ const getPaymentStatusColor = (status, method) => {
 };
 
 const getPaymentStatusText = (status, method) => {
+  console.log(`[DEBUG] getPaymentStatusText called with status: '${status}', method: '${method}'`);
   if (status === 'paid') return `Paid ${method ? '(' + method + ')' : ''}`;
   if (status === 'unpaid' && method === 'offline') return 'Pay at Venue';
   if (status === 'unpaid') return 'Unpaid';
@@ -705,7 +706,10 @@ const fetchBookings = async () => {
     loading.value = true;
     log('INFO', 'BOOKINGS', 'Starting to fetch bookings...');
     
-    const data = await fetchData('/api/bookings');
+    const rawData = await fetchData('/api/bookings');
+    console.log('[DEBUG] Raw bookings data from API:', JSON.stringify(rawData, null, 2));
+    
+    const data = rawData;
     log('INFO', 'BOOKINGS', `Fetched ${data?.length || 0} bookings from API`);
     
     if (data && data.length > 0) {

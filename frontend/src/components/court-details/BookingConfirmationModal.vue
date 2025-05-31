@@ -66,7 +66,7 @@
           </p>
           <ul class="text-sm text-gray-300 list-disc pl-5 space-y-1">
             <li v-if="bookingDetails.freeBookingsRemaining > 0">Choose <span class="font-semibold">"Pay Physically at Venue"</span> to confirm now and pay later.</li>
-            <li class="text-purple-300">Optionally prepay with Khalti or loyalty points to earn 15 bonus points!</li>
+            <li class="text-purple-300">Optionally prepay with Khalti to earn 15 bonus points!</li>
           </ul>
         </div>
 
@@ -92,10 +92,7 @@
         >
           Cancel
         </button>
-        
-        <!-- Buttons Based ONLY on requiresPrepayment -->
 
-        <!-- 1. Court Requires Prepayment -->
         <template v-if="requiresPrepayment">
           <button 
             @click="onConfirmBooking('khalti')" 

@@ -1,5 +1,5 @@
 // routes/tournament.routes.js
-console.log('Loading tournament routes...'); // <--- ADD THIS LOG AT THE VERY TOP
+console.log('Loading tournament routes...'); 
 try {
     const express = require('express');
     const router = express.Router();
@@ -11,7 +11,6 @@ try {
     const TournamentRegistration = require('../models/tournament.registration.model'); // <-- Import registration model
     const { createNotification } = require('../utils/notification.service'); // <-- Import notification service
 
-    // Middleware to check if user is a futsal admin
     const isFutsalAdmin = (req, res, next) => {
         if (req.user.role !== 'futsalAdmin') {
             return res.status(403).json({ message: 'Access denied. Only futsal admins can manage tournaments.' });

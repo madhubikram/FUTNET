@@ -305,6 +305,7 @@
   <script setup>
   import { ref, onMounted } from 'vue';
   import { useRouter } from 'vue-router';
+  import { useToast } from "vue-toastification";
   import PageLayout from '@/components/layout/PageLayout.vue';
   import BaseModal from '@/components/base/BaseModal.vue';
   import { useTimeFormatting } from '@/composables/useTimeFormatting';
@@ -319,6 +320,7 @@
   const router = useRouter();
   const { formatDate } = useTimeFormatting();
   const { logout } = useAuth();
+  const toast = useToast();
   
   // State
   const loading = ref(false);
@@ -549,11 +551,11 @@
     isEditing.value = false;
     
     // Show success message
-    alert('Profile updated successfully');
+    toast.success('Profile updated successfully!');
     
   } catch (error) {
     console.error('Error updating profile:', error);
-    alert(error.message || 'Failed to update profile. Please try again.');
+    toast.error(error.message || 'Failed to update profile. Please try again.');
   } finally {
     isSubmitting.value = false;
   }
@@ -588,7 +590,7 @@
         };
         
         showPasswordModal.value = false;
-        alert('Password changed successfully');
+        toast.success('Password changed successfully');
         
         isSubmitting.value = false;
       }, 1500);

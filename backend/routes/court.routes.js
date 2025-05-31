@@ -129,8 +129,6 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
             console.log(`Attempting to upload ${req.files.length} court images...`);
             try {
                 for (const file of req.files) {
-                    // Use a path prefix like court-images/<futsalId>/ 
-                    // FIX: Use the _id from the populated futsal object
                     const blobPathPrefix = `court-images/${req.user.futsal?._id}/`; 
                     if (!req.user.futsal?._id) {
                          console.error("FATAL: Futsal ID not found on req.user during court image upload.");
@@ -148,7 +146,6 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
                 });
             }
         }
-        // <<< END BLOB UPLOAD >>>
 
         const courtData = {
             name: req.body.name,
@@ -335,104 +332,154 @@ router.put('/:id', auth, upload.array('images', 5), async (req, res) => {
             return res.status(403).json({ message: 'User not authorized to update this court' });
         }
 
-        // Parse boolean values from the nested facilities object
-        const parseBooleans = (obj) => {
-            if (!obj) return {}; // Handle cases where facilities might not be sent
-            const result = {};
-            for (const [key, value] of Object.entries(obj)) {
-                result[key] = value === 'true';
-            }
-            return result;
+        // Log the raw request body received by the server AFTER middleware (multer, etc.)
+        console.log('[DEBUG] Raw req.body in PUT route:', JSON.stringify(req.body, null, 2));
+
+        const parseBooleans = (value) => {
+            // Simple check for explicit 'true' string
+            return value === 'true';
         };
 
+        // Prepare base update data, excluding special hour fields initially
         const updateData = {
-            ...req.body,
-             // Directly use new dimension fields from form
-             dimensionLength: Number(req.body.dimensionLength),
-             dimensionWidth: Number(req.body.dimensionWidth),
-             surfaceType: req.body.surfaceType, // Already a string from select
-             facilities: parseBooleans({
-                 changingRooms: req.body['facilities.changingRooms'],
-                 lighting: req.body['facilities.lighting'],
-                 parking: req.body['facilities.parking'],
-                 shower: req.body['facilities.shower']
-             }),
-             hasPeakHours: req.body.hasPeakHours === 'true',
-             hasOffPeakHours: req.body.hasOffPeakHours === 'true',
-             peakHours: {
-                 start: req.body['peakHours[start]'],
-                 end: req.body['peakHours[end]']
-             },
-             offPeakHours: {
-                 start: req.body['offPeakHours[start]'],
-                 end: req.body['offPeakHours[end]']
-             }
+            name: req.body.name,
+            dimensionLength: Number(req.body.dimensionLength),
+            dimensionWidth: Number(req.body.dimensionWidth),
+            surfaceType: req.body.surfaceType,
+            courtType: req.body.courtType,
+            courtSide: req.body.courtSide,
+            priceHourly: Number(req.body.priceHourly),
+            status: req.body.status,
+            // Parse facilities directly from the bracketed fields
+            facilities: {
+                changingRooms: parseBooleans(req.body['facilities[changingRooms]']),
+                lighting: parseBooleans(req.body['facilities[lighting]']),
+                parking: parseBooleans(req.body['facilities[parking]']),
+                shower: parseBooleans(req.body['facilities[shower]'])
+            },
+            hasPeakHours: parseBooleans(req.body.hasPeakHours),     // Use parseBooleans
+            hasOffPeakHours: parseBooleans(req.body.hasOffPeakHours) // Use parseBooleans
         };
-        
-        // Remove the old 'dimensions' field if it exists from form data
-        delete updateData.dimensions;
 
-        // Convert price strings to numbers
-        updateData.priceHourly = Number(updateData.priceHourly);
+        // Prepare fields to potentially unset
+        const fieldsToUnset = {};
+
+        // Conditionally handle Peak Hours
         if (updateData.hasPeakHours) {
-            updateData.pricePeakHours = Number(updateData.pricePeakHours);
-        }
-        if (updateData.hasOffPeakHours) {
-            updateData.priceOffPeakHours = Number(updateData.priceOffPeakHours);
-        }
-
-        // Handle image updates
-        // <<< START BLOB UPLOAD >>>
-        if (req.files && req.files.length > 0) {
-            console.log(`Attempting to upload ${req.files.length} new court images for update...`);
-            const courtImageUrls = [];
-            
-            // --- START: Delete old blobs before uploading new ones ---
-            if (court.images && court.images.length > 0) {
-                console.log(`Deleting ${court.images.length} old blobs for court ${court._id}...`);
-                for (const imageUrl of court.images) {
-                    try {
-                        // Ensure deleteBlob is imported at the top
-                        await deleteBlob('uploads', imageUrl); 
-                        console.log(`Deleted old blob: ${imageUrl}`);
-                    } catch (blobDeleteError) {
-                        // Log error but continue trying to delete others and upload new ones
-                        console.error(`Error deleting old blob ${imageUrl} during update for court ${court._id}:`, blobDeleteError);
-                    }
-                }
-                console.log(`Finished deleting old blobs for court ${court._id}.`);
+            updateData.peakHours = {
+                start: req.body['peakHours[start]'], // Use direct bracket access confirmed by logs
+                end: req.body['peakHours[end]']
+            };
+            updateData.pricePeakHours = Number(req.body.pricePeakHours);
+            // Ensure times are valid before saving
+            if (!updateData.peakHours.start || !updateData.peakHours.end) {
+                // Clean up potentially partially set fields if validation fails
+                delete updateData.peakHours;
+                delete updateData.pricePeakHours;
+                return res.status(400).json({ message: 'Peak hours start and end times are required when enabled.' });
             }
-            // --- END: Delete old blobs ---
-
-            try {
-                for (const file of req.files) {
-                    // This part looked correct, using court.futsalId
-                    const blobPathPrefix = `court-images/${court.futsalId}/`; // Use existing futsal ID 
-                    const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, blobPathPrefix);
-                    courtImageUrls.push(blobUrl);
-                    console.log(`Uploaded new court image: ${blobUrl}`);
-                }
-                updateData.images = courtImageUrls; // Replace existing images with new Blob URLs
-            } catch (uploadError) {
-                console.error('Error uploading new court images to blob storage:', uploadError);
-                // Decide if update should fail
-                return res.status(500).json({
-                    message: 'Failed to upload new court images',
-                    error: uploadError.message
-                });
+            if (isNaN(updateData.pricePeakHours) || updateData.pricePeakHours < 0) {
+                 delete updateData.peakHours;
+                 delete updateData.pricePeakHours;
+                return res.status(400).json({ message: 'Valid peak hours price is required when enabled.' });
             }
         } else {
-            // If no new files are uploaded, the existing updateData.images (if sent in req.body)
-            // or the original court.images will be used by findByIdAndUpdate.
-            // If you want to explicitly prevent clearing images if none are sent, 
-            // ensure updateData.images is not set or removed here.
-            // delete updateData.images; // Uncomment this if you DON'T want an empty req.files array to clear images
+            // If peak hours are disabled, schedule them for removal
+            fieldsToUnset.peakHours = "";
+            fieldsToUnset.pricePeakHours = "";
+            delete updateData.peakHours; // Remove from $set if being unset
+            delete updateData.pricePeakHours;
         }
-        // <<< END BLOB UPLOAD >>>
 
-        console.log('Court data being updated:', updateData);
+        // Conditionally handle Off-Peak Hours
+        if (updateData.hasOffPeakHours) {
+            updateData.offPeakHours = {
+                start: req.body['offPeakHours[start]'], // Use direct bracket access confirmed by logs
+                end: req.body['offPeakHours[end]']
+            };
+            updateData.priceOffPeakHours = Number(req.body.priceOffPeakHours);
+            // Ensure times are valid before saving
+             if (!updateData.offPeakHours.start || !updateData.offPeakHours.end) {
+                delete updateData.offPeakHours;
+                delete updateData.priceOffPeakHours;
+                return res.status(400).json({ message: 'Off-peak hours start and end times are required when enabled.' });
+            }
+            if (isNaN(updateData.priceOffPeakHours) || updateData.priceOffPeakHours < 0) {
+                delete updateData.offPeakHours;
+                delete updateData.priceOffPeakHours;
+                return res.status(400).json({ message: 'Valid off-peak hours price is required when enabled.' });
+            }
+        } else {
+            // If off-peak hours are disabled, schedule them for removal
+            fieldsToUnset.offPeakHours = "";
+            fieldsToUnset.priceOffPeakHours = "";
+            delete updateData.offPeakHours; // Remove from $set if being unset
+            delete updateData.priceOffPeakHours;
+        }
 
-        const updatedCourt = await Court.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
+        // Handle image updates - simplified, assuming previous blob logic is sufficient
+        let newImageUrls = [];
+        let shouldUpdateImages = false;
+        const existingImageUrlsString = req.body.existingImageUrls;
+
+        if (req.files && req.files.length > 0) {
+            shouldUpdateImages = true;
+            // ... (keep existing blob deletion and upload logic) ...
+            if (court.images && court.images.length > 0) {
+                console.log(`Deleting ${court.images.length} old blobs...`);
+                for (const imageUrl of court.images) {
+                    try { await deleteBlob('uploads', imageUrl); } catch (e) { console.error('Blob delete error:', e); }
+                }
+            }
+            try {
+                for (const file of req.files) {
+                    const blobUrl = await uploadToBlob('uploads', file.buffer, file.originalname, `court-images/${court.futsalId}/`);
+                    newImageUrls.push(blobUrl);
+                }
+            } catch (uploadError) {
+                 console.error('Error uploading new court images:', uploadError);
+                 return res.status(500).json({ message: 'Failed to upload new images', error: uploadError.message });
+            }
+            
+        } else if (existingImageUrlsString) {
+             try {
+                 // Only update if existingImageUrls are provided
+                 newImageUrls = JSON.parse(existingImageUrlsString); 
+                 // Basic validation: Ensure it's an array of strings
+                 if (!Array.isArray(newImageUrls) || !newImageUrls.every(url => typeof url === 'string')) {
+                    throw new Error('Invalid format');
+                 }
+                 shouldUpdateImages = true; 
+             } catch (parseError) {
+                 console.error("Error parsing/validating existingImageUrls:", parseError);
+                 return res.status(400).json({ message: "Invalid format for existingImageUrls" });
+             }
+        } 
+        // If shouldUpdateImages is true, set the images field for the update
+        if (shouldUpdateImages) {
+            updateData.images = newImageUrls;
+        } // Otherwise, the images field is not included in updateData, preserving existing images
+
+
+        // Combine $set and $unset operations
+        const updateOperation = { $set: updateData };
+        if (Object.keys(fieldsToUnset).length > 0) {
+            updateOperation.$unset = fieldsToUnset;
+        }
+
+        // Remove boolean flags from the $set operation as they are schema properties, not meant to be updated directly this way
+        delete updateOperation.$set.hasPeakHours;
+        delete updateOperation.$set.hasOffPeakHours;
+
+        console.log('Final Court update operation:', JSON.stringify(updateOperation, null, 2));
+
+        const updatedCourt = await Court.findByIdAndUpdate(req.params.id, updateOperation, { new: true, runValidators: true });
+        
+        if (!updatedCourt) {
+             console.error('Update failed, court not found after findByIdAndUpdate:', req.params.id);
+             return res.status(404).json({ message: 'Court not found after update attempt.' });
+        }
+        
         res.json(updatedCourt);
     } catch (error) {
         console.error('Error updating court:', error);

@@ -183,18 +183,6 @@
               <span class="text-base font-medium text-purple-300"> / {{ totalPointsCost }} pts</span>
             </span>
           </div>
-<!-- 
-          <div v-if="!props.court.requirePrepayment && freeBookingsRemaining > 0" class="mt-4 p-4 bg-blue-500/10 rounded-lg border border-blue-500/20">
-            <div class="flex justify-between items-center">
-              <div>
-                <p class="text-sm text-blue-300">Free Slots Available</p>
-                <p class="text-lg font-semibold text-blue-400">{{ freeBookingsRemaining }}</p>
-                <p class="text-xs text-blue-200 mt-1">Free slots are automatically confirmed!</p>
-              </div>
-            </div>
-          </div> -->
-
-          <!-- Proceed Button -->
           <div>
              <button
               @click="proceedToBooking"
@@ -429,26 +417,19 @@ const generateTimeSlots = async () => {
 
   while (currentTime < closing) {
     try {
-      // Find booking that OVERLAPS with the current slot time
       const bookingForSlot = existingBookings.find(booking => 
         booking.status !== 'cancelled' &&
         booking.startTime <= currentTime && // Booking starts at or before this slot
         booking.endTime > currentTime      // Booking ends after this slot starts
       );
 
-      // Log details for each slot check
-      // console.log(`[BookingSection] Checking slot ${currentTime}: Found overlapping booking?`, bookingForSlot ? JSON.parse(JSON.stringify(bookingForSlot)) : 'No'); 
-
       const isBooked = !!bookingForSlot;
       const isPending = isBooked && bookingForSlot.status === 'pending';
-      // Comparison logic for yourBooking remains the same
       const isYourBooking = isBooked && bookingForSlot.user?._id?.toString() === userId?.toString(); 
 
       if (isBooked) { 
         console.log(`[BookingSection] Slot ${currentTime}: isBooked=${isBooked}, isYourBooking=${isYourBooking}, currentUserId=${userId}, bookingUserId=${bookingForSlot?.user?._id?.toString()}`);
       }
-
-      // Check if this time is in the past (for today only)
       const [hours, minutes] = currentTime.split(':').map(Number);
       const isPastTime = isToday && (hours < currentHour || (hours === currentHour && minutes < currentMinutes));
       
@@ -456,9 +437,7 @@ const generateTimeSlots = async () => {
 
       slots.push({
         time: currentTime,
-        // Slot is available only if it's not booked (by anyone), not pending (by anyone), and not in the past
         available: !isBooked && !isPastTime,
-        // Only show booked/pending/your status if the slot is NOT in the past
         booked: !isPastTime && isBooked && !isYourBooking, 
         isPending: !isPastTime && isPending && !isYourBooking, 
         yourBooking: !isPastTime && isYourBooking, 
@@ -469,7 +448,6 @@ const generateTimeSlots = async () => {
       console.error('[BookingSection] Error processing slot:', currentTime, error);
     }
 
-    // Increment time by 1 hour
     const [hours, minutes] = currentTime.split(':').map(Number);
     const totalMinutes = hours * 60 + minutes + 60;
     const newHours = Math.floor(totalMinutes / 60);

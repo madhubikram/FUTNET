@@ -181,8 +181,6 @@ const verifyPayment = async (req, res) => {
 
         // 2. Process Khalti Verification Response (Extract data, DO NOT fail if purchase_order_id is missing from Khalti response)
         const { status: khaltiStatus, transaction_id, total_amount /*, data: khaltiData */ } = verificationResult;
-        // const purchase_order_id_from_khalti = khaltiData?.purchase_order_id; // We don't rely on this
-
         log('INFO', context, `Khalti lookup successful for PIDX: ${pidx}. Khalti Status: ${khaltiStatus}, Amount: ${total_amount}`);
 
         // 3. Update Database Record (Pass null for received_purchase_order_id as it's not needed here)

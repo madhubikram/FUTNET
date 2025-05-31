@@ -165,11 +165,13 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { BaseInput, BaseSelect } from '../components/base' // Import BaseSelect as well
+import { useToast } from "vue-toastification";
+import { BaseInput, BaseSelect } from '../components/base' 
 import ImageUpload from '../components/ImageUpload.vue'
 import API_URL from '@/config/api'
 
 const router = useRouter()
+const toast = useToast();
 const errors = ref({})
 const isSubmitting = ref(false)
 const selectedFiles = ref([])
@@ -198,7 +200,6 @@ const validateForm = () => {
   errors.value = {}
   let isValid = true
 
-  // Required fields validation
   const requiredFields = {
     firstName: 'First Name',
     lastName: 'Last Name',
@@ -291,6 +292,12 @@ const handleSubmit = async () => {
     const data = await response.json()
 
     if (response.ok) {
+      // Show different message based on role
+      if (formData.value.role === 'futsalAdmin') {
+        toast.info("Registration complete! Your account is pending verification."); // Use info level for pending status
+      } else {
+        toast.success("Registration successful!"); // Standard success for players
+      }
       router.push('/login')
     } else {
       throw new Error(data.message || 'Registration failed')

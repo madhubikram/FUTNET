@@ -132,7 +132,6 @@ const timeErrorMessage = computed(() => {
   return ''; // No error message
 });
 
-// Handle location selection from map
 const handleLocationSelected = (location) => {
   console.log('Received location-selected event in ProfileCompletion:', location);
   selectedLocation.value = location
@@ -154,7 +153,7 @@ const validateForm = () => {
     return false
   }
   if (!isValidTimes.value) {
-    addNotification(timeErrorMessage.value, 'error') // Use timeErrorMessage.value to show the message
+    addNotification(timeErrorMessage.value, 'error') 
     return false
   }
   return true

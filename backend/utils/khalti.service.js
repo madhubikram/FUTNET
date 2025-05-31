@@ -53,7 +53,6 @@ const initiateKhaltiPayment = async (initiationData) => {
         ...(customer_info && { customer_info }),
         ...(amount_breakdown && { amount_breakdown }),
         ...(product_details && { product_details }),
-        // Add merchant_username or merchant_extra if needed
     };
 
     const headers = {

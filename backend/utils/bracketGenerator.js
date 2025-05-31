@@ -38,7 +38,6 @@ function generateSingleEliminationBracket(registrations, numSpots) {
         return null;
     }
 
-    // Shuffle registrations randomly before assigning slots
     const shuffledRegistrations = shuffle([...registrations]);
     console.log('[Bracket Generator - v3] Shuffled Team Names:', JSON.stringify(shuffledRegistrations.map(r => r.teamName)));
 
@@ -54,22 +53,19 @@ function generateSingleEliminationBracket(registrations, numSpots) {
         numSpots: numSpots
     };
 
-    // --- Standard Seeding and Bye Placement ---
     const participants = [];
     let teamIdx = 0;
 
-    // Assign teams to the top slots
     for (let i = 0; i < numTeams; i++) {
         participants[i] = {
-            _id: shuffledRegistrations[teamIdx]._id, // Use registration _id as the unique identifier for the match participant
-            teamId: shuffledRegistrations[teamIdx].teamId, // Keep original teamId if needed
+            _id: shuffledRegistrations[teamIdx]._id, 
+            teamId: shuffledRegistrations[teamIdx].teamId, 
             name: shuffledRegistrations[teamIdx].teamName
         };
         teamIdx++;
     }
-    // Fill remaining slots with null (representing Byes for pairing)
     for (let i = numTeams; i < numSpots; i++) {
-        participants[i] = null; // Placeholder for Bye
+        participants[i] = null; 
     }
     console.log('[Bracket Generator - v3] Participants array created with proper seeding');
 

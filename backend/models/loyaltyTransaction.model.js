@@ -5,11 +5,11 @@ const loyaltyTransactionSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true,
-        index: true // Index for faster queries by user
+        index: true 
     },
     type: {
         type: String,
-        enum: ['credit', 'debit'], // 'credit' for points awarded, 'debit' for points revoked/used
+        enum: ['credit', 'debit'], 
         required: true
     },
     points: {
@@ -24,12 +24,11 @@ const loyaltyTransactionSchema = new mongoose.Schema({
     relatedBooking: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Booking',
-        required: false // Make optional, as points might be adjusted manually
+        required: false 
     },
-    // Add other potential related entities if needed (e.g., relatedReward)
 
 }, {
-    timestamps: true // Automatically adds createdAt and updatedAt
+    timestamps: true 
 });
 
 module.exports = mongoose.model('LoyaltyTransaction', loyaltyTransactionSchema); 

@@ -53,7 +53,7 @@
       </div>
     </div>
 
-    <p v-if="error" class="mt-2 text-sm text-red-400">{{ error }}</p>
+    <p v-if="props.error" class="mt-2 text-sm text-red-400">{{ props.error }}</p>
 
     <div v-if="showPreview" class="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70" @click="closeImagePreview">
       <div class="relative bg-gray-800 rounded-lg p-6 max-w-4xl max-h-full overflow-auto">
@@ -104,13 +104,13 @@ const props = defineProps({
     type: String,
     default: 'default',
     validator: value => ['default', 'glass'].includes(value)
-  }
+  },
+  error: String // Prop for parent error
 })
 
 const emit = defineEmits(['update:modelValue', 'error'])
 
 const fileInput = ref(null)
-const error = ref('')
 const filePreviewMap = ref(new Map()) // Store file preview URLs
 
 // Modified previewUrls computed property
@@ -167,12 +167,12 @@ watch(() => props.modelValue, (newFiles, oldFiles) => {
 
 const validateFile = (file) => {
   if (file.size > props.maxSize) {
-    error.value = `File size should not exceed ${props.maxSize / (1024 * 1024)}MB`
+    emit('error', `File size should not exceed ${props.maxSize / (1024 * 1024)}MB`)
     return false
   }
 
   if (!file.type.startsWith('image/')) {
-    error.value = 'Only image files are allowed'
+    emit('error', 'Only image files are allowed')
     return false
   }
 
@@ -189,10 +189,8 @@ const handleDrop = (event) => {
 }
 
 const handleFiles = (files) => {
-  error.value = ''
-
   if (props.modelValue.length + files.length > props.maxFiles) {
-    error.value = `Maximum ${props.maxFiles} files allowed`
+    emit('error', `Maximum ${props.maxFiles} files allowed`)
     return
   }
 

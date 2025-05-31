@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-// Define constant for max free slots per day
-const FREE_SLOT_LIMIT_PER_DAY = 2; // Each user gets 2 free slots per day by default
+
+const FREE_SLOT_LIMIT_PER_DAY = 2; 
 
 // Schema definition
 const FreeSlotsSchema = new Schema({
@@ -28,23 +28,21 @@ const FreeSlotsSchema = new Schema({
   }
 }, { timestamps: true });
 
-// Create a compound index on user and date to ensure uniqueness and fast lookups
 FreeSlotsSchema.index({ user: 1, court: 1, date: 1 }, { unique: true });
 
-// Add middleware to prevent setting negative remainingSlots values
+
 FreeSlotsSchema.pre('findOneAndUpdate', async function(next) {
   try {
     const update = this.getUpdate();
     
-    // If using $inc to decrement remainingSlots
+   
     if (update.$inc && update.$inc.remainingSlots < 0) {
-      // Get the current document to check current value
-      // Use model directly instead of this.findOne to avoid "Query already executed" error
+      
       const FreeSlots = mongoose.model('FreeSlots');
       const doc = await FreeSlots.findOne(this.getQuery()).exec();
       
       if (doc) {
-        // Calculate new value after update
+        
         const newValue = doc.remainingSlots + update.$inc.remainingSlots;
         
         // If would become negative, modify to just set to 0

@@ -71,7 +71,7 @@
         </div>
 
         <!-- Special Hours Pricing with Enhanced Styling -->
-        <div v-if="court.hasPeakHours" 
+        <div v-if="court.hasPeakHours && court.peakHours"
              class="p-3 bg-blue-500/10 rounded-lg border border-blue-500/20">
           <div class="flex justify-between items-center">
             <span class="text-blue-400">Peak Hours</span>
@@ -82,7 +82,7 @@
           </span>
         </div>
 
-        <div v-if="court.hasOffPeakHours" 
+        <div v-if="court.hasOffPeakHours && court.offPeakHours"
              class="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
           <div class="flex justify-between items-center">
             <span class="text-purple-400">Off-Peak Hours</span>
@@ -148,15 +148,17 @@ const getCurrentPriceType = computed(() => {
   const now = new Date()
   const currentTime = now.toTimeString().slice(0, 5) // HH:mm format
 
-  if (props.court.hasPeakHours && 
+  // Check peak hours safely
+  if (props.court.hasPeakHours && props.court.peakHours &&
       isTimeInRange(currentTime, props.court.peakHours.start, props.court.peakHours.end)) {
     return 'peak'
   }
-  if (props.court.hasOffPeakHours && 
+  // Check off-peak hours safely
+  if (props.court.hasOffPeakHours && props.court.offPeakHours &&
       isTimeInRange(currentTime, props.court.offPeakHours.start, props.court.offPeakHours.end)) {
     return 'offPeak'
   }
-  return null
+  return null // Default if neither applies
 })
 
 // Get current applicable price

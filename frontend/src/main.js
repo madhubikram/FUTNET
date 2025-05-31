@@ -4,8 +4,8 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 
 // Import Toast
-import Toast from 'vue-toastification'
-import 'vue-toastification/dist/index.css'
+import Toast from "vue-toastification";
+import "vue-toastification/dist/index.css"; // Import the CSS
 
 // Import ApexCharts
 import VueApexCharts from "vue3-apexcharts"; // Use correct path based on installation

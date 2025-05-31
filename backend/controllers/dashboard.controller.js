@@ -9,7 +9,6 @@ const { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, 
 
 const getCounts = async (req, res) => {
     try {
-        // Ensure the user is a futsalAdmin and has a futsal associated
         if (req.user.role !== 'futsalAdmin' || !req.user.futsal) {
              return res.status(403).json({ message: "Access denied or futsal not associated with admin." });
         }
@@ -27,12 +26,12 @@ const getCounts = async (req, res) => {
         const [upcomingTournamentsCount, activeTournamentsCount] = await Promise.all([
              Tournament.countDocuments({
                 futsalId: futsalId,
-                status: { $nin: ['Cancelled', 'Completed'] }, // Exclude finished/cancelled
+                status: { $nin: ['Cancelled', 'Completed'] }, 
                 startDate: { $gt: now } // Starts after now
             }),
              Tournament.countDocuments({
                 futsalId: futsalId,
-                status: { $nin: ['Cancelled', 'Completed'] }, // Exclude finished/cancelled
+                status: { $nin: ['Cancelled', 'Completed'] }, 
                 startDate: { $lte: now }, // Starts now or in the past
                 endDate: { $gte: todayStart } // Ends today or in the future
             })
@@ -46,18 +45,15 @@ const getCounts = async (req, res) => {
             activeCourts,
             inactiveCourts,
         ] = await Promise.all([
-            // Count bookings for THIS futsal today
             Booking.countDocuments({
                  court: { $in: futsalCourtIds },
                  createdAt: { $gte: todayStart, $lte: todayEnd },
                  status: { $ne: 'cancelled' }
             }),
-            // Aggregate revenue for THIS futsal today
             Booking.aggregate([
                 { $match: { court: { $in: futsalCourtIds }, createdAt: { $gte: todayStart, $lte: todayEnd }, paymentStatus: 'paid' } },
                 { $group: { _id: null, total: { $sum: '$price' } } }
             ]),
-             // Count confirmed bookings for THIS futsal from today onwards
             Booking.countDocuments({
                 court: { $in: futsalCourtIds },
                 status: 'confirmed',

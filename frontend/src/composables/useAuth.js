@@ -28,12 +28,12 @@ export function useAuth() {
         throw new Error(data.message || 'Login failed')
       }
 
-      // Store ALL necessary auth data
+   
       localStorage.setItem('token', data.token)
       localStorage.setItem('userRole', data.user.role)
       localStorage.setItem('profileCompleted', data.user.profileCompleted)
-      localStorage.setItem('userId', data.user.id) // Add this line
-      localStorage.setItem('username', data.user.username) // Optional but useful
+      localStorage.setItem('userId', data.user.id) 
+      localStorage.setItem('username', data.user.username) 
 
       addNotification('Login successful', 'success')
       

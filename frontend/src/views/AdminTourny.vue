@@ -906,8 +906,6 @@ const validateForm = () => {
 const handleCreateTournament = async () => {
   try {
     console.log('Starting tournament creation/update...');
-    
-    // Explicitly call validateForm and check return value
     if (!validateForm()) {
       console.log('Form validation failed:', errors.value);
       toast.error('Please fix the errors in the form.'); // Add toast notification
@@ -916,10 +914,7 @@ const handleCreateTournament = async () => {
 
     isSubmitting.value = true;
     const formData = new FormData();
-
-    // Add form fields to FormData
     Object.entries(tournamentForm.value).forEach(([key, value]) => {
-      // Skip the prizes object itself, handle its fields individually
       if (key !== 'prizes' && value !== null && value !== undefined) {
         formData.append(key, value);
       }

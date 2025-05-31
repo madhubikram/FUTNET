@@ -258,7 +258,7 @@ const tournamentPlayerController = {
 
       // Create Registration Data
       const registrationData = {
-        tournament: actualTournamentId, // <<< Ensure correct ID is used
+        tournament: actualTournamentId, 
         user: userId,
         teamId: teamId,
         teamName: req.body.teamName,
@@ -267,7 +267,7 @@ const tournamentPlayerController = {
         paymentStatus: 'pending'
       };
       log('INFO', context, `[STEP 2 - CREATE PENDING] Creating pending registration document with data:`, { 
-          tournamentId: registrationData.tournament, // Log the ID being saved
+          tournamentId: registrationData.tournament, 
           userId: registrationData.user, 
           teamId: registrationData.teamId, 
           status: registrationData.status 
@@ -285,7 +285,6 @@ const tournamentPlayerController = {
 
             if (initiationResult.success) {
                 log('INFO', context, `[STEP 3 - PAYMENT SUCCESS] Payment initiation successful for Registration ID: ${savedRegistrationId}. Sending payment URL to frontend.`);
-                 // Optional: Send notification...
                 res.status(201).json({
                     message: 'Registration pending. Please complete payment.',
                     registrationId: savedRegistrationId,
@@ -298,7 +297,6 @@ const tournamentPlayerController = {
                 res.status(500).json({ message: `Failed to initiate payment: ${initiationResult.error}` });
             }
        } else {
-           // Handle Free Registration 
            log('INFO', context, `[STEP 3 - FREE] Tournament ${actualTournamentId} is free. Confirming Registration ID: ${savedRegistrationId}.`);
            savedRegistration.status = 'active';
            savedRegistration.paymentStatus = 'paid';

@@ -85,12 +85,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useToast } from 'vue-toastification'
 import { BaseButton } from '@/components/base'
 import LoadingState from '@/components/states/LoadingState.vue'
 import EmptyState from '@/components/states/EmptyState.vue'
 import API_URL from '@/config/api'
 
 const router = useRouter()
+const toast = useToast()
 const pendingAdmins = ref([])
 const loading = ref(false)
 const error = ref(null)
@@ -142,10 +144,15 @@ const approveAdmin = async (adminId) => {
       body: JSON.stringify({ status: 'approved' })
     })
     if (response.ok) {
+      toast.success("Admin approved successfully!")
       await fetchPendingAdmins()
+    } else {
+       const errorData = await response.json().catch(() => ({ message: 'Failed to approve admin.' }));
+       throw new Error(errorData.message || `HTTP error ${response.status}`);
     }
   } catch (error) {
     console.error('Error approving admin:', error)
+    toast.error(error.message || 'Failed to approve admin. Please try again.')
   }
 }
 
@@ -160,10 +167,15 @@ const rejectAdmin = async (adminId) => {
       body: JSON.stringify({ status: 'rejected' })
     })
     if (response.ok) {
+      toast.success("Admin rejected successfully!")
       await fetchPendingAdmins()
+    } else {
+       const errorData = await response.json().catch(() => ({ message: 'Failed to reject admin.' }));
+       throw new Error(errorData.message || `HTTP error ${response.status}`);
     }
   } catch (error) {
     console.error('Error rejecting admin:', error)
+    toast.error(error.message || 'Failed to reject admin. Please try again.')
   }
 }
 

@@ -65,19 +65,6 @@ onMounted(async () => {
           itemType.value = 'booking';
           targetItemId.value = parts[1]; 
           log('INFO', context, `Determined type: booking, ID: ${targetItemId.value}`);
-          // // Fetch the booking to get the court ID -- REMOVED as endpoint doesn't exist and data not used here
-          // try {
-          //     const bookingData = await fetchData(`/bookings/${targetItemId.value}`);
-          //     if (bookingData?.court) {
-          //         targetCourtId.value = typeof bookingData.court === 'object' 
-          //                             ? bookingData.court._id 
-          //                             : bookingData.court;
-          //         log('INFO', context, `Fetched court ID: ${targetCourtId.value} for booking.`);
-          //     }
-          // } catch(fetchError) {
-          //     log('ERROR', context, `Failed to fetch booking details to get court ID for ${targetItemId.value}`, fetchError);
-          // }
-
       } else if (parts[0] === 'TOURNAMENT' && parts[1]) {
           itemType.value = 'tournament';
           targetItemId.value = parts[1]; // Tournament Registration ID
@@ -85,7 +72,6 @@ onMounted(async () => {
           // Could fetch tournament details if needed for redirection later
       }
   }
-  // --- End ID extraction ---
 
   if (!pidx) {
     log('ERROR', context, 'PIDX missing in callback query parameters.');
@@ -101,7 +87,6 @@ onMounted(async () => {
   log('INFO', verifyContext, `Sending verification request to backend for PIDX: ${pidx}`);
 
   try {
-    // Use fetchData for the POST request
     const responseData = await fetchData('/api/payments/khalti/verify', {
         method: 'POST',
         body: JSON.stringify({ pidx })

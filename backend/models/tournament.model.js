@@ -134,39 +134,10 @@ const tournamentSchema = new mongoose.Schema({
     bracket: {
         type: mongoose.Schema.Types.Mixed,
         default: null
-        /* Example structure:
-        {
-            rounds: [
-                // Round 1
-                [
-                    { match: 1, team1: { id: 'teamId1', name: 'Team A' }, team2: { id: 'teamId2', name: 'Team B' }, winner: null },
-                    { match: 2, team1: { id: 'teamId3', name: 'Team C' }, team2: { id: 'BYE', name: 'BYE' }, winner: 'teamId3' },
-                    // ...
-                ],
-                // Round 2
-                [
-                    { match: X, team1: { id: 'winner_match_1', name: 'Winner M1' }, team2: { id: 'winner_match_2', name: 'Winner M2' }, winner: null },
-                    // ...
-                ],
-                // ...
-            ],
-            generated: false // Flag to check if it's been generated
-        }
-        */
     },
     stats: {
         type: mongoose.Schema.Types.Mixed,
         default: {}
-        /* Example structure:
-        {
-            firstPlace: { id: 'teamId1', name: 'Team A' },
-            secondPlace: { id: 'teamId2', name: 'Team B' },
-            thirdPlace: { id: 'teamId3', name: 'Team C' },
-            topScorer: { name: 'Player Name', goals: 5 },
-            mvp: 'Player Name',
-            playerOfTournament: 'Player Name'
-        }
-        */
     }
 }, {
     timestamps: true

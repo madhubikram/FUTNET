@@ -8,9 +8,8 @@ const { createNotification } = require('../utils/notification.service');
 const moment = require('moment');
 const { generateSingleEliminationBracket } = require('../utils/bracketGenerator'); // Import generator
 const mongoose = require('mongoose'); // Import mongoose for ObjectId validation
-const { uploadToBlob, deleteBlob } = require('../utils/blobUpload'); // <<< UPDATE IMPORT
+const { uploadToBlob, deleteBlob } = require('../utils/blobUpload'); 
 
-// --- Define Controller Object Early ---
 const tournamentController = {};
 
 // Helper function to delete file
@@ -22,8 +21,6 @@ const deleteFile = async (filePath) => {
     }
 };
 
-// --- Define Controller Functions and Attach ---
-
 const createTournament = async (req, res) => {
         try {
             console.log('Creating tournament with data:', {
@@ -32,7 +29,6 @@ const createTournament = async (req, res) => {
                 user: req.user
             });
 
-            // Explicitly parse prize fields
             const prizes = {
                 first: req.body['prizes.first'] ? Number(req.body['prizes.first']) : 0,
                 second: req.body['prizes.second'] ? Number(req.body['prizes.second']) : 0,
@@ -69,7 +65,6 @@ const createTournament = async (req, res) => {
                 futsalId: req.user.futsal,
                 prizes: prizes, // Assign the parsed prizes object
                 registrationDeadlineTime: req.body.registrationDeadlineTime, // Explicitly include if needed
-                // Ensure numeric fields are numbers
                 minTeams: Number(req.body.minTeams),
                 maxTeams: Number(req.body.maxTeams),
                 teamSize: Number(req.body.teamSize),
